@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/esm-dev/esm.sh/internal/fetch"
 	"github.com/esm-dev/esm.sh/server/storage"
 	"github.com/ije/gox/log"
 	"github.com/ije/gox/set"
@@ -161,7 +162,7 @@ func customLandingPage(options *LandingPageOptions) rex.Handle {
 			if err != nil {
 				return rex.Err(http.StatusBadRequest, "Invalid url")
 			}
-			fetchClient, recycle := NewFetchClient(15, ctx.UserAgent(), false)
+			fetchClient, recycle := fetch.NewClient(15, ctx.UserAgent(), false)
 			defer recycle()
 			res, err := fetchClient.Fetch(url, nil)
 			if err != nil {

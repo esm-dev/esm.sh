@@ -18,6 +18,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/esm-dev/esm.sh/internal/fetch"
 	"github.com/esm-dev/esm.sh/internal/gfm"
 	"github.com/esm-dev/esm.sh/internal/importmap"
 	"github.com/esm-dev/esm.sh/internal/mime"
@@ -244,7 +245,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 			indexHTML, err := withCache("index.html", time.Duration(cacheTtl)*time.Second, func() (indexHTML []byte, _ string, err error) {
 				readme, err := os.ReadFile("README.md")
 				if err != nil {
-					fetchClient, recycle := NewFetchClient(15, ctx.UserAgent(), false)
+					fetchClient, recycle := fetch.NewClient(15, ctx.UserAgent(), false)
 					defer recycle()
 					readmeUrl, _ := url.Parse("https://raw.githubusercontent.com/esm-dev/esm.sh/refs/heads/main/README.md")
 					var res *http.Response
@@ -563,7 +564,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 			if v != "" && (!npm.Versioning.Match(v) || len(v) > 32) {
 				return rex.Status(400, "Invalid Version Param")
 			}
-			fetchClient, recycle := NewFetchClient(15, ctx.UserAgent(), false)
+			fetchClient, recycle := fetch.NewClient(15, ctx.UserAgent(), false)
 			defer recycle()
 			if strings.HasSuffix(modUrl.Path, "/uno.css") {
 				ctxParam := query.Get("ctx")

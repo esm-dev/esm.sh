@@ -8,6 +8,7 @@ import (
 	"path"
 	"strings"
 
+	"github.com/esm-dev/esm.sh/internal/fetch"
 	"github.com/esm-dev/esm.sh/internal/gfm"
 	"github.com/esm-dev/esm.sh/internal/importmap"
 	esbuild "github.com/evanw/esbuild/pkg/api"
@@ -150,7 +151,7 @@ func transform(options *ResolvedTransformOptions) (out *TransformOutput, err err
 }
 
 // bundleHttpModule bundles the http module and it's submodules.
-func bundleHttpModule(npmrc *NpmRC, entry string, importMap importmap.ImportMap, collectDependencies bool, fetchClient *FetchClient) (js []byte, jsx bool, css []byte, dependencyTree map[string][]byte, err error) {
+func bundleHttpModule(npmrc *NpmRC, entry string, importMap importmap.ImportMap, collectDependencies bool, fetchClient *fetch.FetchClient) (js []byte, jsx bool, css []byte, dependencyTree map[string][]byte, err error) {
 	if !isHttpSepcifier(entry) {
 		err = errors.New("require a http module")
 		return

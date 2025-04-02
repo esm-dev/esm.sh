@@ -8,7 +8,8 @@ import (
 	"github.com/ije/gox/sync"
 )
 
-var bufferPool = sync.Pool{New: func() interface{} { return new(bytes.Buffer) }}
+var bufferPool = sync.Pool{New: func() any { return new(bytes.Buffer) }}
+var onceMap = sync.Map{}
 
 // newBuffer returns a new buffer from the buffer pool.
 func newBuffer() (buffer *bytes.Buffer, recycle func()) {
@@ -19,8 +20,7 @@ func newBuffer() (buffer *bytes.Buffer, recycle func()) {
 	}
 }
 
-var onceMap = sync.Map{}
-
+// doOnce executes a function only once for a given id.
 func doOnce(id string, fn func() error) (err error) {
 	once, _ := onceMap.LoadOrStore(id, &sync.Once{})
 	return once.(*sync.Once).Do(fn)

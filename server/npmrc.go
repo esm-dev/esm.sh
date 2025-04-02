@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/esm-dev/esm.sh/internal/fetch"
 	"github.com/esm-dev/esm.sh/internal/jsonc"
 	"github.com/esm-dev/esm.sh/internal/npm"
 	"github.com/goccy/go-json"
@@ -161,7 +162,7 @@ func (npmrc *NpmRC) getPackageInfo(pkgName string, version string) (packageJson 
 			header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(reg.User+":"+reg.Password)))
 		}
 
-		fetchClient, recycle := NewFetchClient(15, "esmd/"+VERSION, false)
+		fetchClient, recycle := fetch.NewClient(15, "esmd/"+VERSION, false)
 		defer recycle()
 
 		retryTimes := 0
@@ -450,7 +451,7 @@ func fetchPackageTarball(reg *NpmRegistry, installDir string, pkgName string, ta
 		header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(reg.User+":"+reg.Password)))
 	}
 
-	fetchClient, recycle := NewFetchClient(30, "esmd/"+VERSION, false)
+	fetchClient, recycle := fetch.NewClient(30, "esmd/"+VERSION, false)
 	defer recycle()
 
 	retryTimes := 0

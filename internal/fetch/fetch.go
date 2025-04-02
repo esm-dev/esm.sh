@@ -1,4 +1,4 @@
-package server
+package fetch
 
 import (
 	"errors"
@@ -8,22 +8,24 @@ import (
 	"time"
 )
 
-var fetchClientPool = sync.Pool{
+var clientPool = sync.Pool{
 	New: func() any {
 		return &FetchClient{Client: &http.Client{}}
 	},
 }
 
+// FetchClient is a custom HTTP client with a user agent.
 type FetchClient struct {
 	*http.Client
 	userAgent string
 }
 
-func NewFetchClient(timeout int, userAgent string, noRedirect bool) (client *FetchClient, recycle func()) {
-	client = fetchClientPool.Get().(*FetchClient)
+// NewClient creates a new FetchClient with the given timeout and user agent.
+func NewClient(timeout int, userAgent string, reserveRedirect bool) (client *FetchClient, recycle func()) {
+	client = clientPool.Get().(*FetchClient)
 	client.Timeout = time.Duration(timeout) * time.Second
 	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
-		if noRedirect && len(via) > 0 {
+		if reserveRedirect && len(via) > 0 {
 			return http.ErrUseLastResponse
 		}
 		if len(via) >= 3 {
@@ -32,9 +34,10 @@ func NewFetchClient(timeout int, userAgent string, noRedirect bool) (client *Fet
 		return nil
 	}
 	client.userAgent = userAgent
-	return client, func() { fetchClientPool.Put(client) }
+	return client, func() { clientPool.Put(client) }
 }
 
+// Do sends an HTTP request and returns the response.
 func (c *FetchClient) Fetch(url *url.URL, header http.Header) (resp *http.Response, err error) {
 	if c.userAgent != "" {
 		if header == nil {

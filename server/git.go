@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"time"
 
+	"github.com/esm-dev/esm.sh/internal/fetch"
 	"github.com/ije/gox/utils"
 )
 
@@ -62,9 +63,9 @@ func ghInstall(wd, name, tag string) (err error) {
 	if err != nil {
 		return
 	}
-	fetchClient, recycle := NewFetchClient(30, "esmd/"+VERSION, false)
+	client, recycle := fetch.NewClient(30, "esmd/"+VERSION, false)
 	defer recycle()
-	res, err := fetchClient.Fetch(u, nil)
+	res, err := client.Fetch(u, nil)
 	if err != nil {
 		return
 	}

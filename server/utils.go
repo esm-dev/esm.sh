@@ -11,11 +11,6 @@ import (
 	"github.com/ije/gox/valid"
 )
 
-// checks if the given hostname is a local address.
-func isLocalhost(hostname string) bool {
-	return hostname == "localhost" || hostname == "127.0.0.1" || (valid.IsIPv4(hostname) && strings.HasPrefix(hostname, "192.168."))
-}
-
 // isJsReservedWord returns true if the given string is a reserved word in JavaScript.
 func isJsReservedWord(word string) bool {
 	switch word {
@@ -75,6 +70,11 @@ func isRelPathSpecifier(specifier string) bool {
 // isAbsPathSpecifier returns true if the specifier is an absolute path.
 func isAbsPathSpecifier(specifier string) bool {
 	return strings.HasPrefix(specifier, "/") || strings.HasPrefix(specifier, "file://")
+}
+
+// checks if the given hostname is a local address.
+func isLocalhost(hostname string) bool {
+	return hostname == "localhost" || hostname == "127.0.0.1" || (valid.IsIPv4(hostname) && strings.HasPrefix(hostname, "192.168."))
 }
 
 // semverLessThan returns true if the version a is less than the version b.
@@ -202,12 +202,4 @@ func concatBytes(a, b []byte) []byte {
 	copy(c, a)
 	copy(c[al:], b)
 	return c
-}
-
-// toMap converts any value to a `map[string]any`
-func toMap(v any) map[string]any {
-	if m, ok := v.(map[string]any); ok {
-		return m
-	}
-	return nil
 }

@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/esm-dev/esm.sh/internal/fetch"
 	"github.com/esm-dev/esm.sh/internal/npm"
 	"github.com/esm-dev/esm.sh/server/storage"
 	"github.com/goccy/go-json"
@@ -241,10 +242,10 @@ func legacyESM(ctx *rex.Context, buildStorage storage.Storage, buildVersionPrefi
 		return rex.Status(http.StatusBadRequest, "Invalid url")
 	}
 
-	fetchClient, recycle := NewFetchClient(60, ctx.UserAgent(), true)
+	client, recycle := fetch.NewClient(60, ctx.UserAgent(), true)
 	defer recycle()
 
-	res, err := fetchClient.Fetch(url, nil)
+	res, err := client.Fetch(url, nil)
 	if err != nil {
 		return rex.Status(http.StatusBadGateway, "Failed to connect the lagecy esm.sh server")
 	}
