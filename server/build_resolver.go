@@ -12,7 +12,7 @@ import (
 	"strings"
 
 	"github.com/esm-dev/esm.sh/internal/npm"
-	esbuild "github.com/evanw/esbuild/pkg/api"
+	esbuild "github.com/ije/esbuild-internal/api"
 	esbuild_config "github.com/ije/esbuild-internal/config"
 	"github.com/ije/esbuild-internal/js_ast"
 	"github.com/ije/esbuild-internal/js_parser"

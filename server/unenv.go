@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/esm-dev/esm.sh/internal/npm"
-	esbuild "github.com/evanw/esbuild/pkg/api"
+	esbuild "github.com/ije/esbuild-internal/api"
 )
 
 var (

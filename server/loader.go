@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/esm-dev/esm.sh/internal/jsruntime"
-	esbuild "github.com/evanw/esbuild/pkg/api"
+	esbuild "github.com/ije/esbuild-internal/api"
 )
 
 type LoaderOutput struct {

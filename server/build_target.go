@@ -4,7 +4,7 @@ import (
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
-	esbuild "github.com/evanw/esbuild/pkg/api"
+	esbuild "github.com/ije/esbuild-internal/api"
 )
 
 var targets = map[string]esbuild.Target{

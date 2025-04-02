@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
-	"github.com/evanw/esbuild/pkg/api"
+	"github.com/ije/esbuild-internal/api"
 	"github.com/ije/esbuild-internal/compat"
 	"github.com/mssola/useragent"
 )
