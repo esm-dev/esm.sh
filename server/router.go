@@ -78,6 +78,8 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 
 		// handle POST API requests
 		switch ctx.R.Method {
+		case "HEAD", "GET":
+			// continue
 		case "POST":
 			switch pathname {
 			case "/transform":
@@ -155,39 +157,9 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 				ctx.SetHeader("Cache-Control", ccMustRevalidate)
 				return output
 
-			case "/purge":
-				zoneId := ctx.FormValue("zoneId")
-				packageName := ctx.FormValue("package")
-				version := ctx.FormValue("version")
-				if packageName == "" {
-					return rex.Err(400, "param `package` is required")
-				}
-				if version != "" && !npm.Versioning.Match(version) {
-					return rex.Err(400, "invalid version")
-				}
-				prefix := ""
-				if zoneId != "" {
-					prefix = zoneId + "/"
-				}
-				deletedBuildFiles, err := buildStorage.DeleteAll(prefix + "esm/" + packageName + "@" + version)
-				if err != nil {
-					return rex.Err(500, err.Error())
-				}
-				deletedDTSFiles, err := buildStorage.DeleteAll(prefix + "types/" + packageName + "@" + version)
-				if err != nil {
-					return rex.Err(500, err.Error())
-				}
-				deleteKeys := make([]string, len(deletedBuildFiles)+len(deletedDTSFiles))
-				copy(deleteKeys, deletedBuildFiles)
-				copy(deleteKeys[len(deletedBuildFiles):], deletedDTSFiles)
-				logger.Infof("Purged %d files for %s@%s (ip: %s)", len(deleteKeys), packageName, version, ctx.RemoteIP())
-				return map[string]any{"deleted": deleteKeys}
-
 			default:
 				return rex.Status(404, "not found")
 			}
-		case "GET", "HEAD":
-			// continue
 		default:
 			return rex.Status(405, "Method Not Allowed")
 		}
