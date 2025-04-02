@@ -27,22 +27,23 @@ var gfm = goldmark.New(
 	),
 )
 
-type MarkdownRenderKind uint8
+type RenderFormat uint8
 
 const (
-	MarkdownRenderKindHTML MarkdownRenderKind = iota
-	MarkdownRenderKindJS
-	MarkdownRenderKindJSX
-	MarkdownRenderKindSvelte
-	MarkdownRenderKindVue
+	RenderFormatHTML RenderFormat = iota
+	RenderFormatJS
+	RenderFormatJSX
+	RenderFormatSvelte
+	RenderFormatVue
 )
 
-func RenderMarkdown(md []byte, kind MarkdownRenderKind) (code []byte, err error) {
+// Render renders the given markdown content into HTML or other formats.
+func Render(input []byte, kind RenderFormat) (code []byte, err error) {
 	var unSafeHtmlBuf bytes.Buffer
 	var htmlBuf bytes.Buffer
 	var metaDataJS []byte
 	context := parser.NewContext()
-	err = gfm.Convert(md, &unSafeHtmlBuf, parser.WithContext(context))
+	err = gfm.Convert(input, &unSafeHtmlBuf, parser.WithContext(context))
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert markdown to HTML: %v", err)
 	}
@@ -155,25 +156,25 @@ func RenderMarkdown(md []byte, kind MarkdownRenderKind) (code []byte, err error)
 		}
 	}
 	switch kind {
-	case MarkdownRenderKindJSX:
+	case RenderFormatJSX:
 		jsxBuf := bytes.NewBuffer(metaDataJS)
 		jsxBuf.Write([]byte("export default function Markdown() { return <>"))
 		htmlBuf.WriteTo(jsxBuf)
 		jsxBuf.Write([]byte("</>}"))
 		return jsxBuf.Bytes(), nil
-	case MarkdownRenderKindSvelte:
+	case RenderFormatSvelte:
 		htmlBuf.Write([]byte("<script module>"))
 		htmlBuf.Write(metaDataJS)
 		htmlBuf.Write([]byte("</script>"))
 		return htmlBuf.Bytes(), nil
-	case MarkdownRenderKindVue:
+	case RenderFormatVue:
 		vueBuf := bytes.NewBuffer([]byte("<script>"))
 		vueBuf.Write(metaDataJS)
 		vueBuf.Write([]byte("</script><template>"))
 		htmlBuf.WriteTo(vueBuf)
 		vueBuf.Write([]byte("</template>"))
 		return vueBuf.Bytes(), nil
-	case MarkdownRenderKindJS:
+	case RenderFormatJS:
 		jsBuf := bytes.NewBuffer([]byte("export const html = "))
 		json.NewEncoder(jsBuf).Encode(htmlBuf.String())
 		jsBuf.Write([]byte{';'})

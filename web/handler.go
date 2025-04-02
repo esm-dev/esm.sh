@@ -156,28 +156,28 @@ func (s *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 				if query.Has("jsx") {
-					jsxCode, err := gfm.RenderMarkdown(markdown, gfm.MarkdownRenderKindJSX)
+					jsxCode, err := gfm.Render(markdown, gfm.RenderFormatJSX)
 					if err != nil {
 						http.Error(w, "Failed to render markdown to jsx", 500)
 						return
 					}
 					s.ServeModule(w, r, pathname+"?jsx", jsxCode)
 				} else if query.Has("svelte") {
-					svelteCode, err := gfm.RenderMarkdown(markdown, gfm.MarkdownRenderKindSvelte)
+					svelteCode, err := gfm.Render(markdown, gfm.RenderFormatSvelte)
 					if err != nil {
 						http.Error(w, "Failed to render markdown to svelte component", 500)
 						return
 					}
 					s.ServeModule(w, r, pathname+"?svelte", svelteCode)
 				} else if query.Has("vue") {
-					vueCode, err := gfm.RenderMarkdown(markdown, gfm.MarkdownRenderKindVue)
+					vueCode, err := gfm.Render(markdown, gfm.RenderFormatVue)
 					if err != nil {
 						http.Error(w, "Failed to render markdown to vue component", 500)
 						return
 					}
 					s.ServeModule(w, r, pathname+"?vue", vueCode)
 				} else {
-					js, err := gfm.RenderMarkdown(markdown, gfm.MarkdownRenderKindJS)
+					js, err := gfm.Render(markdown, gfm.RenderFormatJS)
 					if err != nil {
 						http.Error(w, "Failed to render markdown", 500)
 						return

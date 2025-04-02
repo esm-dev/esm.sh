@@ -268,7 +268,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 				readme = bytes.ReplaceAll(readme, []byte("./server/embed/"), []byte("/embed/"))
 				readme = bytes.ReplaceAll(readme, []byte("./HOSTING.md"), []byte("https://github.com/esm-dev/esm.sh/blob/main/HOSTING.md"))
 				readme = bytes.ReplaceAll(readme, []byte("https://esm.sh"), []byte(getOrigin(ctx)))
-				readmeHtml, err := gfm.RenderMarkdown(readme, gfm.MarkdownRenderKindHTML)
+				readmeHtml, err := gfm.Render(readme, gfm.RenderFormatHTML)
 				if err != nil {
 					err = errors.New("failed to render readme: " + err.Error())
 					return

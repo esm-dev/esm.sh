@@ -14,13 +14,13 @@ var clientPool = sync.Pool{
 	},
 }
 
-// FetchClient is a custom HTTP client with a user agent.
+// FetchClient is a custom HTTP client.
 type FetchClient struct {
 	*http.Client
 	userAgent string
 }
 
-// NewClient creates a new FetchClient with the given timeout and user agent.
+// NewClient creates a new FetchClient.
 func NewClient(timeout int, userAgent string, reserveRedirect bool) (client *FetchClient, recycle func()) {
 	client = clientPool.Get().(*FetchClient)
 	client.Timeout = time.Duration(timeout) * time.Second

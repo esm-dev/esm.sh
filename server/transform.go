@@ -270,7 +270,7 @@ func bundleHttpModule(npmrc *NpmRC, entry string, importMap importmap.ImportMap,
 						case ".md":
 							query := url.Query()
 							if query.Has("jsx") {
-								jsxCode, err := gfm.RenderMarkdown([]byte(code), gfm.MarkdownRenderKindJSX)
+								jsxCode, err := gfm.Render([]byte(code), gfm.RenderFormatJSX)
 								if err != nil {
 									return esbuild.OnLoadResult{}, err
 								}
@@ -278,7 +278,7 @@ func bundleHttpModule(npmrc *NpmRC, entry string, importMap importmap.ImportMap,
 								loader = esbuild.LoaderJSX
 								jsx = true
 							} else if query.Has("svelte") {
-								svelteCode, err := gfm.RenderMarkdown([]byte(code), gfm.MarkdownRenderKindSvelte)
+								svelteCode, err := gfm.Render([]byte(code), gfm.RenderFormatSvelte)
 								if err != nil {
 									return esbuild.OnLoadResult{}, err
 								}
@@ -292,7 +292,7 @@ func bundleHttpModule(npmrc *NpmRC, entry string, importMap importmap.ImportMap,
 								}
 								code = ret.Code
 							} else if query.Has("vue") {
-								vueCode, err := gfm.RenderMarkdown([]byte(code), gfm.MarkdownRenderKindVue)
+								vueCode, err := gfm.Render([]byte(code), gfm.RenderFormatVue)
 								if err != nil {
 									return esbuild.OnLoadResult{}, err
 								}
@@ -306,7 +306,7 @@ func bundleHttpModule(npmrc *NpmRC, entry string, importMap importmap.ImportMap,
 								}
 								code = ret.Code
 							} else {
-								js, err := gfm.RenderMarkdown([]byte(code), gfm.MarkdownRenderKindJS)
+								js, err := gfm.Render([]byte(code), gfm.RenderFormatJS)
 								if err != nil {
 									return esbuild.OnLoadResult{}, err
 								}
