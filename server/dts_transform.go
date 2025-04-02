@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/esm-dev/esm.sh/internal/npm"
-	"github.com/esm-dev/esm.sh/server/storage"
+	"github.com/esm-dev/esm.sh/internal/storage"
 	"github.com/ije/gox/set"
 	"github.com/ije/gox/utils"
 )

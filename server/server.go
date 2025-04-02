@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/esm-dev/esm.sh/internal/fetch"
-	"github.com/esm-dev/esm.sh/server/storage"
+	"github.com/esm-dev/esm.sh/internal/storage"
 	"github.com/ije/gox/log"
 	"github.com/ije/gox/set"
 	"github.com/ije/rex"

@@ -23,7 +23,7 @@ import (
 	"github.com/esm-dev/esm.sh/internal/importmap"
 	"github.com/esm-dev/esm.sh/internal/mime"
 	"github.com/esm-dev/esm.sh/internal/npm"
-	"github.com/esm-dev/esm.sh/server/storage"
+	"github.com/esm-dev/esm.sh/internal/storage"
 	esbuild "github.com/evanw/esbuild/pkg/api"
 	"github.com/goccy/go-json"
 	"github.com/ije/esbuild-internal/xxhash"

@@ -16,7 +16,7 @@ var efs embed.FS
 
 var (
 	once            sync.Once
-	npmReplacements = map[string]NpmReplacement{}
+	npmReplacements map[string]NpmReplacement
 )
 
 type NpmReplacement struct {
@@ -26,17 +26,16 @@ type NpmReplacement struct {
 
 // Get returns the npm replacement by the given name.
 func Get(name string) (NpmReplacement, bool) {
-	once.Do(func() {
-		build()
-	})
+	once.Do(build)
 	ret, ok := npmReplacements[name]
 	return ret, ok
 }
 
 // Build builds the npm replacements.
-func build() (err error) {
+func build() {
 	regexpExportAsExpr := regexp.MustCompile(`([\w$]+) as ([\w$]+)`)
-	return walkEmbedFS("src", func(path string) error {
+	npmReplacements = make(map[string]NpmReplacement)
+	err := walkEmbedFS("src", func(path string) error {
 		sourceCode, err := efs.ReadFile(path)
 		if err != nil {
 			return err
@@ -60,6 +59,9 @@ func build() (err error) {
 		}
 		return nil
 	})
+	if err != nil {
+		panic(err)
+	}
 }
 
 // concatBytes concatenates two byte slices.
