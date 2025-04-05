@@ -34,7 +34,7 @@ async function transformModule(filename, importMap, sourceCode, isDev) {
     [lang, code, map] = await transformVue(filename, code, importMap, isDev);
   }
   if (!tsx) {
-    tsx = import("npm:@esm.sh/tsx@1.1.0").then(async ({ init, transform }) => {
+    tsx = import("npm:@esm.sh/tsx@1.2.0").then(async ({ init, transform }) => {
       await init();
       return { transform };
     });
@@ -129,7 +129,7 @@ async function unocss(_id, content, config) {
   }
   let uno = unoGenerators.get(generatorId);
   if (!uno || uno.configCSS !== config?.css) {
-    uno = import("npm:@esm.sh/unocss@0.5.0-beta.2").then(({ init }) => init({ configCSS: config?.css }));
+    uno = import("npm:@esm.sh/unocss@0.5.0-beta.3").then(({ init }) => init({ configCSS: config?.css }));
     uno.configCSS = config?.css;
     unoGenerators.set(generatorId, uno);
   }

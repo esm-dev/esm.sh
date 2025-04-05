@@ -1486,12 +1486,7 @@ func (ctx *BuildContext) install() (err error) {
 						// exports: { ".": { "node": { "require": "./cjs/index.js", "import": "./esm/index.js" } } }
 						// ...
 						paths := getExportConditionPaths(obj)
-						for _, path := range paths {
-							if check(path) {
-								isMainModule = true
-								break
-							}
-						}
+						isMainModule = slices.ContainsFunc(paths, check)
 					}
 				}
 			}
