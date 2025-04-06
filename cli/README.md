@@ -2,6 +2,9 @@
 
 A _nobuild_ tool for modern web development.
 
+> [!WARNING]
+> The `esm.sh` CLI is still in development and may not be stable. Use it at your own risk.
+
 ## Installation
 
 You can install `esm.sh` CLI from source code:
