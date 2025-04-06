@@ -10,7 +10,7 @@ import (
 )
 
 func TestListRepoRefs(t *testing.T) {
-	refs, err := listRepoRefs("https://github.com/esm-dev/esm.sh")
+	refs, err := listGhRepoRefs("https://github.com/esm-dev/esm.sh")
 	if err != nil {
 		t.Fatal(err)
 	}

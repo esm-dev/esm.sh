@@ -11,8 +11,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/esm-dev/esm.sh/server/npm_replacements"
-	"github.com/esm-dev/esm.sh/server/storage"
+	"github.com/esm-dev/esm.sh/internal/fetch"
+	"github.com/esm-dev/esm.sh/internal/storage"
 	"github.com/ije/gox/log"
 	"github.com/ije/gox/set"
 	"github.com/ije/rex"
@@ -55,7 +55,6 @@ func Serve() {
 	if err != nil {
 		logger.Fatalf("failed to initialize access logger: %v", err)
 	}
-	// don't write log message to stdout
 	accessLogger.SetQuite(true)
 
 	// open database
@@ -70,9 +69,6 @@ func Serve() {
 		logger.Fatalf("failed to initialize build storage(%s): %v", config.Storage.Type, err)
 	}
 	logger.Debugf("storage initialized, type: %s, endpoint: %s", config.Storage.Type, config.Storage.Endpoint)
-
-	// setup server
-	Setup(logger)
 
 	// pre-compile uno generator in background
 	go generateUnoCSS(&NpmRC{NpmRegistry: NpmRegistry{Registry: "https://registry.npmjs.org/"}}, "", "")
@@ -114,44 +110,6 @@ func Serve() {
 	db.Close()
 	logger.FlushBuffer()
 	accessLogger.FlushBuffer()
-}
-
-// Setup loads the necessary requirements for the server
-func Setup(logger *log.Logger) {
-	// add `.esmd/bin` to PATH
-	os.Setenv("PATH", fmt.Sprintf("%s%c%s", path.Join(config.WorkDir, "bin"), os.PathListSeparator, os.Getenv("PATH")))
-
-	// install cjs-module-lexer
-	err := installCjsModuleLexer()
-	if err != nil {
-		logger.Fatalf("failed to install cjs-module-lexer: %v", err)
-	}
-	logger.Debugf("cjs-module-lexer@%s installed", cjsModuleLexerVersion)
-
-	// load unenv
-	err = loadUnenvNodeRuntime()
-	if err != nil {
-		logger.Fatalf("load unenv node runtime: %v", err)
-	}
-	totalSize := 0
-	for _, data := range unenvNodeRuntimeBulid {
-		totalSize += len(data)
-	}
-	logger.Debugf("unenv node runtime loaded, %d files, total size: %d KB", len(unenvNodeRuntimeBulid), totalSize/1024)
-
-	// build npm replacements
-	n, err := npm_replacements.Build()
-	if err != nil {
-		logger.Fatalf("build npm replacements: %v", err)
-	}
-	logger.Debugf("%d npm repalcements loaded", n)
-
-	// install deno
-	denoVersion, err := InstallDeno("2.2.1")
-	if err != nil {
-		logger.Fatalf("failed to install deno: %v", err)
-	}
-	logger.Debugf("deno v%s installed", denoVersion)
 }
 
 func cors(allowOrigins []string) rex.Handle {
@@ -204,7 +162,7 @@ func customLandingPage(options *LandingPageOptions) rex.Handle {
 			if err != nil {
 				return rex.Err(http.StatusBadRequest, "Invalid url")
 			}
-			fetchClient, recycle := NewFetchClient(15, ctx.UserAgent(), false)
+			fetchClient, recycle := fetch.NewClient(15, ctx.UserAgent(), false)
 			defer recycle()
 			res, err := fetchClient.Fetch(url, nil)
 			if err != nil {

@@ -11,20 +11,31 @@ import (
 	"strings"
 	"time"
 
-	esbuild "github.com/evanw/esbuild/pkg/api"
+	"github.com/esm-dev/esm.sh/internal/npm"
+	esbuild "github.com/ije/esbuild-internal/api"
 )
 
 var (
 	// https://github.com/unjs/unenv
-	unenvPkg = Package{
+	unenvPkg = npm.Package{
 		Name:    "unenv-nightly",
 		Version: "2.0.0-20241218-183400-5d6aec3",
 	}
-	unenvNodeRuntimeBulid = map[string][]byte{
+	unenvNodeRuntimeMap = map[string][]byte{
 		"sys.mjs": []byte(`export*from "/node/util.mjs";export{default}from "/node/util.mjs";`),
 	}
 )
 
+// GetNodeRuntimeJS returns the unenv node runtime by the given name.
+func GetNodeRuntimeJS(name string) (js []byte, ok bool) {
+	doOnce("load-unenv-node-runtime", func() (err error) {
+		return loadUnenvNodeRuntime()
+	})
+	js, ok = unenvNodeRuntimeMap[name]
+	return
+}
+
+// loadUnenvNodeRuntime loads the unenv node runtime from the embed filesystem.
 func loadUnenvNodeRuntime() (err error) {
 	data, err := embedFS.ReadFile("embed/node-runtime.tgz")
 	if err == nil {
@@ -42,7 +53,7 @@ func loadUnenvNodeRuntime() (err error) {
 					data := make([]byte, header.Size)
 					n, err := io.ReadFull(tr, data)
 					if err == nil && int64(n) == header.Size {
-						unenvNodeRuntimeBulid[name] = data
+						unenvNodeRuntimeMap[name] = data
 					}
 				}
 			}
@@ -52,6 +63,7 @@ func loadUnenvNodeRuntime() (err error) {
 	return buildUnenvNodeRuntime()
 }
 
+// slow path
 func buildUnenvNodeRuntime() (err error) {
 	wd := path.Join(config.WorkDir, "npm/"+unenvPkg.String())
 	err = ensureDir(wd)
@@ -123,7 +135,7 @@ func buildUnenvNodeRuntime() (err error) {
 		if strings.HasPrefix(name, "chunk-") && len(result.Contents) < 600 {
 			tinyChunks[name] = result.Contents
 		} else {
-			unenvNodeRuntimeBulid[name] = result.Contents
+			unenvNodeRuntimeMap[name] = result.Contents
 		}
 	}
 
@@ -148,7 +160,7 @@ func buildUnenvNodeRuntime() (err error) {
 	}
 
 	now := time.Now()
-	for name, data := range unenvNodeRuntimeBulid {
+	for name, data := range unenvNodeRuntimeMap {
 		ret := esbuild.Build(esbuild.BuildOptions{
 			Stdin: &esbuild.StdinOptions{
 				Contents:   string(data),
@@ -201,7 +213,7 @@ func buildUnenvNodeRuntime() (err error) {
 			})
 			tarball.Write(js)
 		}
-		unenvNodeRuntimeBulid[name] = js
+		unenvNodeRuntimeMap[name] = js
 	}
 	return
 }

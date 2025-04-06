@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"time"
 
+	"github.com/esm-dev/esm.sh/internal/fetch"
 	"github.com/ije/gox/utils"
 )
 
@@ -18,12 +19,12 @@ type GitRef struct {
 	Sha string
 }
 
-// list repo refs using `git ls-remote repo`
-func listRepoRefs(repo string) (refs []GitRef, err error) {
+// list refs of a github repository using `git ls-remote repo`
+func listGhRepoRefs(repo string) (refs []GitRef, err error) {
 	return withCache("git ls-remote "+repo, time.Duration(config.NpmQueryCacheTTL)*time.Second, func() ([]GitRef, string, error) {
-		stdout, recycle := NewBuffer()
+		stdout, recycle := newBuffer()
 		defer recycle()
-		errout, recycle := NewBuffer()
+		errout, recycle := newBuffer()
 		defer recycle()
 		cmd := exec.Command("git", "ls-remote", repo)
 		cmd.Stdout = stdout
@@ -62,9 +63,9 @@ func ghInstall(wd, name, tag string) (err error) {
 	if err != nil {
 		return
 	}
-	fetchClient, recycle := NewFetchClient(30, "esmd/"+VERSION, false)
+	client, recycle := fetch.NewClient(30, "esmd/"+VERSION, false)
 	defer recycle()
-	res, err := fetchClient.Fetch(u, nil)
+	res, err := client.Fetch(u, nil)
 	if err != nil {
 		return
 	}

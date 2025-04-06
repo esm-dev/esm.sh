@@ -5,7 +5,6 @@ import (
 	"crypto/sha1"
 	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -13,14 +12,20 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"slices"
 	"sort"
 	"strings"
 	"syscall"
 	"time"
 
-	"github.com/esm-dev/esm.sh/server/common"
-	"github.com/esm-dev/esm.sh/server/storage"
-	esbuild "github.com/evanw/esbuild/pkg/api"
+	"github.com/esm-dev/esm.sh/internal/fetch"
+	"github.com/esm-dev/esm.sh/internal/gfm"
+	"github.com/esm-dev/esm.sh/internal/importmap"
+	"github.com/esm-dev/esm.sh/internal/mime"
+	"github.com/esm-dev/esm.sh/internal/npm"
+	"github.com/esm-dev/esm.sh/internal/storage"
+	"github.com/goccy/go-json"
+	esbuild "github.com/ije/esbuild-internal/api"
 	"github.com/ije/esbuild-internal/xxhash"
 	"github.com/ije/gox/log"
 	"github.com/ije/gox/set"
@@ -73,6 +78,8 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 
 		// handle POST API requests
 		switch ctx.R.Method {
+		case "HEAD", "GET":
+			// continue
 		case "POST":
 			switch pathname {
 			case "/transform":
@@ -127,7 +134,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 					return output
 				}
 
-				importMap := common.ImportMap{Imports: map[string]string{}}
+				importMap := importmap.ImportMap{Imports: map[string]string{}}
 				if len(options.ImportMap) > 0 {
 					err = json.Unmarshal(options.ImportMap, &importMap)
 					if err != nil {
@@ -150,39 +157,9 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 				ctx.SetHeader("Cache-Control", ccMustRevalidate)
 				return output
 
-			case "/purge":
-				zoneId := ctx.FormValue("zoneId")
-				packageName := ctx.FormValue("package")
-				version := ctx.FormValue("version")
-				if packageName == "" {
-					return rex.Err(400, "param `package` is required")
-				}
-				if version != "" && !npmVersioning.Match(version) {
-					return rex.Err(400, "invalid version")
-				}
-				prefix := ""
-				if zoneId != "" {
-					prefix = zoneId + "/"
-				}
-				deletedBuildFiles, err := buildStorage.DeleteAll(prefix + "esm/" + packageName + "@" + version)
-				if err != nil {
-					return rex.Err(500, err.Error())
-				}
-				deletedDTSFiles, err := buildStorage.DeleteAll(prefix + "types/" + packageName + "@" + version)
-				if err != nil {
-					return rex.Err(500, err.Error())
-				}
-				deleteKeys := make([]string, len(deletedBuildFiles)+len(deletedDTSFiles))
-				copy(deleteKeys, deletedBuildFiles)
-				copy(deleteKeys[len(deletedBuildFiles):], deletedDTSFiles)
-				logger.Infof("Purged %d files for %s@%s (ip: %s)", len(deleteKeys), packageName, version, ctx.RemoteIP())
-				return map[string]any{"deleted": deleteKeys}
-
 			default:
 				return rex.Status(404, "not found")
 			}
-		case "GET", "HEAD":
-			// continue
 		default:
 			return rex.Status(405, "Method Not Allowed")
 		}
@@ -240,7 +217,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 			indexHTML, err := withCache("index.html", time.Duration(cacheTtl)*time.Second, func() (indexHTML []byte, _ string, err error) {
 				readme, err := os.ReadFile("README.md")
 				if err != nil {
-					fetchClient, recycle := NewFetchClient(15, ctx.UserAgent(), false)
+					fetchClient, recycle := fetch.NewClient(15, ctx.UserAgent(), false)
 					defer recycle()
 					readmeUrl, _ := url.Parse("https://raw.githubusercontent.com/esm-dev/esm.sh/refs/heads/main/README.md")
 					var res *http.Response
@@ -263,7 +240,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 				readme = bytes.ReplaceAll(readme, []byte("./server/embed/"), []byte("/embed/"))
 				readme = bytes.ReplaceAll(readme, []byte("./HOSTING.md"), []byte("https://github.com/esm-dev/esm.sh/blob/main/HOSTING.md"))
 				readme = bytes.ReplaceAll(readme, []byte("https://esm.sh"), []byte(getOrigin(ctx)))
-				readmeHtml, err := common.RenderMarkdown(readme, common.MarkdownRenderKindHTML)
+				readmeHtml, err := gfm.Render(readme, gfm.RenderFormatHTML)
 				if err != nil {
 					err = errors.New("failed to render readme: " + err.Error())
 					return
@@ -452,12 +429,12 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 				return rex.Status(404, "Not Found")
 			}
 			name := pathname[6:]
-			code, ok := unenvNodeRuntimeBulid[name]
+			js, ok := GetNodeRuntimeJS(name)
 			if !ok {
 				if !nodeBuiltinModules[name] {
 					return rex.Status(404, "Not Found")
 				}
-				code = []byte("export default {}")
+				js = []byte("export default {}")
 			}
 			if strings.HasPrefix(name, "chunk-") {
 				ctx.SetHeader("Cache-Control", ccImmutable)
@@ -470,7 +447,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 				ctx.SetHeader("Etag", globalETag)
 			}
 			ctx.SetHeader("Content-Type", ctJavaScript)
-			return code
+			return js
 		}
 
 		// embed assets
@@ -489,7 +466,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 				ctx.SetHeader("Etag", etag)
 				ctx.SetHeader("Cache-Control", ccOneDay)
 			}
-			contentType := common.ContentType(pathname)
+			contentType := mime.GetContentType(pathname)
 			if contentType != "" {
 				ctx.SetHeader("Content-Type", contentType)
 			}
@@ -548,7 +525,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 				}
 			}
 			extname := path.Ext(modUrl.Path)
-			if !(stringInSlice(moduleExts, extname) || extname == ".vue" || extname == ".svelte" || extname == ".md" || extname == ".css") {
+			if !(slices.Contains(moduleExts, extname) || extname == ".vue" || extname == ".svelte" || extname == ".md" || extname == ".css") {
 				return redirect(ctx, modUrl.String(), true)
 			}
 			target := strings.ToLower(query.Get("target"))
@@ -556,10 +533,10 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 				target = "es2022"
 			}
 			v := query.Get("v")
-			if v != "" && (!npmVersioning.Match(v) || len(v) > 32) {
+			if v != "" && (!npm.Versioning.Match(v) || len(v) > 32) {
 				return rex.Status(400, "Invalid Version Param")
 			}
-			fetchClient, recycle := NewFetchClient(15, ctx.UserAgent(), false)
+			fetchClient, recycle := fetch.NewClient(15, ctx.UserAgent(), false)
 			defer recycle()
 			if strings.HasSuffix(modUrl.Path, "/uno.css") {
 				ctxParam := query.Get("ctx")
@@ -604,7 +581,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 				tokenizer := html.NewTokenizer(io.LimitReader(res.Body, 5*MB))
 				content := []string{}
 				jsEntries := map[string]struct{}{}
-				importMap := common.ImportMap{}
+				importMap := importmap.ImportMap{}
 				for {
 					tt := tokenizer.Next()
 					if tt == html.ErrorToken {
@@ -710,6 +687,14 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 				return minifiedCSS
 			} else {
 				im := query.Get("im")
+				if extname == ".md" {
+					for _, kind := range []string{"jsx", "svelte", "vue"} {
+						if query.Has(kind) {
+							modUrlRaw += "?" + kind
+							break
+						}
+					}
+				}
 				h := sha1.New()
 				h.Write([]byte(modUrlRaw))
 				h.Write([]byte(im))
@@ -722,7 +707,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 				}
 				var body io.Reader = content
 				if err == storage.ErrNotFound {
-					importMap := common.ImportMap{}
+					importMap := importmap.ImportMap{}
 					if len(im) > 0 {
 						imPath, err := atobUrl(im)
 						if err != nil {
@@ -771,15 +756,6 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 									}
 									break
 								}
-							}
-						}
-					}
-					if extname == ".md" {
-						for _, kind := range []string{"jsx", "svelte", "vue"} {
-							if query.Has(kind) {
-								modUrl.RawQuery = kind
-								modUrlRaw = modUrl.String()
-								break
 							}
 						}
 					}
@@ -1094,8 +1070,8 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 			if pathKind == RawFile {
 				if esm.SubPath == "" {
 					b := &BuildContext{
-						npmrc: npmrc,
-						esm:   esm,
+						npmrc:   npmrc,
+						esmPath: esm,
 					}
 					err = b.install()
 					if err != nil {
@@ -1181,7 +1157,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 				} else if strings.HasSuffix(esm.SubPath, ".jsx") {
 					ctx.SetHeader("Content-Type", "text/jsx; charset=utf-8")
 				} else {
-					contentType := common.ContentType(esm.SubPath)
+					contentType := mime.GetContentType(esm.SubPath)
 					if contentType != "" {
 						ctx.SetHeader("Content-Type", contentType)
 					}
@@ -1410,12 +1386,12 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 		}
 
 		buildArgs := BuildArgs{
-			alias:      alias,
-			conditions: conditions,
-			deps:       deps,
+			Alias:      alias,
+			Conditions: conditions,
+			Deps:       deps,
 		}
 		if !externalAll && external.Len() > 0 {
-			buildArgs.external = *external.ReadOnly()
+			buildArgs.External = *external.ReadOnly()
 		}
 
 		// match path `PKG@VERSION/X-${args}/esnext/SUBPATH`
@@ -1459,7 +1435,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 					logger:      logger,
 					db:          db,
 					storage:     buildStorage,
-					esm:         esm,
+					esmPath:     esm,
 					args:        buildArgs,
 					externalAll: externalAll,
 					target:      "types",
@@ -1501,9 +1477,9 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 			if !externalRequire && esm.PkgName == "@unocss/preset-icons" {
 				externalRequire = true
 			}
-			buildArgs.externalRequire = externalRequire
-			buildArgs.keepNames = query.Has("keep-names")
-			buildArgs.ignoreAnnotations = query.Has("ignore-annotations")
+			buildArgs.ExternalRequire = externalRequire
+			buildArgs.KeepNames = query.Has("keep-names")
+			buildArgs.IgnoreAnnotations = query.Has("ignore-annotations")
 		}
 
 		bundleMode := BundleDefault
@@ -1565,7 +1541,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 			logger:      logger,
 			db:          db,
 			storage:     buildStorage,
-			esm:         esm,
+			esmPath:     esm,
 			args:        buildArgs,
 			bundleMode:  bundleMode,
 			externalAll: externalAll,
@@ -1635,8 +1611,8 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 
 		// if the path is `ESMBuild`, return the built js/css content
 		if pathKind == EsmBuild {
-			if esm.SubPath != build.esm.SubPath {
-				buf, recycle := NewBuffer()
+			if esm.SubPath != build.esmPath.SubPath {
+				buf, recycle := newBuffer()
 				defer recycle()
 				fmt.Fprintf(buf, "export * from \"%s\";\n", build.Path())
 				if ret.ExportDefault {
@@ -1712,7 +1688,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 			return f // auto closed
 		}
 
-		buf, recycle := NewBuffer()
+		buf, recycle := newBuffer()
 		defer recycle()
 		fmt.Fprintf(buf, "/* esm.sh - %s */\n", esm.Specifier())
 
@@ -1738,7 +1714,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 			}
 			ctx.SetHeader("X-ESM-Path", esm)
 			fmt.Fprintf(buf, "export * from \"%s\";\n", esm)
-			if ret.ExportDefault && (len(exports) == 0 || stringInSlice(exports, "default")) {
+			if ret.ExportDefault && (len(exports) == 0 || slices.Contains(exports, "default")) {
 				fmt.Fprintf(buf, "export { default } from \"%s\";\n", esm)
 			}
 			if ret.CJS && len(exports) > 0 {
@@ -1798,7 +1774,7 @@ func redirect(ctx *rex.Context, url string, isMovedPermanently bool) any {
 }
 
 func errorJS(ctx *rex.Context, message string) any {
-	buf, recycle := NewBuffer()
+	buf, recycle := newBuffer()
 	defer recycle()
 	buf.WriteString("/* esm.sh - error */\n")
 	buf.WriteString("throw new Error(")

@@ -30,7 +30,7 @@ jobs:
           deno-version: ${{ matrix.deno-version }}
 
       - name: Run Unit Tests
-        run: go test ./server ./server/storage -v
+        run: go test ./server ./internal/* -v
         env:
           GO_TEST_S3_ENDPOINT: ${{ secrets.GO_TEST_S3_ENDPOINT }}
           GO_TEST_S3_REGION: ${{ secrets.GO_TEST_S3_REGION }}

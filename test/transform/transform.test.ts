@@ -3,6 +3,38 @@ import { contentType } from "jsr:@std/media-types";
 import { join } from "jsr:@std/path";
 
 Deno.test("transform", async (t) => {
+  const modUrl = new URL(import.meta.url);
+  const demoRootDir = join(modUrl.pathname, "../../../cli/demo");
+  const ac = new AbortController();
+
+  Deno.serve({
+    port: 8083,
+    signal: ac.signal,
+  }, async req => {
+    let { pathname } = new URL(req.url);
+    if (pathname.endsWith("/")) {
+      pathname += "index.html";
+    }
+    try {
+      const file = join(demoRootDir, pathname);
+      const f = await Deno.open(file);
+      return new Response(f.readable, {
+        headers: {
+          "Content-Type": contentType(pathname) ?? "application/octet-stream",
+          "User-Agent": "es/2022",
+        },
+      });
+    } catch (e) {
+      if (e instanceof Deno.errors.NotFound) {
+        return new Response("Not Found", { status: 404 });
+      }
+      return new Response("Internal Server Error", { status: 500 });
+    }
+  });
+
+  // wait for the server(8083) to ready
+  await new Promise((resolve) => setTimeout(resolve, 100));
+
   await t.step("transform API", async () => {
     const options = {
       lang: "jsx",
@@ -48,39 +80,7 @@ Deno.test("transform", async (t) => {
     assertEquals(map, transformOut.map);
   });
 
-  const modUrl = new URL(import.meta.url);
-  const demoRootDir = join(modUrl.pathname, "../../../cli/demo");
-  const ac = new AbortController();
-
-  Deno.serve({
-    port: 8083,
-    signal: ac.signal,
-  }, async req => {
-    let { pathname } = new URL(req.url);
-    if (pathname.endsWith("/")) {
-      pathname += "index.html";
-    }
-    try {
-      const file = join(demoRootDir, pathname);
-      const f = await Deno.open(file);
-      return new Response(f.readable, {
-        headers: {
-          "Content-Type": contentType(pathname) ?? "application/octet-stream",
-          "User-Agent": "es/2022",
-        },
-      });
-    } catch (e) {
-      if (e instanceof Deno.errors.NotFound) {
-        return new Response("Not Found", { status: 404 });
-      }
-      return new Response("Internal Server Error", { status: 500 });
-    }
-  });
-
-  // wait for the server(8083) to ready
-  await new Promise((resolve) => setTimeout(resolve, 100));
-
-  await t.step("transform http module: vanilla", async () => {
+  await t.step("transform module: vanilla", async () => {
     const im = btoaUrl("/vanilla/");
     const res = await fetch(`http://localhost:8080/http://localhost:8083/vanilla/app/main.ts?im=${im}`);
     assertEquals(res.status, 200);
@@ -92,7 +92,7 @@ Deno.test("transform", async (t) => {
     assertStringIncludes(js, 'globalThis.document.head.insertAdjacentHTML("beforeend",`<style>*{margin:0;padding:0;box-sizing:border-box}');
   });
 
-  await t.step("transform http module: react", async () => {
+  await t.step("transform module: react", async () => {
     const im = btoaUrl("/react/");
     const res = await fetch(`http://localhost:8080/http://localhost:8083/react/app/main.tsx?im=${im}`);
     assertEquals(res.status, 200);
@@ -104,7 +104,7 @@ Deno.test("transform", async (t) => {
     assertStringIncludes(js, '("h1",{style:{color:"#61DAFB"},children:"esm.sh"})');
   });
 
-  await t.step("transform http module: preact", async () => {
+  await t.step("transform module: preact", async () => {
     const im = btoaUrl("/preact/");
     const res = await fetch(`http://localhost:8080/http://localhost:8083/preact/app/main.tsx?im=${im}`);
     assertEquals(res.status, 200);
@@ -116,7 +116,7 @@ Deno.test("transform", async (t) => {
     assertStringIncludes(js, '("h1",{style:{color:"#673AB8"},children:"esm.sh"})');
   });
 
-  await t.step("transform http module: vue", async () => {
+  await t.step("transform module: vue", async () => {
     {
       const im = btoaUrl("/vue/");
       const res = await fetch(`http://localhost:8080/http://localhost:8083/vue/app/main.ts?im=${im}`);
@@ -151,7 +151,7 @@ Deno.test("transform", async (t) => {
     }
   });
 
-  await t.step("transform http module: svelte", async () => {
+  await t.step("transform module: svelte", async () => {
     {
       const im = btoaUrl("/svelte/");
       const res = await fetch(`http://localhost:8080/http://localhost:8083/svelte/app/main.ts?im=${im}`);
@@ -182,10 +182,9 @@ Deno.test("transform", async (t) => {
     }
   });
 
-  await t.step("transform http module: markdown", async () => {
+  await t.step("transform module: markdown", async () => {
     {
-      const im = btoaUrl("/with-markdown/vanilla/");
-      const res = await fetch(`http://localhost:8080/http://localhost:8083/with-markdown/vanilla/app/about.md?im=${im}`);
+      const res = await fetch(`http://localhost:8080/https://raw.githubusercontent.com/esm-dev/esm.sh/refs/heads/main/README.md`);
       assertEquals(res.status, 200);
       assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
       assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
@@ -193,96 +192,31 @@ Deno.test("transform", async (t) => {
       assertStringIncludes(js, `h1 id="esmsh">esm.sh</h1>`);
     }
     {
-      const im = btoaUrl("/with-markdown/react/");
-      const res = await fetch(`http://localhost:8080/http://localhost:8083/with-markdown/react/app/about.md?jsx&im=${im}`);
+      const res = await fetch(`http://localhost:8080/https://raw.githubusercontent.com/esm-dev/esm.sh/refs/heads/main/README.md?jsx`);
       assertEquals(res.status, 200);
       assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
       assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
       const js = await res.text();
+      assertStringIncludes(js, `from"react/jsx-runtime"`);
       assertStringIncludes(js, `"h1",{id:"esmsh",children:"esm.sh"}`);
     }
     {
-      const im = btoaUrl("/with-markdown/svelte/");
-      const res = await fetch(`http://localhost:8080/http://localhost:8083/with-markdown/svelte/app/about.md?svelte&im=${im}`);
+      const res = await fetch(`http://localhost:8080/https://raw.githubusercontent.com/esm-dev/esm.sh/refs/heads/main/README.md?svelte`);
       assertEquals(res.status, 200);
       assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
       assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
       const js = await res.text();
+      assertStringIncludes(js, `from"svelte/internal/client"`);
       assertStringIncludes(js, `<h1 id="esmsh">esm.sh</h1>`);
     }
     {
-      const im = btoaUrl("/with-markdown/vue/");
-      const res = await fetch(`http://localhost:8080/http://localhost:8083/with-markdown/vue/app/about.md?vue&im=${im}`);
+      const res = await fetch(`http://localhost:8080/https://raw.githubusercontent.com/esm-dev/esm.sh/refs/heads/main/README.md?vue`);
       assertEquals(res.status, 200);
       assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
       assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
       const js = await res.text();
-      assertStringIncludes(js, `("h1",{id:"esmsh"},"esm.sh"`);
-    }
-    {
-      const im = btoaUrl("/with-markdown/vanilla/");
-      const res = await fetch(`http://localhost:8080/http://localhost:8083/with-markdown/vanilla/app/main.ts?im=${im}`);
-      assertEquals(res.status, 200);
-      assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
-      assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
-      const js = await res.text();
-      assertStringIncludes(js, `h1 id="esmsh">esm.sh</h1>`);
-      assertStringIncludes(
-        js,
-        'globalThis.document.head.insertAdjacentHTML("beforeend",`<style>*{margin:0;padding:0;box-sizing:border-box}',
-      );
-    }
-    {
-      const im = btoaUrl("/with-markdown/preact/");
-      const res = await fetch(`http://localhost:8080/http://localhost:8083/with-markdown/preact/app/main.tsx?im=${im}`);
-      assertEquals(res.status, 200);
-      assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
-      assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
-      const js = await res.text();
-      assertStringIncludes(js, `"h1",{id:"esmsh",children:"esm.sh"}`);
-      assertStringIncludes(
-        js,
-        'globalThis.document.head.insertAdjacentHTML("beforeend",`<style>*{margin:0;padding:0;box-sizing:border-box}',
-      );
-    }
-    {
-      const im = btoaUrl("/with-markdown/react/");
-      const res = await fetch(`http://localhost:8080/http://localhost:8083/with-markdown/react/app/main.tsx?im=${im}`);
-      assertEquals(res.status, 200);
-      assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
-      assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
-      const js = await res.text();
-      assertStringIncludes(js, `"h1",{id:"esmsh",children:"esm.sh"}`);
-      assertStringIncludes(
-        js,
-        'globalThis.document.head.insertAdjacentHTML("beforeend",`<style>*{margin:0;padding:0;box-sizing:border-box}',
-      );
-    }
-    {
-      const im = btoaUrl("/with-markdown/svelte/");
-      const res = await fetch(`http://localhost:8080/http://localhost:8083/with-markdown/svelte/app/main.ts?im=${im}`);
-      assertEquals(res.status, 200);
-      assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
-      assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
-      const js = await res.text();
+      assertStringIncludes(js, `from"vue"`);
       assertStringIncludes(js, `<h1 id="esmsh">esm.sh</h1>`);
-      assertStringIncludes(
-        js,
-        'globalThis.document.head.insertAdjacentHTML("beforeend",`<style>*{margin:0;padding:0;box-sizing:border-box}',
-      );
-    }
-    {
-      const im = btoaUrl("/with-markdown/vue/");
-      const res = await fetch(`http://localhost:8080/http://localhost:8083/with-markdown/vue/app/main.ts?im=${im}`);
-      assertEquals(res.status, 200);
-      assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
-      assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
-      const js = await res.text();
-      assertStringIncludes(js, `("h1",{id:"esmsh"},"esm.sh"`);
-      assertStringIncludes(
-        js,
-        'globalThis.document.head.insertAdjacentHTML("beforeend",`<style>*{margin:0;padding:0;box-sizing:border-box}',
-      );
     }
   });
 
@@ -296,7 +230,7 @@ Deno.test("transform", async (t) => {
       assertEquals(res.headers.get("Content-Type"), "text/css; charset=utf-8");
       assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
       const css = await res.text();
-      assertStringIncludes(css, "time,mark,audio,video{"); // eric-meyer reset css
+      assertStringIncludes(css, "*,:before,:after{"); // reset css
       assertStringIncludes(css, ".center-box{");
       assertStringIncludes(css, ".logo{");
       assertStringIncludes(css, ".logo:hover{");
@@ -318,7 +252,7 @@ Deno.test("transform", async (t) => {
       assertEquals(res.headers.get("Content-Type"), "text/css; charset=utf-8");
       assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
       const css = await res.text();
-      assertStringIncludes(css, "time,mark,audio,video{"); // eric-meyer reset css
+      assertStringIncludes(css, "*,:before,:after{"); // reset css
       assertStringIncludes(css, ".center-box{");
       assertStringIncludes(css, ".logo{");
       assertStringIncludes(css, ".logo:hover{");
@@ -340,7 +274,7 @@ Deno.test("transform", async (t) => {
       assertEquals(res.headers.get("Content-Type"), "text/css; charset=utf-8");
       assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
       const css = await res.text();
-      assertStringIncludes(css, "time,mark,audio,video{"); // eric-meyer reset css
+      assertStringIncludes(css, "*,:before,:after{"); // reset css
       assertStringIncludes(css, ".center-box{");
       assertStringIncludes(css, ".logo{");
       assertStringIncludes(css, ".logo:hover{");
@@ -362,7 +296,7 @@ Deno.test("transform", async (t) => {
       assertEquals(res.headers.get("Content-Type"), "text/css; charset=utf-8");
       assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
       const css = await res.text();
-      assertStringIncludes(css, "time,mark,audio,video{"); // eric-meyer reset css
+      assertStringIncludes(css, "*,:before,:after{"); // reset css
       assertStringIncludes(css, ".center-box{");
       assertStringIncludes(css, ".logo{");
       assertStringIncludes(css, ".logo:hover{");
@@ -384,7 +318,7 @@ Deno.test("transform", async (t) => {
       assertEquals(res.headers.get("Content-Type"), "text/css; charset=utf-8");
       assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
       const css = await res.text();
-      assertStringIncludes(css, "time,mark,audio,video{"); // eric-meyer reset css
+      assertStringIncludes(css, "*,:before,:after{"); // reset css
       assertStringIncludes(css, ".center-box{");
       assertStringIncludes(css, ".logo{");
       assertStringIncludes(css, ".logo:hover{");

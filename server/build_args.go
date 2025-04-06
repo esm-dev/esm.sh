@@ -3,21 +3,23 @@ package server
 import (
 	"fmt"
 	"path"
+	"slices"
 	"sort"
 	"strings"
 
+	"github.com/esm-dev/esm.sh/internal/npm"
 	"github.com/ije/gox/set"
 	"github.com/ije/gox/utils"
 )
 
 type BuildArgs struct {
-	alias             map[string]string
-	deps              map[string]string
-	external          set.ReadOnlySet[string]
-	conditions        []string
-	keepNames         bool
-	ignoreAnnotations bool
-	externalRequire   bool
+	Alias             map[string]string
+	Deps              map[string]string
+	External          set.ReadOnlySet[string]
+	Conditions        []string
+	KeepNames         bool
+	IgnoreAnnotations bool
+	ExternalRequire   bool
 }
 
 func decodeBuildArgs(argsString string) (args BuildArgs, err error) {
@@ -26,13 +28,13 @@ func decodeBuildArgs(argsString string) (args BuildArgs, err error) {
 		args = BuildArgs{}
 		for _, p := range strings.Split(s, "\n") {
 			if strings.HasPrefix(p, "a") {
-				args.alias = map[string]string{}
+				args.Alias = map[string]string{}
 				for _, p := range strings.Split(p[1:], ",") {
 					name, to := utils.SplitByFirstByte(p, ':')
 					name = strings.TrimSpace(name)
 					to = strings.TrimSpace(to)
 					if name != "" && to != "" {
-						args.alias[name] = to
+						args.Alias[name] = to
 					}
 				}
 			} else if strings.HasPrefix(p, "d") {
@@ -41,19 +43,19 @@ func decodeBuildArgs(argsString string) (args BuildArgs, err error) {
 					pkgName, pkgVersion, _, _ := splitEsmPath(p)
 					deps[pkgName] = pkgVersion
 				}
-				args.deps = deps
+				args.Deps = deps
 			} else if strings.HasPrefix(p, "e") {
-				args.external = *set.NewReadOnly(strings.Split(p[1:], ",")...)
+				args.External = *set.NewReadOnly(strings.Split(p[1:], ",")...)
 			} else if strings.HasPrefix(p, "c") {
-				args.conditions = append(args.conditions, strings.Split(p[1:], ",")...)
+				args.Conditions = append(args.Conditions, strings.Split(p[1:], ",")...)
 			} else {
 				switch p {
 				case "r":
-					args.externalRequire = true
+					args.ExternalRequire = true
 				case "k":
-					args.keepNames = true
+					args.KeepNames = true
 				case "i":
-					args.ignoreAnnotations = true
+					args.IgnoreAnnotations = true
 
 				}
 			}
@@ -64,9 +66,9 @@ func decodeBuildArgs(argsString string) (args BuildArgs, err error) {
 
 func encodeBuildArgs(args BuildArgs, isDts bool) string {
 	lines := []string{}
-	if len(args.alias) > 0 {
+	if len(args.Alias) > 0 {
 		var ss sort.StringSlice
-		for from, to := range args.alias {
+		for from, to := range args.Alias {
 			ss = append(ss, fmt.Sprintf("%s:%s", from, to))
 		}
 		if len(ss) > 0 {
@@ -74,9 +76,9 @@ func encodeBuildArgs(args BuildArgs, isDts bool) string {
 			lines = append(lines, fmt.Sprintf("a%s", strings.Join(ss, ",")))
 		}
 	}
-	if len(args.deps) > 0 {
+	if len(args.Deps) > 0 {
 		var ss sort.StringSlice
-		for name, version := range args.deps {
+		for name, version := range args.Deps {
 			ss = append(ss, fmt.Sprintf("%s@%s", name, version))
 		}
 		if len(ss) > 0 {
@@ -84,9 +86,9 @@ func encodeBuildArgs(args BuildArgs, isDts bool) string {
 			lines = append(lines, fmt.Sprintf("d%s", strings.Join(ss, ",")))
 		}
 	}
-	if args.external.Len() > 0 {
+	if args.External.Len() > 0 {
 		var ss sort.StringSlice
-		for _, name := range args.external.Values() {
+		for _, name := range args.External.Values() {
 			ss = append(ss, name)
 		}
 		if len(ss) > 0 {
@@ -94,9 +96,9 @@ func encodeBuildArgs(args BuildArgs, isDts bool) string {
 			lines = append(lines, fmt.Sprintf("e%s", strings.Join(ss, ",")))
 		}
 	}
-	if len(args.conditions) > 0 {
+	if len(args.Conditions) > 0 {
 		var ss sort.StringSlice
-		for _, name := range args.conditions {
+		for _, name := range args.Conditions {
 			ss = append(ss, name)
 		}
 		if len(ss) > 0 {
@@ -105,13 +107,13 @@ func encodeBuildArgs(args BuildArgs, isDts bool) string {
 		}
 	}
 	if !isDts {
-		if args.externalRequire {
+		if args.ExternalRequire {
 			lines = append(lines, "r")
 		}
-		if args.keepNames {
+		if args.KeepNames {
 			lines = append(lines, "k")
 		}
-		if args.ignoreAnnotations {
+		if args.IgnoreAnnotations {
 			lines = append(lines, "i")
 		}
 	}
@@ -123,13 +125,13 @@ func encodeBuildArgs(args BuildArgs, isDts bool) string {
 
 // resolveBuildArgs resolves `alias`, `deps`, `external` of the build args
 func resolveBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esm EsmPath) error {
-	if len(args.alias) > 0 || len(args.deps) > 0 || args.external.Len() > 0 {
+	if len(args.Alias) > 0 || len(args.Deps) > 0 || args.External.Len() > 0 {
 		// quick check if the alias, deps, external are all in dependencies of the package
 		deps, ok, err := func() (deps *set.Set[string], ok bool, err error) {
-			var p *PackageJSON
+			var p *npm.PackageJSON
 			pkgJsonPath := path.Join(installDir, "node_modules", esm.PkgName, "package.json")
 			if existsFile(pkgJsonPath) {
-				var raw PackageJSONRaw
+				var raw npm.PackageJSONRaw
 				err = utils.ParseJSONFile(pkgJsonPath, &raw)
 				if err == nil {
 					p = raw.ToNpmPackage()
@@ -149,22 +151,22 @@ func resolveBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esm EsmP
 			for name := range p.PeerDependencies {
 				deps.Add(name)
 			}
-			if len(args.alias) > 0 {
-				for from := range args.alias {
+			if len(args.Alias) > 0 {
+				for from := range args.Alias {
 					if !deps.Has(from) {
 						return nil, false, nil
 					}
 				}
 			}
-			if len(args.deps) > 0 {
-				for name := range args.deps {
+			if len(args.Deps) > 0 {
+				for name := range args.Deps {
 					if !deps.Has(name) {
 						return nil, false, nil
 					}
 				}
 			}
-			if args.external.Len() > 0 {
-				for _, name := range args.external.Values() {
+			if args.External.Len() > 0 {
+				for _, name := range args.External.Values() {
 					if !deps.Has(name) {
 						return nil, false, nil
 					}
@@ -182,9 +184,9 @@ func resolveBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esm EsmP
 				return err
 			}
 		}
-		if len(args.alias) > 0 {
+		if len(args.Alias) > 0 {
 			alias := map[string]string{}
-			for from, to := range args.alias {
+			for from, to := range args.Alias {
 				if deps.Has(from) {
 					alias[from] = to
 				}
@@ -197,11 +199,11 @@ func resolveBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esm EsmP
 					deps.Add(pkgName)
 				}
 			}
-			args.alias = alias
+			args.Alias = alias
 		}
-		if len(args.deps) > 0 {
+		if len(args.Deps) > 0 {
 			depsArg := map[string]string{}
-			for name, version := range args.deps {
+			for name, version := range args.Deps {
 				if name != esm.PkgName && deps.Has(name) {
 					depsArg[name] = version
 					continue
@@ -209,15 +211,15 @@ func resolveBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esm EsmP
 				// fix some edge cases
 				// for example, the package "htm" doesn't declare 'preact' as a dependency explicitly
 				// as a workaround, we check if the package name is in the subPath of the package
-				if esm.SubModuleName != "" && stringInSlice(strings.Split(esm.SubModuleName, "/"), name) {
+				if esm.SubModuleName != "" && slices.Contains(strings.Split(esm.SubModuleName, "/"), name) {
 					depsArg[name] = version
 				}
 			}
-			args.deps = depsArg
+			args.Deps = depsArg
 		}
-		if args.external.Len() > 0 {
-			external := make([]string, 0, args.external.Len())
-			for _, name := range args.external.Values() {
+		if args.External.Len() > 0 {
+			external := make([]string, 0, args.External.Len())
+			for _, name := range args.External.Values() {
 				if strings.HasPrefix(name, "node:") {
 					if nodeBuiltinModules[name[5:]] {
 						external = append(external, name)
@@ -233,21 +235,21 @@ func resolveBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esm EsmP
 					external = append(external, name)
 				}
 			}
-			args.external = *set.NewReadOnly(external...)
+			args.External = *set.NewReadOnly(external...)
 		}
 	}
 	return nil
 }
 
-func walkDeps(npmrc *NpmRC, installDir string, pkg Package, mark *set.Set[string]) (err error) {
+func walkDeps(npmrc *NpmRC, installDir string, pkg npm.Package, mark *set.Set[string]) (err error) {
 	if mark.Has(pkg.Name) {
 		return
 	}
 	mark.Add(pkg.Name)
-	var p *PackageJSON
+	var p *npm.PackageJSON
 	pkgJsonPath := path.Join(installDir, "node_modules", pkg.Name, "package.json")
 	if existsFile(pkgJsonPath) {
-		var raw PackageJSONRaw
+		var raw npm.PackageJSONRaw
 		err = utils.ParseJSONFile(pkgJsonPath, &raw)
 		if err == nil {
 			p = raw.ToNpmPackage()
@@ -268,8 +270,8 @@ func walkDeps(npmrc *NpmRC, installDir string, pkg Package, mark *set.Set[string
 		pkgDeps[name] = version
 	}
 	for name, version := range pkgDeps {
-		depPkg := Package{Name: name, Version: version}
-		p, e := resolveDependencyVersion(version)
+		depPkg := npm.Package{Name: name, Version: version}
+		p, e := npm.ResolveDependencyVersion(version)
 		if e == nil && p.Name != "" {
 			depPkg = p
 		}

@@ -2,10 +2,11 @@ package server
 
 import (
 	"bytes"
-	"encoding/json"
 	"os"
 	"path"
 	"regexp"
+
+	"github.com/goccy/go-json"
 )
 
 var (
@@ -13,7 +14,7 @@ var (
 )
 
 func (ctx *BuildContext) rewriteJS(in []byte) (out []byte, dropSourceMap bool) {
-	switch ctx.esm.PkgName {
+	switch ctx.esmPath.PkgName {
 	case "axios", "cross-fetch", "whatwg-fetch":
 		if ctx.isDenoTarget() {
 			xhr := []byte("\nimport \"https://deno.land/x/xhr@0.3.0/mod.ts\";")
@@ -31,7 +32,7 @@ func (ctx *BuildContext) rewriteJS(in []byte) (out []byte, dropSourceMap bool) {
 		}
 
 	case "iconv-lite":
-		if ctx.isDenoTarget() && semverLessThan(ctx.esm.PkgVersion, "0.5.0") {
+		if ctx.isDenoTarget() && semverLessThan(ctx.esmPath.PkgVersion, "0.5.0") {
 			old := "__Process$.versions.node"
 			new := "__Process$.versions.nope"
 			return bytes.Replace(in, []byte(old), []byte(new), 1), false
@@ -41,7 +42,7 @@ func (ctx *BuildContext) rewriteJS(in []byte) (out []byte, dropSourceMap bool) {
 }
 
 func (ctx *BuildContext) rewriteDTS(filename string, buf *bytes.Buffer) *bytes.Buffer {
-	switch ctx.esm.PkgName {
+	switch ctx.esmPath.PkgName {
 	case "preact":
 		// fix preact/compat types
 		if filename == "./compat/src/index.d.ts" {

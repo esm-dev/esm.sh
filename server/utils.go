@@ -1,23 +1,15 @@
 package server
 
 import (
-	"bytes"
 	"encoding/base64"
-	"errors"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
-	"sync"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/ije/gox/valid"
 )
-
-// checks if the given hostname is a local address.
-func isLocalhost(hostname string) bool {
-	return hostname == "localhost" || hostname == "127.0.0.1" || (valid.IsIPv4(hostname) && strings.HasPrefix(hostname, "192.168."))
-}
 
 // isJsReservedWord returns true if the given string is a reserved word in JavaScript.
 func isJsReservedWord(word string) bool {
@@ -46,23 +38,59 @@ func isJsIdentifier(s string) bool {
 	return true
 }
 
+// isCommitish returns true if the given string is a commit hash.
+func isCommitish(s string) bool {
+	return len(s) >= 7 && len(s) <= 40 && valid.IsHexString(s)
+}
+
+// isNodeBuiltinSpecifier checks if the given specifier is a node.js built-in module.
+func isNodeBuiltinSpecifier(specifier string) bool {
+	return strings.HasPrefix(specifier, "node:") && nodeBuiltinModules[specifier[5:]]
+}
+
+// isJsonModuleSpecifier returns true if the specifier is a json module.
+func isJsonModuleSpecifier(specifier string) bool {
+	if !strings.HasSuffix(specifier, ".json") {
+		return false
+	}
+	_, _, subpath, _ := splitEsmPath(specifier)
+	return subpath != "" && strings.HasSuffix(subpath, ".json")
+}
+
+// isHttpSepcifier returns true if the specifier is a remote URL.
+func isHttpSepcifier(specifier string) bool {
+	return strings.HasPrefix(specifier, "https://") || strings.HasPrefix(specifier, "http://")
+}
+
+// isRelPathSpecifier returns true if the specifier is a local path.
+func isRelPathSpecifier(specifier string) bool {
+	return strings.HasPrefix(specifier, "./") || strings.HasPrefix(specifier, "../")
+}
+
+// isAbsPathSpecifier returns true if the specifier is an absolute path.
+func isAbsPathSpecifier(specifier string) bool {
+	return strings.HasPrefix(specifier, "/") || strings.HasPrefix(specifier, "file://")
+}
+
+// checks if the given hostname is a local address.
+func isLocalhost(hostname string) bool {
+	return hostname == "localhost" || hostname == "127.0.0.1" || (valid.IsIPv4(hostname) && strings.HasPrefix(hostname, "192.168."))
+}
+
+// semverLessThan returns true if the version a is less than the version b.
+func semverLessThan(a string, b string) bool {
+	va, err1 := semver.NewVersion(a)
+	if err1 != nil {
+		return false
+	}
+	vb, err2 := semver.NewVersion(b)
+	return err2 == nil && va.LessThan(vb)
+}
+
 // endsWith returns true if the given string ends with any of the suffixes.
 func endsWith(s string, suffixs ...string) bool {
 	for _, suffix := range suffixs {
 		if strings.HasSuffix(s, suffix) {
-			return true
-		}
-	}
-	return false
-}
-
-// stringInSlice returns true if the given string is included in the given array.
-func stringInSlice(a []string, s string) bool {
-	if len(a) == 0 {
-		return false
-	}
-	for _, v := range a {
-		if v == s {
 			return true
 		}
 	}
@@ -161,17 +189,6 @@ func appendVaryHeader(header http.Header, key string) {
 	}
 }
 
-var bufferPool = sync.Pool{New: func() interface{} { return new(bytes.Buffer) }}
-
-// NewBuffer returns a new buffer from the buffer pool.
-func NewBuffer() (buffer *bytes.Buffer, recycle func()) {
-	buf := bufferPool.Get().(*bytes.Buffer)
-	return buf, func() {
-		buf.Reset()
-		bufferPool.Put(buf)
-	}
-}
-
 // concatBytes concatenates two byte slices.
 func concatBytes(a, b []byte) []byte {
 	al, bl := len(a), len(b)
@@ -185,23 +202,4 @@ func concatBytes(a, b []byte) []byte {
 	copy(c, a)
 	copy(c[al:], b)
 	return c
-}
-
-// run executes the given command and returns the output.
-func run(cmd string, args ...string) (output []byte, err error) {
-	var outBuf bytes.Buffer
-	var errBuf bytes.Buffer
-	c := exec.Command(cmd, args...)
-	c.Dir = os.TempDir()
-	c.Stdout = &outBuf
-	c.Stderr = &errBuf
-	err = c.Run()
-	if err != nil {
-		if errBuf.Len() > 0 {
-			err = errors.New(errBuf.String())
-		}
-		return
-	}
-	output = outBuf.Bytes()
-	return
 }

@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/esm-dev/esm.sh/internal/npm"
 	"github.com/ije/gox/set"
 )
 
@@ -20,17 +21,17 @@ type Ref struct {
 func (ctx *BuildContext) analyzeSplitting() (err error) {
 	exportNames := set.New[string]()
 
-	for _, exportName := range ctx.pkgJson.Exports.keys {
+	for _, exportName := range ctx.pkgJson.Exports.Keys() {
 		exportName := stripEntryModuleExt(exportName)
 		if (exportName == "." || (strings.HasPrefix(exportName, "./") && !strings.ContainsRune(exportName, '*'))) && !endsWith(exportName, ".json", ".css", ".wasm", ".d.ts", ".d.mts", ".d.cts") {
-			v := ctx.pkgJson.Exports.values[exportName]
+			v, _ := ctx.pkgJson.Exports.Get(exportName)
 			if s, ok := v.(string); ok {
 				if endsWith(s, ".json", ".css", ".wasm", ".d.ts", ".d.mts", ".d.cts") {
 					continue
 				}
-			} else if obj, ok := v.(JSONObject); ok {
+			} else if obj, ok := v.(npm.JSONObject); ok {
 				// ignore types only exports
-				if len(obj.keys) == 1 && obj.keys[0] == "types" {
+				if keys := obj.Keys(); len(keys) == 1 && keys[0] == "types" {
 					continue
 				}
 			}
@@ -79,7 +80,7 @@ func (ctx *BuildContext) analyzeSplitting() (err error) {
 				if e == nil && n <= len(a)-1 {
 					ctx.splitting = set.NewReadOnly(a[1 : n+1]...)
 					if DEBUG {
-						ctx.logger.Debugf("build(%s): splitting.txt found with %d shared modules", ctx.esm.Specifier(), ctx.splitting.Len())
+            ctx.logger.Debugf("build(%s): splitting.txt found with %d shared modules", ctx.esmPath.Specifier(), ctx.splitting.Len())
 					}
 					return true
 				}
@@ -126,15 +127,15 @@ func (ctx *BuildContext) analyzeSplitting() (err error) {
 
 		refs := map[string]Ref{}
 		for _, exportName := range exportNames.Values() {
-			esm := ctx.esm
-			esm.SubPath = exportName
-			esm.SubModuleName = stripEntryModuleExt(exportName)
+      esmPath := ctx.esmPath
+			esmPath.SubPath = exportName
+			esmPath.SubModuleName = stripEntryModuleExt(exportName)
 			b := &BuildContext{
 				npmrc:       ctx.npmrc,
 				logger:      ctx.logger,
 				db:          ctx.db,
 				storage:     ctx.storage,
-				esm:         esm,
+        esmPath:     esmPath,
 				args:        ctx.args,
 				externalAll: ctx.externalAll,
 				target:      ctx.target,
@@ -144,7 +145,7 @@ func (ctx *BuildContext) analyzeSplitting() (err error) {
 			}
 			_, includes, err := b.buildModule(true)
 			if err != nil {
-				return fmt.Errorf("failed to analyze %s: %v", esm.Specifier(), err)
+        return fmt.Errorf("failed to analyze %s: %v", esmPath.Specifier(), err)
 			}
 			for _, include := range includes {
 				module, importer := include[0], include[1]
@@ -197,7 +198,7 @@ func (ctx *BuildContext) analyzeSplitting() (err error) {
 			}
 			ctx.splitting = splitting.ReadOnly()
 			if DEBUG {
-				ctx.logger.Debugf("build(%s): found %d shared modules from %d modules", ctx.esm.Specifier(), shared.Len(), len(refs))
+        ctx.logger.Debugf("build(%s): found %d shared modules from %d modules", ctx.esmPath.Specifier(), shared.Len(), len(refs))
 			}
 		}
 	}

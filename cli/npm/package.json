@@ -1,7 +1,7 @@
 {
   "name": "esm.sh",
   "version": "*",
-  "description": "A nobuild CDN for modern web development.",
+  "description": "A nobuild tool for modern web development.",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/esm-dev/esm.sh.git"

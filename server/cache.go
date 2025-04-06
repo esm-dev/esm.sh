@@ -1,15 +1,33 @@
 package server
 
 import (
-	"sync"
+	"bytes"
 	"time"
 
 	lru "github.com/hashicorp/golang-lru/v2"
-	syncx "github.com/ije/gox/sync"
+	"github.com/ije/gox/sync"
 )
 
+var bufferPool = sync.Pool{New: func() any { return new(bytes.Buffer) }}
+var onceMap = sync.Map{}
+
+// newBuffer returns a new buffer from the buffer pool.
+func newBuffer() (buffer *bytes.Buffer, recycle func()) {
+	buf := bufferPool.Get().(*bytes.Buffer)
+	return buf, func() {
+		buf.Reset()
+		bufferPool.Put(buf)
+	}
+}
+
+// doOnce executes a function only once for a given id.
+func doOnce(id string, fn func() error) (err error) {
+	once, _ := onceMap.LoadOrStore(id, &sync.Once{})
+	return once.(*sync.Once).Do(fn)
+}
+
 var (
-	cacheMutex syncx.KeyedMutex
+	cacheMutex sync.KeyedMutex
 	cacheStore sync.Map
 	cacheLRU   *lru.Cache[string, any]
 )
@@ -30,7 +48,7 @@ func withCache[T any](key string, cacheTtl time.Duration, fetch func() (T, strin
 		}
 	}
 
-	unlock := cacheMutex.Lock("lru:" + key)
+	unlock := cacheMutex.Lock(key)
 	defer unlock()
 
 	// check cache store again after get lock
@@ -65,7 +83,7 @@ func withLRUCache[T any](key string, fetch func() (T, error)) (data T, err error
 		return v.(T), nil
 	}
 
-	unlock := cacheMutex.Lock(key)
+	unlock := cacheMutex.Lock("lru:" + key)
 	defer unlock()
 
 	// check cache store again after get lock

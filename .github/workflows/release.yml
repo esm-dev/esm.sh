@@ -110,7 +110,7 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
 
       - name: Build CLI
-        run: go build -ldflags="-s -w -X 'github.com/esm-dev/esm.sh/server.VERSION=${{ github.ref_name }}'" -o cli/build/bin/esm.sh-cli-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }} cli/cmd/main.go
+        run: go build -ldflags="-s -w -X 'github.com/esm-dev/esm.sh/server.VERSION=${{ github.ref_name }}'" -o cli/build/bin/esm.sh-cli-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }} cli/esmd/main.go
         env:
           GOOS: ${{ matrix.os }}
           GOARCH: ${{ matrix.arch }}

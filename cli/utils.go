@@ -1,15 +1,13 @@
 package cli
 
 import (
+	"embed"
 	"flag"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"golang.org/x/term"
-)
-
-var (
-	moduleExts = []string{".js", ".mjs", ".jsx", ".ts", ".mts", ".tsx", ".svelte", ".vue"}
 )
 
 // termRaw implements the github.com/ije/gox/term.Raw interface.
@@ -37,38 +35,15 @@ func (t *termRaw) Next() byte {
 	return buf[0]
 }
 
-// isHttpSepcifier returns true if the specifier is a remote URL.
-func isHttpSepcifier(specifier string) bool {
-	return strings.HasPrefix(specifier, "https://") || strings.HasPrefix(specifier, "http://")
-}
-
-// isRelPathSpecifier returns true if the specifier is a local path.
-func isRelPathSpecifier(specifier string) bool {
-	return strings.HasPrefix(specifier, "./") || strings.HasPrefix(specifier, "../")
-}
-
-// isAbsPathSpecifier returns true if the specifier is an absolute path.
-func isAbsPathSpecifier(specifier string) bool {
-	return strings.HasPrefix(specifier, "/") || strings.HasPrefix(specifier, "file://")
-}
-
-// endsWith returns true if the given string ends with any of the suffixes.
-func endsWith(s string, suffixs ...string) bool {
-	for _, suffix := range suffixs {
-		if strings.HasSuffix(s, suffix) {
-			return true
-		}
+// parseCommandFlag parses the command flag
+func parseCommandFlag(start int) (string, []string) {
+	if start >= len(os.Args) {
+		start = len(os.Args)
 	}
-	return false
-}
-
-// parseCommandFlag parses the command flag.
-func parseCommandFlag() (string, []string) {
-	flag.CommandLine.Parse(os.Args[2:])
-
+	flag.CommandLine.Parse(os.Args[start:])
 	args := make([]string, 0, len(os.Args)-2)
 	nextVaule := false
-	for _, arg := range os.Args[2:] {
+	for _, arg := range os.Args[start:] {
 		if !strings.HasPrefix(arg, "-") {
 			if !nextVaule {
 				args = append(args, arg)
@@ -85,12 +60,46 @@ func parseCommandFlag() (string, []string) {
 	return args[0], args[1:]
 }
 
-// includes returns true if the given value is included in the array.
-func includes(arr []string, value string) bool {
-	for _, v := range arr {
-		if v == value {
-			return true
+func lookupCloestFile(basename string) (filename string, exists bool, err error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", false, err
+	}
+	dir := cwd
+	for {
+		indexHtml := filepath.Join(dir, basename)
+		fi, err := os.Stat(indexHtml)
+		if err == nil && !fi.IsDir() {
+			return indexHtml, true, nil
+		}
+		if err != nil && os.IsExist(err) {
+			return "", false, err
+		}
+		dir = filepath.Dir(dir)
+		if dir == "/" || (os.PathSeparator == '\\' && len(dir) <= 3) {
+			break
 		}
 	}
-	return false
+	return filepath.Join(cwd, basename), false, nil
+}
+
+func walkEmbedFS(fs *embed.FS, dir string, callback func(filename string) error) error {
+	entries, err := efs.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			err = walkEmbedFS(fs, dir+"/"+entry.Name(), callback)
+			if err != nil {
+				return err
+			}
+		} else {
+			err = callback(dir + "/" + entry.Name())
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }

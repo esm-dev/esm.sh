@@ -1,32 +1,25 @@
 package server
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path"
-	"regexp"
 	"strconv"
 	"strings"
 
-	"github.com/esm-dev/esm.sh/server/common"
-	"github.com/ije/gox/sync"
+	"github.com/esm-dev/esm.sh/internal/importmap"
+	"github.com/esm-dev/esm.sh/internal/jsrt"
+	"github.com/esm-dev/esm.sh/internal/npm"
 	"github.com/ije/gox/term"
-)
-
-var (
-	compileSyncMap   = sync.Map{}
-	regexpSveltePath = regexp.MustCompile(`/\*?svelte@([~\^]?[\w\+\-\.]+)(/|\?|&|$)`)
-	regexpVuePath    = regexp.MustCompile(`/\*?vue@([~\^]?[\w\+\-\.]+)(/|\?|&|$)`)
 )
 
 func transformSvelte(npmrc *NpmRC, svelteVersion string, filename string, code string) (output *LoaderOutput, err error) {
 	loaderExecPath := path.Join(npmrc.StoreDir(), "svelte@"+svelteVersion, "loader.js")
 
-	once, _ := compileSyncMap.LoadOrStore(loaderExecPath, &sync.Once{})
-	err = once.(*sync.Once).Do(func() (err error) {
+	err = doOnce(loaderExecPath, func() (err error) {
 		if !existsFile(loaderExecPath) {
 			if DEBUG {
 				fmt.Println(term.Dim("Compiling svelte loader..."))
@@ -47,7 +40,7 @@ func compileSvelteLoader(npmrc *NpmRC, svelteVersion string, loaderExecPath stri
 	wd := path.Join(npmrc.StoreDir(), "svelte@"+svelteVersion)
 
 	// install svelte
-	pkgJson, err := npmrc.installPackage(Package{Name: "svelte", Version: svelteVersion})
+	pkgJson, err := npmrc.installPackage(npm.Package{Name: "svelte", Version: svelteVersion})
 	if err != nil {
 		return
 	}
@@ -72,19 +65,22 @@ func compileSvelteLoader(npmrc *NpmRC, svelteVersion string, loaderExecPath stri
 	return
 }
 
-func resolveSvelteVersion(npmrc *NpmRC, importMap common.ImportMap) (svelteVersion string, err error) {
+func resolveSvelteVersion(npmrc *NpmRC, importMap importmap.ImportMap) (svelteVersion string, err error) {
 	svelteVersion = "5"
 	if len(importMap.Imports) > 0 {
-		sveltePath, ok := importMap.Imports["svelte"]
-		if ok {
-			a := regexpSveltePath.FindAllStringSubmatch(sveltePath, 1)
-			if len(a) > 0 {
-				svelteVersion = a[0][1]
+		svelteUrl, ok := importMap.Imports["svelte"]
+		if ok && isHttpSepcifier(svelteUrl) {
+			u, e := url.Parse(svelteUrl)
+			if e == nil {
+				_, v, _, _ := splitEsmPath(u.Path)
+				if len(v) > 0 {
+					svelteVersion = v
+				}
 			}
 		}
 	}
-	if !isExactVersion(svelteVersion) {
-		var info *PackageJSON
+	if !npm.IsExactVersion(svelteVersion) {
+		var info *npm.PackageJSON
 		info, err = npmrc.getPackageInfo("svelte", svelteVersion)
 		if err != nil {
 			return
@@ -97,12 +93,91 @@ func resolveSvelteVersion(npmrc *NpmRC, importMap common.ImportMap) (svelteVersi
 	return
 }
 
-func generateUnoCSS(npmrc *NpmRC, configCSS string, content string) (output *LoaderOutput, err error) {
-	loaderVersion := "0.4.3"
+func transformVue(npmrc *NpmRC, vueVersion string, filename string, code string) (output *LoaderOutput, err error) {
+	loaderVersion := "1.0.1" // @esm.sh/vue-compiler
+	loaderExecPath := path.Join(npmrc.StoreDir(), "@vue/compiler-sfc@"+vueVersion, "loader-"+loaderVersion+".js")
+
+	err = doOnce(loaderExecPath, func() (err error) {
+		if !existsFile(loaderExecPath) {
+			if DEBUG {
+				fmt.Println(term.Dim("Compiling vue loader..."))
+			}
+			err = compileVueLoader(npmrc, vueVersion, loaderVersion, loaderExecPath)
+		}
+		return
+	})
+	if err != nil {
+		err = errors.New("failed to compile vue loader: " + err.Error())
+		return
+	}
+
+	return runLoader(loaderExecPath, filename, code)
+}
+
+func compileVueLoader(npmrc *NpmRC, vueVersion string, loaderVersion, loaderExecPath string) (err error) {
+	wd := path.Join(npmrc.StoreDir(), "@vue/compiler-sfc@"+vueVersion)
+
+	// install vue sfc compiler
+	pkgJson, err := npmrc.installPackage(npm.Package{Name: "@vue/compiler-sfc", Version: vueVersion})
+	if err != nil {
+		return
+	}
+	npmrc.installDependencies(wd, pkgJson, false, nil)
+	npmrc.installDependencies(wd, &npm.PackageJSON{Dependencies: map[string]string{"@esm.sh/vue-compiler": loaderVersion}}, false, nil)
+
+	loaderJS := `
+	  import * as vueCompilerSFC from "@vue/compiler-sfc";
+	  import { transform } from "@esm.sh/vue-compiler";
+	  const { stdin, stdout } = Deno;
+	  const write = data => stdout.write(new TextEncoder().encode(data));
+	  try {
+	    let sourceCode = "";
+	    for await (const text of stdin.readable.pipeThrough(new TextDecoderStream())) {
+	      sourceCode += text;
+	    }
+	    const { lang, code } = await transform(Deno.args[0], sourceCode, { imports: { "@vue/compiler-sfc": vueCompilerSFC } });
+	    await write((lang === "ts" ? '2' : '1') + '\n' + code);
+	  } catch (err) {
+	    await write("0\n" + err.message);
+	  }
+	`
+	err = buildLoader(wd, loaderJS, loaderExecPath)
+	return
+}
+
+func resolveVueVersion(npmrc *NpmRC, importMap importmap.ImportMap) (vueVersion string, err error) {
+	vueVersion = "3"
+	if len(importMap.Imports) > 0 {
+		vueUrl, ok := importMap.Imports["vue"]
+		if ok && isHttpSepcifier(vueUrl) {
+			u, e := url.Parse(vueUrl)
+			if e == nil {
+				_, v, _, _ := splitEsmPath(u.Path)
+				if len(v) > 0 {
+					vueVersion = v
+				}
+			}
+		}
+	}
+	if !npm.IsExactVersion(vueVersion) {
+		var info *npm.PackageJSON
+		info, err = npmrc.getPackageInfo("vue", vueVersion)
+		if err != nil {
+			return
+		}
+		vueVersion = info.Version
+	}
+	if semverLessThan(vueVersion, "3.0.0") {
+		err = errors.New("unsupported vue version, only 3.0.0+ is supported")
+	}
+	return
+}
+
+func generateUnoCSS(npmrc *NpmRC, configCSS string, content string) (out *LoaderOutput, err error) {
+	loaderVersion := "0.5.0-beta.3"
 	loaderExecPath := path.Join(config.WorkDir, "bin", "unocss-"+loaderVersion)
 
-	once, _ := compileSyncMap.LoadOrStore(loaderExecPath, &sync.Once{})
-	err = once.(*sync.Once).Do(func() (err error) {
+	err = doOnce(loaderExecPath, func() (err error) {
 		if !existsFile(loaderExecPath) {
 			if DEBUG {
 				fmt.Println(term.Dim("Compiling unocss loader..."))
@@ -116,43 +191,28 @@ func generateUnoCSS(npmrc *NpmRC, configCSS string, content string) (output *Loa
 		return
 	}
 
-	outBuf := bufferPool.Get().(*bytes.Buffer)
-	errBuf := bufferPool.Get().(*bytes.Buffer)
-	defer func() {
-		outBuf.Reset()
-		errBuf.Reset()
-		bufferPool.Put(outBuf)
-		bufferPool.Put(errBuf)
-	}()
 	c := exec.Command(loaderExecPath, strconv.Itoa(len(configCSS)), path.Join(config.WorkDir, "cache/unocss"))
-	c.Dir = os.TempDir()
 	c.Stdin = strings.NewReader(configCSS + content)
-	c.Stdout = outBuf
-	c.Stderr = errBuf
-	err = c.Run()
+	output, err := c.Output()
 	if err != nil {
-		if errBuf.Len() > 0 {
-			err = errors.New(errBuf.String())
-		}
 		return
 	}
-	if outBuf.Len() < 2 {
+	if len(output) < 2 {
 		err = errors.New("bad loader output")
 		return
 	}
-	data := outBuf.Bytes()
-	if data[0] != '1' {
-		err = errors.New(string(data[2:]))
+	if output[0] != '1' {
+		err = errors.New(string(output[2:]))
 		return
 	}
-	return &LoaderOutput{Lang: "css", Code: string(data[2:])}, nil
+	return &LoaderOutput{Lang: "css", Code: string(output[2:])}, nil
 }
 
 func compileUnocssLoader(npmrc *NpmRC, loaderVersion string, loaderExecPath string) (err error) {
 	wd := path.Join(npmrc.StoreDir(), "@esm.sh/unocss@"+loaderVersion)
 
 	// install @esm.sh/unocss
-	pkgJson, err := npmrc.installPackage(Package{Name: "@esm.sh/unocss", Version: loaderVersion})
+	pkgJson, err := npmrc.installPackage(npm.Package{Name: "@esm.sh/unocss", Version: loaderVersion})
 	if err != nil {
 		return
 	}
@@ -206,8 +266,17 @@ func compileUnocssLoader(npmrc *NpmRC, loaderVersion string, loaderExecPath stri
 		return
 	}
 
-	_, err = run(
-		"deno", "compile",
+	err = doOnce("check-deno", func() (err error) {
+		_, err = jsrt.GetDenoPath(config.WorkDir)
+		return err
+	})
+	if err != nil {
+		return
+	}
+
+	cmd := exec.Command(
+		path.Join(config.WorkDir, "bin/deno"),
+		"compile",
 		"--no-config",
 		"--no-lock",
 		"--no-check",
@@ -220,86 +289,10 @@ func compileUnocssLoader(npmrc *NpmRC, loaderVersion string, loaderExecPath stri
 		"--output", loaderExecPath,
 		path.Join(wd, "loader.js"),
 	)
+	cmd.Env = append(os.Environ(), "DENO_NO_UPDATE_CHECK=1", "DENO_NO_PACKAGE_JSON=1")
+	_, err = cmd.Output()
 	if err != nil {
 		err = fmt.Errorf("failed to compile %s: %s", path.Base(loaderExecPath), err.Error())
-	}
-	return
-}
-
-func transformVue(npmrc *NpmRC, vueVersion string, filename string, code string) (output *LoaderOutput, err error) {
-	loaderVersion := "1.0.1" // @esm.sh/vue-compiler
-	loaderExecPath := path.Join(npmrc.StoreDir(), "@vue/compiler-sfc@"+vueVersion, "loader-"+loaderVersion+".js")
-
-	once, _ := compileSyncMap.LoadOrStore(loaderExecPath, &sync.Once{})
-	err = once.(*sync.Once).Do(func() (err error) {
-		if !existsFile(loaderExecPath) {
-			if DEBUG {
-				fmt.Println(term.Dim("Compiling vue loader..."))
-			}
-			err = compileVueLoader(npmrc, vueVersion, loaderVersion, loaderExecPath)
-		}
-		return
-	})
-	if err != nil {
-		err = errors.New("failed to compile vue loader: " + err.Error())
-		return
-	}
-
-	return runLoader(loaderExecPath, filename, code)
-}
-
-func compileVueLoader(npmrc *NpmRC, vueVersion string, loaderVersion, loaderExecPath string) (err error) {
-	wd := path.Join(npmrc.StoreDir(), "@vue/compiler-sfc@"+vueVersion)
-
-	// install vue sfc compiler
-	pkgJson, err := npmrc.installPackage(Package{Name: "@vue/compiler-sfc", Version: vueVersion})
-	if err != nil {
-		return
-	}
-	npmrc.installDependencies(wd, pkgJson, false, nil)
-	npmrc.installDependencies(wd, &PackageJSON{Dependencies: map[string]string{"@esm.sh/vue-compiler": loaderVersion}}, false, nil)
-
-	loaderJS := `
-	  import * as vueCompilerSFC from "@vue/compiler-sfc";
-	  import { transform } from "@esm.sh/vue-compiler";
-	  const { stdin, stdout } = Deno;
-	  const write = data => stdout.write(new TextEncoder().encode(data));
-	  try {
-	    let sourceCode = "";
-	    for await (const text of stdin.readable.pipeThrough(new TextDecoderStream())) {
-	      sourceCode += text;
-	    }
-	    const { lang, code } = await transform(Deno.args[0], sourceCode, { imports: { "@vue/compiler-sfc": vueCompilerSFC } });
-	    await write((lang === "ts" ? '2' : '1') + '\n' + code);
-	  } catch (err) {
-	    await write("0\n" + err.message);
-	  }
-	`
-	err = buildLoader(wd, loaderJS, loaderExecPath)
-	return
-}
-
-func resolveVueVersion(npmrc *NpmRC, importMap common.ImportMap) (vueVersion string, err error) {
-	vueVersion = "3"
-	if len(importMap.Imports) > 0 {
-		vuePath, ok := importMap.Imports["vue"]
-		if ok {
-			a := regexpVuePath.FindAllStringSubmatch(vuePath, 1)
-			if len(a) > 0 {
-				vueVersion = a[0][1]
-			}
-		}
-	}
-	if !isExactVersion(vueVersion) {
-		var info *PackageJSON
-		info, err = npmrc.getPackageInfo("vue", vueVersion)
-		if err != nil {
-			return
-		}
-		vueVersion = info.Version
-	}
-	if semverLessThan(vueVersion, "3.0.0") {
-		err = errors.New("unsupported vue version, only 3.0.0+ is supported")
 	}
 	return
 }

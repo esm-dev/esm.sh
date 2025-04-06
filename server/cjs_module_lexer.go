@@ -6,7 +6,6 @@ import (
 	"context"
 	"crypto/sha1"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -18,6 +17,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/esm-dev/esm.sh/internal/jsrt"
+	"github.com/goccy/go-json"
 	"github.com/ije/gox/set"
 	"github.com/ije/gox/term"
 	"github.com/ije/gox/utils"
@@ -59,11 +60,19 @@ func cjsModuleLexer(b *BuildContext, cjsEntry string) (ret cjsModuleLexerResult,
 		return
 	}
 
+	err = doOnce("install-cjs-module-lexer", func() (err error) {
+		err = installCjsModuleLexer()
+		return
+	})
+	if err != nil {
+		return
+	}
+
 	start := time.Now()
 	defer func() {
 		if err == nil {
 			if DEBUG {
-				b.logger.Debugf("[cjsModuleLexer] parse %s in %s", path.Join(b.esm.PkgName, cjsEntry), time.Since(start))
+				b.logger.Debugf("[cjsModuleLexer] parse %s in %s", path.Join(b.esmPath.PkgName, cjsEntry), time.Since(start))
 			}
 			if !existsFile(cacheFileName) {
 				ensureDir(path.Dir(cacheFileName))
@@ -72,14 +81,30 @@ func cjsModuleLexer(b *BuildContext, cjsEntry string) (ret cjsModuleLexerResult,
 		}
 	}()
 
-	if cjsModuleLexerIgnoredPackages.Has(b.esm.PkgName) {
+	if cjsModuleLexerIgnoredPackages.Has(b.esmPath.PkgName) {
+		err = doOnce("check-deno", func() (err error) {
+			_, err = jsrt.GetDenoPath(config.WorkDir)
+			return err
+		})
+		if err != nil {
+			return
+		}
 		js := path.Join(b.wd, "reveal_"+strings.ReplaceAll(cjsEntry[2:], "/", "_"))
-		err = os.WriteFile(js, []byte(fmt.Sprintf(`console.log(JSON.stringify(Object.keys((await import("npm:%s")).default)))`, path.Join(b.esm.Name(), cjsEntry))), 0644)
+		err = os.WriteFile(js, []byte(fmt.Sprintf(`console.log(JSON.stringify(Object.keys((await import("npm:%s")).default)))`, path.Join(b.esmPath.Name(), cjsEntry))), 0644)
 		if err != nil {
 			return
 		}
 		var data []byte
-		data, err = run("deno", "run", "--no-config", "--no-lock", "--no-prompt", "--quiet", js)
+		cmd := exec.Command(
+			path.Join(config.WorkDir, "bin/deno"),
+			"run",
+			"--no-prompt",
+			"--no-config",
+			"--no-lock",
+			"--quiet",
+			js)
+		cmd.Env = append(os.Environ(), "DENO_NO_UPDATE_CHECK=1", "DENO_NO_PACKAGE_JSON=1")
+		data, err = cmd.Output()
 		if err != nil {
 			return
 		}
@@ -100,13 +125,13 @@ func cjsModuleLexer(b *BuildContext, cjsEntry string) (ret cjsModuleLexerResult,
 RETRY:
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	stdout, recycle1 := NewBuffer()
-	stderr, recycle2 := NewBuffer()
+	stdout, recycle1 := newBuffer()
+	stderr, recycle2 := newBuffer()
 	defer cancel()
 	defer recycle1()
 	defer recycle2()
 
-	cmd := exec.CommandContext(ctx, "cjs-module-lexer", path.Join(b.esm.PkgName, cjsEntry))
+	cmd := exec.CommandContext(ctx, path.Join(config.WorkDir, "bin/cjs-module-lexer"), path.Join(b.esmPath.PkgName, cjsEntry))
 	cmd.Dir = b.wd
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
@@ -155,9 +180,9 @@ func installCjsModuleLexer() (err error) {
 
 	// use dev version of cjs-module-lexer if exists
 	// clone https://github.com/esm-dev/cjs-module-lexer to the same directory of esm.sh and run `cargo build --release -p native`
-	if devCML := "../cjs-module-lexer/target/release/native"; existsFile(devCML) {
+	if bin := "../cjs-module-lexer/target/release/native"; existsFile(bin) {
 		ensureDir(binDir)
-		_, err = utils.CopyFile(devCML, path.Join(binDir, "cjs-module-lexer"))
+		_, err = utils.CopyFile(bin, path.Join(binDir, "cjs-module-lexer"))
 		if err == nil {
 			cjsModuleLexerVersion = "dev"
 		}

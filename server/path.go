@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/esm-dev/esm.sh/internal/npm"
 	"github.com/ije/gox/utils"
 )
 
@@ -20,8 +21,8 @@ type EsmPath struct {
 	SubModuleName string
 }
 
-func (p EsmPath) Package() Package {
-	return Package{
+func (p EsmPath) Package() npm.Package {
+	return npm.Package{
 		Github:   p.GhPrefix,
 		PkgPrNew: p.PrPrefix,
 		Name:     p.PkgName,
@@ -64,7 +65,7 @@ func praseEsmPath(npmrc *NpmRC, pathname string) (esm EsmPath, extraQuery string
 			return
 		}
 		version, subPath := utils.SplitByFirstByte(rest, '/')
-		if version == "" || !npmVersioning.Match(version) {
+		if version == "" || !npm.Versioning.Match(version) {
 			err = errors.New("invalid path")
 			return
 		}
@@ -120,7 +121,7 @@ func praseEsmPath(npmrc *NpmRC, pathname string) (esm EsmPath, extraQuery string
 	}
 
 	pkgName, maybeVersion, subPath, hasTargetSegment := splitEsmPath(pathname)
-	if !validatePackageName(pkgName) {
+	if !npm.ValidatePackageName(pkgName) {
 		err = fmt.Errorf("invalid package name '%s'", pkgName)
 		return
 	}
@@ -149,12 +150,12 @@ func praseEsmPath(npmrc *NpmRC, pathname string) (esm EsmPath, extraQuery string
 	}
 
 	if ghPrefix {
-		if isExactVersion(strings.TrimPrefix(esm.PkgVersion, "v")) {
+		if npm.IsExactVersion(strings.TrimPrefix(esm.PkgVersion, "v")) {
 			exactVersion = true
 			return
 		}
 		var refs []GitRef
-		refs, err = listRepoRefs(fmt.Sprintf("https://github.com/%s", esm.PkgName))
+		refs, err = listGhRepoRefs(fmt.Sprintf("https://github.com/%s", esm.PkgName))
 		if err != nil {
 			return
 		}
@@ -206,9 +207,9 @@ func praseEsmPath(npmrc *NpmRC, pathname string) (esm EsmPath, extraQuery string
 		return
 	}
 
-	exactVersion = len(esm.PkgVersion) > 0 && isExactVersion(esm.PkgVersion)
+	exactVersion = len(esm.PkgVersion) > 0 && npm.IsExactVersion(esm.PkgVersion)
 	if !exactVersion {
-		var p *PackageJSON
+		var p *npm.PackageJSON
 		p, err = npmrc.getPackageInfo(pkgName, esm.PkgVersion)
 		if err == nil {
 			esm.PkgVersion = p.Version

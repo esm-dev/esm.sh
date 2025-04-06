@@ -3,7 +3,6 @@ package server
 import (
 	"bytes"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,7 +11,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/esm-dev/esm.sh/server/storage"
+	"github.com/esm-dev/esm.sh/internal/fetch"
+	"github.com/esm-dev/esm.sh/internal/npm"
+	"github.com/esm-dev/esm.sh/internal/storage"
+	"github.com/goccy/go-json"
 	"github.com/ije/esbuild-internal/xxhash"
 	"github.com/ije/gox/utils"
 	"github.com/ije/gox/valid"
@@ -131,7 +133,7 @@ func legacyESM(ctx *rex.Context, buildStorage storage.Storage, buildVersionPrefi
 			asteriskFlag = true
 			pkgName = pkgName[1:]
 		}
-		if !validatePackageName(pkgName) {
+		if !npm.ValidatePackageName(pkgName) {
 			return rex.Status(400, "Invalid Package Name")
 		}
 		var extraQuery string
@@ -141,7 +143,7 @@ func legacyESM(ctx *rex.Context, buildStorage storage.Storage, buildVersionPrefi
 				pkgVersion = v
 			}
 		}
-		if !isExactVersion(pkgVersion) {
+		if !npm.IsExactVersion(pkgVersion) {
 			npmrc := DefaultNpmRC()
 			pkgInfo, err := npmrc.getPackageInfo(pkgName, pkgVersion)
 			if err != nil {
@@ -240,10 +242,10 @@ func legacyESM(ctx *rex.Context, buildStorage storage.Storage, buildVersionPrefi
 		return rex.Status(http.StatusBadRequest, "Invalid url")
 	}
 
-	fetchClient, recycle := NewFetchClient(60, ctx.UserAgent(), true)
+	client, recycle := fetch.NewClient(60, ctx.UserAgent(), true)
 	defer recycle()
 
-	res, err := fetchClient.Fetch(url, nil)
+	res, err := client.Fetch(url, nil)
 	if err != nil {
 		return rex.Status(http.StatusBadGateway, "Failed to connect the lagecy esm.sh server")
 	}
