@@ -2,11 +2,12 @@ package server
 
 import (
 	"errors"
+	"os"
 	"os/exec"
 	"path"
 	"strings"
 
-	"github.com/esm-dev/esm.sh/internal/jsruntime"
+	"github.com/esm-dev/esm.sh/internal/jsrt"
 	esbuild "github.com/ije/esbuild-internal/api"
 )
 
@@ -18,7 +19,7 @@ type LoaderOutput struct {
 
 func runLoader(loaderJsPath string, filename string, code string) (out *LoaderOutput, err error) {
 	err = doOnce("check-deno", func() (err error) {
-		_, err = jsruntime.GetDenoPath(config.WorkDir)
+		_, err = jsrt.GetDenoPath(config.WorkDir)
 		return err
 	})
 	if err != nil {
@@ -26,16 +27,18 @@ func runLoader(loaderJsPath string, filename string, code string) (out *LoaderOu
 	}
 
 	cmd := exec.Command(
-		path.Join(config.WorkDir, "bin/deno"), "run",
+		path.Join(config.WorkDir, "bin/deno"),
+		"run",
 		"--no-config",
 		"--no-lock",
 		"--cached-only",
-		"--no-prompt",
 		"--allow-read=.",
+		"--no-prompt",
 		"--quiet",
 		loaderJsPath,
 		filename, // args[0]
 	)
+	cmd.Env = append(os.Environ(), "DENO_NO_UPDATE_CHECK=1", "DENO_NO_PACKAGE_JSON=1")
 	cmd.Stdin = strings.NewReader(code)
 	output, err := cmd.Output()
 	if err != nil {

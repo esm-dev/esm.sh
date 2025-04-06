@@ -1,13 +1,42 @@
 import { TextLineStream } from "jsr:@std/streams@1.0.9/text-line-stream";
 
 const enc = new TextEncoder();
-const regexpModulePath = /^\/\*?(svelte|vue)@([~\^]?[\w\+\-\.]+)(\/|\?|&|$)/;
 const output = (type, data) => Deno.stdout.write(enc.encode(">>>" + type + ":" + JSON.stringify(data) + "\n"));
+const once = {};
 
-let tsx;
-let unoGenerators;
+for await (const line of Deno.stdin.readable.pipeThrough(new TextDecoderStream()).pipeThrough(new TextLineStream())) {
+  try {
+    const [type, ...args] = JSON.parse(line);
+    switch (type) {
+      case "tsx": {
+        output("js", await tsx(...args));
+        break;
+      }
+      case "svelte": {
+        const [lang, code] = await transformSvelte(...args);
+        output(lang, code);
+        break;
+      }
+      case "vue": {
+        const [lang, code] = await transformVue(...args);
+        output(lang, code);
+        break;
+      }
+      case "unocss": {
+        output("css", await unocss(...args));
+        break;
+      }
+      default: {
+        output("error", "Unknown loader type: " + type);
+      }
+    }
+  } catch (e) {
+    output("error", e.message);
+  }
+}
 
-async function transformModule(filename, importMap, sourceCode, isDev) {
+// transform TypeScript/JSX/TSX to JavaScript with HMR support
+async function tsx(filename, importMap, sourceCode, isDev) {
   const imports = importMap?.imports;
   if (imports && isDev) {
     // add `?dev` query to `react-dom` and `vue` imports for development mode
@@ -33,16 +62,15 @@ async function transformModule(filename, importMap, sourceCode, isDev) {
   } else if (filename.endsWith(".vue") || filename.endsWith(".md?vue")) {
     [lang, code, map] = await transformVue(filename, code, importMap, isDev);
   }
-  if (!tsx) {
-    tsx = import("npm:@esm.sh/tsx@1.2.0").then(async ({ init, transform }) => {
-      await init();
-      return { transform };
+  if (!once.tsxWasm) {
+    once.tsxWasm = import("npm:@esm.sh/tsx@1.2.0").then(async (m) => {
+      await m.init();
+      return m;
     });
   }
-  const { transform } = await tsx;
   const react = imports?.react;
   const preact = imports?.preact;
-  const ret = transform({
+  const ret = (await once.tsxWasm).transform({
     filename,
     lang,
     code,
@@ -67,8 +95,20 @@ async function transformModule(filename, importMap, sourceCode, isDev) {
   return js;
 }
 
+// transform Vue SFC to JavaScript
+async function transformVue(filename, sourceCode, importMap, isDev) {
+  const { transform } = await import("npm:@esm.sh/vue-compiler@1.0.1");
+  const ret = await transform(filename, sourceCode, {
+    imports: { "@vue/compiler-sfc": import("npm:@vue/compiler-sfc@" + getPackageVersion(importMap, "vue", "3")) },
+    isDev,
+    devRuntime: isDev ? "/@vdr" : undefined,
+  });
+  return [ret.lang, ret.code, ret.map];
+}
+
+// transform Svelte SFC to JavaScript
 async function transformSvelte(filename, sourceCode, importMap, isDev) {
-  const { compile, VERSION } = await import(`npm:svelte@${getSvelteVersion(importMap)}/compiler`);
+  const { compile, VERSION } = await import("npm:svelte@" + getPackageVersion(importMap, "svelte", "5") + "/compiler");
   const majorVersion = parseInt(VERSION.split(".", 1)[0]);
   if (majorVersion < 5) {
     throw new Error("Unsupported Svelte version: " + VERSION + ". Please use svelte@5 or higher.");
@@ -82,88 +122,32 @@ async function transformSvelte(filename, sourceCode, importMap, isDev) {
   return ["js", js.code, js.map];
 }
 
-async function transformVue(filename, sourceCode, importMap, isDev) {
-  const { transform } = await import("npm:@esm.sh/vue-compiler@1.0.1");
-  const ret = await transform(filename, sourceCode, {
-    imports: { "@vue/compiler-sfc": import("npm:@vue/compiler-sfc@" + getVueVersion(importMap)) },
-    isDev,
-    devRuntime: isDev ? "/@vdr" : undefined,
-  });
-  return [ret.lang, ret.code, ret.map];
-}
-
-function getSvelteVersion(importMap) {
-  const svelteUrl = importMap?.imports?.svelte;
-  if (svelteUrl && isHttpSpecifier(svelteUrl)) {
-    const url = new URL(svelteUrl);
-    const m = url.pathname.match(regexpModulePath);
+// get the package version from the import map
+function getPackageVersion(importMap, pkgName, defaultVersion) {
+  const url = importMap?.imports?.[pkgName];
+  if (url && (url.startsWith("https://") || url.startsWith("http://"))) {
+    const { pathname } = new URL(url);
+    const m = pathname.match(/^\/\*?(svelte|vue)@([~\^]?[\w\+\-\.]+)(\/|\?|&|$)/);
     if (m) {
       return m[2];
     }
   }
-  // default to svelte@5
-  return "5";
+  return defaultVersion;
 }
 
-function getVueVersion(importMap) {
-  const vueUrl = importMap?.imports?.vue;
-  if (vueUrl && isHttpSpecifier(vueUrl)) {
-    const url = new URL(vueUrl);
-    const m = url.pathname.match(regexpModulePath);
-    if (m) {
-      return m[2];
-    }
-  }
-  // default to vue@3
-  return "3";
-}
-
-function isHttpSpecifier(specifier) {
-  return typeof specifier === "string" && specifier.startsWith("https://") || specifier.startsWith("http://");
-}
-
+// generate unocss for the given content
 async function unocss(_id, content, config) {
   const generatorId = config?.filename ?? ".";
-  if (!unoGenerators) {
-    unoGenerators = new Map();
+  if (!once.unoGenerators) {
+    once.unoGenerators = new Map();
   }
-  let uno = unoGenerators.get(generatorId);
+  let uno = once.unoGenerators.get(generatorId);
   if (!uno || uno.configCSS !== config?.css) {
     uno = import("npm:@esm.sh/unocss@0.5.0-beta.3").then(({ init }) => init({ configCSS: config?.css }));
     uno.configCSS = config?.css;
-    unoGenerators.set(generatorId, uno);
+    once.unoGenerators.set(generatorId, uno);
   }
   const { update, generate } = await uno;
   await update(content);
   return await generate();
-}
-
-for await (const line of Deno.stdin.readable.pipeThrough(new TextDecoderStream()).pipeThrough(new TextLineStream())) {
-  try {
-    const [type, ...args] = JSON.parse(line);
-    switch (type) {
-      case "module":
-        output("js", await transformModule(...args));
-        break;
-      case "svelte": {
-        const [lang, code] = await transformSvelte(...args);
-        output(lang, code);
-        break;
-      }
-      case "vue": {
-        const [lang, code] = await transformVue(...args);
-        output(lang, code);
-        break;
-      }
-      case "unocss": {
-        output("css", await unocss(...args));
-        break;
-      }
-      default: {
-        output("error", "Unknown loader type: " + type);
-      }
-    }
-  } catch (e) {
-    output("error", e.message);
-  }
 }

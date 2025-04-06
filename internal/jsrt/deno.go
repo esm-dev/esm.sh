@@ -1,4 +1,4 @@
-package jsruntime
+package jsrt
 
 import (
 	"archive/zip"
@@ -18,11 +18,7 @@ import (
 
 func GetDenoPath(workDir string) (denoPath string, err error) {
 	if workDir == "" {
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return "", err
-		}
-		workDir = filepath.Join(homeDir, ".esmd")
+		return "", errors.New("workDir is empty")
 	}
 
 	denoPath = filepath.Join(workDir, "bin/deno")

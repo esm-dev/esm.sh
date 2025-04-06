@@ -37,7 +37,7 @@ type Config struct {
 type Handler struct {
 	config           *Config
 	etagSuffix       string
-	loaderWorker     *LoaderWorker
+	loaderWorker     *JSWorker
 	loaderCache      sync.Map
 	watchDataMapLock sync.RWMutex
 	watchData        map[*websocket.Conn]map[string]int64
@@ -64,7 +64,7 @@ func NewHandler(config Config) *Handler {
 func (s *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	pathname := r.URL.Path
 	switch pathname {
-	case "/@hmr", "/@refresh", "/@prefresh", "/@vdr":
+	case "/@hmr", "/@refresh", "/@prefresh", "/@vdr", "/@rpc-runtime":
 		s.ServeInternalJS(w, r, pathname[2:])
 	case "/@hmr-ws":
 		if s.watchData == nil {
@@ -73,6 +73,10 @@ func (s *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		s.ServeHmrWS(w, r)
 	default:
+		if strings.HasPrefix(pathname, "/@rpc/") {
+			s.ServeRPC(w, r, pathname[6:])
+			return
+		}
 		filename := filepath.Join(s.config.AppDir, pathname)
 		fi, err := os.Lstat(filename)
 		if err == nil && fi.IsDir() {
@@ -134,18 +138,24 @@ func (s *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			s.ServeHtml(w, r, pathname)
 		case ".js", ".mjs", ".jsx", ".ts", ".mts", ".tsx", ".vue", ".svelte":
 			if !query.Has("raw") {
-				s.ServeModule(w, r, pathname, nil)
+				if query.Has("rpc") {
+					s.ServeRPCModule(w, r, pathname)
+					return
+				}
+				s.ServeModule(w, r, pathname, query, nil)
 				return
 			}
 			fallthrough
 		case ".css":
-			if query.Has("module") {
-				s.ServeCSSModule(w, r, pathname, query)
-				return
-			}
-			if strings.HasSuffix(pathname, "/uno.css") {
-				s.ServeUnoCSS(w, r)
-				return
+			if !query.Has("raw") {
+				if query.Has("module") {
+					s.ServeCSSModule(w, r, query)
+					return
+				}
+				if strings.HasSuffix(pathname, "/uno.css") {
+					s.ServeUnoCSS(w, r, query)
+					return
+				}
 			}
 			fallthrough
 		case ".md":
@@ -161,21 +171,21 @@ func (s *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 						http.Error(w, "Failed to render markdown to jsx", 500)
 						return
 					}
-					s.ServeModule(w, r, pathname+"?jsx", jsxCode)
+					s.ServeModule(w, r, pathname+"?jsx", query, jsxCode)
 				} else if query.Has("svelte") {
 					svelteCode, err := gfm.Render(markdown, gfm.RenderFormatSvelte)
 					if err != nil {
 						http.Error(w, "Failed to render markdown to svelte component", 500)
 						return
 					}
-					s.ServeModule(w, r, pathname+"?svelte", svelteCode)
+					s.ServeModule(w, r, pathname+"?svelte", query, svelteCode)
 				} else if query.Has("vue") {
 					vueCode, err := gfm.Render(markdown, gfm.RenderFormatVue)
 					if err != nil {
 						http.Error(w, "Failed to render markdown to vue component", 500)
 						return
 					}
-					s.ServeModule(w, r, pathname+"?vue", vueCode)
+					s.ServeModule(w, r, pathname+"?vue", query, vueCode)
 				} else {
 					js, err := gfm.Render(markdown, gfm.RenderFormatJS)
 					if err != nil {
@@ -415,78 +425,28 @@ func (s *Handler) ServeHtml(w http.ResponseWriter, r *http.Request, filename str
 	}
 }
 
-func (s *Handler) ServeModule(w http.ResponseWriter, r *http.Request, pathname string, sourceCode []byte) {
-	query := r.URL.Query()
+func (s *Handler) ServeModule(w http.ResponseWriter, r *http.Request, filename string, query url.Values, preTransform []byte) {
 	im, err := base64.RawURLEncoding.DecodeString(query.Get("im"))
 	if err != nil {
 		http.Error(w, "Bad Request", 400)
 		return
 	}
-	imHtmlFilename := filepath.Join(s.config.AppDir, string(im))
-	imHtmlFile, err := os.Open(imHtmlFilename)
+
+	importMapRaw, importMap, err := s.parseImportMap(string(im))
 	if err != nil {
-		if os.IsNotExist(err) {
-			http.Error(w, "Bad Request", 400)
-		} else {
-			http.Error(w, "Internal Server Error", 500)
-		}
+		http.Error(w, "could not parse import map: "+err.Error(), 500)
 		return
 	}
-	defer imHtmlFile.Close()
 
-	var importMapRaw []byte
-	var importMap importmap.ImportMap
-	tokenizer := html.NewTokenizer(imHtmlFile)
-	for {
-		tt := tokenizer.Next()
-		if tt == html.ErrorToken {
-			break
-		}
-		if tt == html.StartTagToken {
-			tagName, moreAttr := tokenizer.TagName()
-			if string(tagName) == "script" {
-				var typeAttr string
-				for moreAttr {
-					var key, val []byte
-					key, val, moreAttr = tokenizer.TagAttr()
-					if string(key) == "type" {
-						typeAttr = string(val)
-						break
-					}
-				}
-				if typeAttr == "importmap" {
-					tokenizer.Next()
-					importMapRaw = tokenizer.Text()
-					if json.Unmarshal(importMapRaw, &importMap) != nil {
-						header := w.Header()
-						header.Set("Content-Type", "application/javascript; charset=utf-8")
-						header.Set("Cache-Control", "max-age=0, must-revalidate")
-						w.Write([]byte(`throw new Error("Failed to parse import map: invalid JSON")`))
-						return
-					}
-					importMap.Src = "file://" + string(im)
-					// todo: cache parsed import map
-					break
-				}
-			} else if string(tagName) == "body" {
-				break
-			}
-		} else if tt == html.EndTagToken {
-			tagName, _ := tokenizer.TagName()
-			if bytes.Equal(tagName, []byte("head")) {
-				break
-			}
-		}
-	}
 	var modTime uint64
 	var size int64
-	if sourceCode != nil {
+	if preTransform != nil {
 		xx := xxhash.New()
-		xx.Write(sourceCode)
+		xx.Write(preTransform)
 		modTime = xx.Sum64()
-		size = int64(len(sourceCode))
+		size = int64(len(preTransform))
 	} else {
-		fi, err := os.Lstat(filepath.Join(s.config.AppDir, pathname))
+		fi, err := os.Lstat(filepath.Join(s.config.AppDir, filename))
 		if err != nil {
 			if os.IsNotExist(err) {
 				http.Error(w, "Not Found", 404)
@@ -505,8 +465,8 @@ func (s *Handler) ServeModule(w http.ResponseWriter, r *http.Request, pathname s
 		w.WriteHeader(http.StatusNotModified)
 		return
 	}
-	cacheKey := fmt.Sprintf("module-%s", pathname)
-	etagCacheKey := fmt.Sprintf("module-%s.etag", pathname)
+	cacheKey := fmt.Sprintf("module-%s", filename)
+	etagCacheKey := fmt.Sprintf("module-%s.etag", filename)
 	if js, ok := s.loaderCache.Load(cacheKey); ok {
 		if e, ok := s.loaderCache.Load(etagCacheKey); ok {
 			if e.(string) == etag {
@@ -525,11 +485,11 @@ func (s *Handler) ServeModule(w http.ResponseWriter, r *http.Request, pathname s
 		http.Error(w, "Loader worker not started", 500)
 		return
 	}
-	args := []any{pathname, importMap, nil, s.config.Dev}
-	if sourceCode != nil {
-		args[2] = string(sourceCode)
+	args := []any{"tsx", filename, importMap, nil, s.config.Dev}
+	if preTransform != nil {
+		args[3] = string(preTransform)
 	}
-	_, js, err := s.loaderWorker.Load("module", args)
+	_, js, err := s.callLoader(args...)
 	if err != nil {
 		fmt.Println(term.Red("[error] " + err.Error()))
 		http.Error(w, "Internal Server Error", 500)
@@ -546,9 +506,122 @@ func (s *Handler) ServeModule(w http.ResponseWriter, r *http.Request, pathname s
 	w.Write([]byte(js))
 }
 
-func (s *Handler) ServeCSSModule(w http.ResponseWriter, r *http.Request, pathname string, query url.Values) {
+func (s *Handler) ServeRPCModule(w http.ResponseWriter, r *http.Request, filename string) {
+	filename = filepath.Join(s.config.AppDir, filename)
+	fi, err := os.Lstat(filename)
+	if err != nil {
+		if os.IsNotExist(err) {
+			http.Error(w, "Not Found", 404)
+		} else {
+			http.Error(w, "Internal Server Error", 500)
+		}
+		return
+	}
+	etag := fmt.Sprintf("w/\"%x-%x%s\"", fi.ModTime().UnixMilli(), fi.Size(), s.etagSuffix)
+	if r.Header.Get("If-None-Match") == etag {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+
+	cacheKey := fmt.Sprintf("module-%s?rpc", filename)
+	etagCacheKey := fmt.Sprintf("module-%s?rpc.etag", filename)
+	if js, ok := s.loaderCache.Load(cacheKey); ok {
+		if e, ok := s.loaderCache.Load(etagCacheKey); ok {
+			if e.(string) == etag {
+				header := w.Header()
+				header.Set("Content-Type", "application/javascript; charset=utf-8")
+				header.Set("Cache-Control", "max-age=0, must-revalidate")
+				header.Set("Etag", etag)
+				w.Write(js.([]byte))
+				return
+			}
+		}
+	}
+
+	namedExports, err := validateModule(filename)
+	if err != nil {
+		http.Error(w, err.Error(), 400)
+		return
+	}
+
+	js := fmt.Sprintf(`import{proxy}from"/@rpc-runtime";export const{%s}=proxy(import.meta.url);`, strings.Join(namedExports, ","))
+	s.loaderCache.Store(cacheKey, []byte(js))
+	s.loaderCache.Store(etagCacheKey, etag)
+
+	header := w.Header()
+	header.Set("Content-Type", "application/javascript; charset=utf-8")
+	header.Set("Cache-Control", "max-age=0, must-revalidate")
+	header.Set("Etag", etag)
+	w.Write([]byte(js))
+}
+
+func (s *Handler) ServeRPC(w http.ResponseWriter, r *http.Request, filename string) {
+	query := r.URL.Query()
+
+	fn := query.Get("fn")
+	if fn == "" {
+		http.Error(w, "Required parameter 'fn' is missing", 400)
+		return
+	}
+
+	im, err := base64.RawURLEncoding.DecodeString(query.Get("im"))
+	if err != nil {
+		http.Error(w, "Required parameter 'im' is missing", 400)
+		return
+	}
+
+	importMapRaw, _, err := s.parseImportMap(string(im))
+	if err != nil {
+		http.Error(w, "could not parse import map: "+err.Error(), 500)
+		return
+	}
+
+	var args []any
+	if json.NewDecoder(r.Body).Decode(&args) != nil {
+		http.Error(w, "Failed to decode rpc args", 400)
+		return
+	}
+
+	importMapJsonPath := filepath.Join(s.config.AppDir, ".importmap.json")
+	err = os.WriteFile(importMapJsonPath, []byte(importMapRaw), 0644)
+	if err != nil {
+		http.Error(w, "Failed to write import map: "+err.Error(), 500)
+		return
+	}
+	defer os.Remove(importMapJsonPath)
+
+	loaderWorker := &JSWorker{
+		wd:     s.config.AppDir,
+		config: ".importmap.json",
+		script: "rpc-worker.js",
+	}
+	err = loaderWorker.Start()
+	if err != nil {
+		fmt.Println(term.Red("Failed to start loader worker: " + err.Error()))
+		http.Error(w, "Failed to start loader worker: "+err.Error(), 500)
+		return
+	}
+	defer loaderWorker.Stop()
+
+	header := w.Header()
+	header.Set("Content-Type", "application/json; charset=utf-8")
+	header.Set("Cache-Control", "max-age=0, must-revalidate")
+
+	_, ret, err := loaderWorker.Call(filename, fn, args)
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]any{
+			"error": err.Error(),
+		})
+	} else {
+		w.Write([]byte("{\"result\":"))
+		w.Write([]byte(ret))
+		w.Write([]byte("}"))
+	}
+}
+
+func (s *Handler) ServeCSSModule(w http.ResponseWriter, r *http.Request, query url.Values) {
 	ret := esbuild.Build(esbuild.BuildOptions{
-		EntryPoints:      []string{filepath.Join(s.config.AppDir, pathname)},
+		EntryPoints:      []string{filepath.Join(s.config.AppDir, r.URL.Path)},
 		Write:            false,
 		MinifyWhitespace: true,
 		MinifySyntax:     true,
@@ -587,8 +660,7 @@ func (s *Handler) ServeCSSModule(w http.ResponseWriter, r *http.Request, pathnam
 	w.Write([]byte("export default css;"))
 }
 
-func (s *Handler) ServeUnoCSS(w http.ResponseWriter, r *http.Request) {
-	query := r.URL.Query()
+func (s *Handler) ServeUnoCSS(w http.ResponseWriter, r *http.Request, query url.Values) {
 	ctx, err := base64.RawURLEncoding.DecodeString(query.Get("ctx"))
 	if err != nil {
 		http.Error(w, "Bad Request", 400)
@@ -650,10 +722,10 @@ func (s *Handler) ServeUnoCSS(w http.ResponseWriter, r *http.Request) {
 					contents = append(contents, tokenizer.Text())
 				} else {
 					if hrefAttr != "" && isHttpSepcifier(srcAttr) {
-						if !isHttpSepcifier(hrefAttr) && endsWith(hrefAttr, moduleExts...) {
+						if !isHttpSepcifier(hrefAttr) && isModulePath(hrefAttr) {
 							jsEntries[hrefAttr] = struct{}{}
 						}
-					} else if !isHttpSepcifier(srcAttr) && endsWith(srcAttr, moduleExts...) {
+					} else if !isHttpSepcifier(srcAttr) && isModulePath(srcAttr) {
 						jsEntries[srcAttr] = struct{}{}
 					}
 				}
@@ -721,7 +793,9 @@ func (s *Handler) ServeUnoCSS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	config := map[string]any{"filename": r.URL.Path, "css": string(configCSS)}
-	_, css, err := s.loaderWorker.Load("unocss", []any{r.URL.Path + "?" + r.URL.RawQuery, string(bytes.Join(contents, []byte{'\n'})), config})
+	_, cssRaw, err := s.loaderWorker.Call("unocss", r.URL.Path+"?"+r.URL.RawQuery, string(bytes.Join(contents, []byte{'\n'})), config)
+	var css string
+	json.Unmarshal([]byte(cssRaw), &css)
 	if err != nil {
 		fmt.Println(term.Red("[error] " + err.Error()))
 		http.Error(w, "Internal Server Error", 500)
@@ -810,6 +884,56 @@ func (s *Handler) ServeHmrWS(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *Handler) parseImportMap(im string) (importMapRaw []byte, importMap importmap.ImportMap, err error) {
+	imHtmlFilename := filepath.Join(s.config.AppDir, im)
+	imHtmlFile, err := os.Open(imHtmlFilename)
+	if err != nil {
+		return
+	}
+	defer imHtmlFile.Close()
+
+	tokenizer := html.NewTokenizer(imHtmlFile)
+	for {
+		tt := tokenizer.Next()
+		if tt == html.ErrorToken {
+			break
+		}
+		if tt == html.StartTagToken {
+			tagName, moreAttr := tokenizer.TagName()
+			if string(tagName) == "script" {
+				var typeAttr string
+				for moreAttr {
+					var key, val []byte
+					key, val, moreAttr = tokenizer.TagAttr()
+					if string(key) == "type" {
+						typeAttr = string(val)
+						break
+					}
+				}
+				if typeAttr == "importmap" {
+					tokenizer.Next()
+					importMapRaw = tokenizer.Text()
+					if json.Unmarshal(importMapRaw, &importMap) != nil {
+						err = errors.New("invalid import map")
+						return
+					}
+					importMap.Src = "file://" + string(im)
+					// todo: cache parsed import map
+					break
+				}
+			} else if string(tagName) == "body" {
+				break
+			}
+		} else if tt == html.EndTagToken {
+			tagName, _ := tokenizer.TagName()
+			if bytes.Equal(tagName, []byte("head")) {
+				break
+			}
+		}
+	}
+	return
+}
+
 func (s *Handler) analyzeDependencyTree(entry string, importMap importmap.ImportMap) (tree map[string][]byte, err error) {
 	tree = make(map[string][]byte)
 	ret := esbuild.Build(esbuild.BuildOptions{
@@ -831,7 +955,7 @@ func (s *Handler) analyzeDependencyTree(entry string, importMap importmap.Import
 						if isHttpSepcifier(path) || (!isRelPathSpecifier(path) && !isAbsPathSpecifier(path)) {
 							return esbuild.OnResolveResult{Path: path, External: true}, nil
 						}
-						if endsWith(path, moduleExts...) {
+						if isModulePath(path) {
 							if isRelPathSpecifier(path) {
 								path = filepath.Join(filepath.Dir(args.Importer), path)
 							}
@@ -879,7 +1003,7 @@ func (s *Handler) analyzeDependencyTree(entry string, importMap importmap.Import
 							if s.loaderWorker == nil {
 								return esbuild.OnLoadResult{}, errors.New("loader worker not started")
 							}
-							lang, code, err := s.loaderWorker.Load(ext[1:], []any{pathname, contents, importMap})
+							lang, code, err := s.callLoader(ext[1:], pathname, contents, importMap)
 							if err != nil {
 								return esbuild.OnLoadResult{}, err
 							}
@@ -950,26 +1074,35 @@ func (s *Handler) startLoaderWorker() (err error) {
 	if s.loaderWorker != nil {
 		return nil
 	}
-	loaderJs, err := efs.ReadFile("internal/loader.js")
-	if err != nil {
-		return
+	loaderWorker := &JSWorker{
+		wd:     s.config.AppDir,
+		script: "loader.js",
 	}
-	loaderWorker := &LoaderWorker{}
-	err = loaderWorker.Start(s.config.AppDir, loaderJs)
+	err = loaderWorker.Start()
 	if err != nil {
 		return err
 	}
-	go loaderWorker.Load("module", []any{"_.tsx", nil, "", false})
+	go s.callLoader("tsx", "_.tsx", nil, "", false)
 	go func() {
 		entries, err := os.ReadDir(s.config.AppDir)
 		if err == nil {
 			for _, entry := range entries {
 				if entry.Type().IsRegular() && entry.Name() == "uno.css" {
-					go loaderWorker.Load("unocss", []any{"_uno.css", "flex"})
+					go s.callLoader("unocss", "_uno.css", "flex")
 				}
 			}
 		}
 	}()
 	s.loaderWorker = loaderWorker
+	return
+}
+
+func (s *Handler) callLoader(args ...any) (format string, code string, err error) {
+	var data string
+	format, data, err = s.loaderWorker.Call(args...)
+	if err != nil {
+		return
+	}
+	err = json.Unmarshal([]byte(data), &code)
 	return
 }

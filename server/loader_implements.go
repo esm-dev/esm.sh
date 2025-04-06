@@ -4,13 +4,14 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"os"
 	"os/exec"
 	"path"
 	"strconv"
 	"strings"
 
 	"github.com/esm-dev/esm.sh/internal/importmap"
-	"github.com/esm-dev/esm.sh/internal/jsruntime"
+	"github.com/esm-dev/esm.sh/internal/jsrt"
 	"github.com/esm-dev/esm.sh/internal/npm"
 	"github.com/ije/gox/term"
 )
@@ -266,15 +267,16 @@ func compileUnocssLoader(npmrc *NpmRC, loaderVersion string, loaderExecPath stri
 	}
 
 	err = doOnce("check-deno", func() (err error) {
-		_, err = jsruntime.GetDenoPath(config.WorkDir)
+		_, err = jsrt.GetDenoPath(config.WorkDir)
 		return err
 	})
 	if err != nil {
 		return
 	}
 
-	_, err = exec.Command(
-		path.Join(config.WorkDir, "bin/deno"), "compile",
+	cmd := exec.Command(
+		path.Join(config.WorkDir, "bin/deno"),
+		"compile",
 		"--no-config",
 		"--no-lock",
 		"--no-check",
@@ -286,7 +288,9 @@ func compileUnocssLoader(npmrc *NpmRC, loaderVersion string, loaderExecPath stri
 		"--quiet",
 		"--output", loaderExecPath,
 		path.Join(wd, "loader.js"),
-	).Output()
+	)
+	cmd.Env = append(os.Environ(), "DENO_NO_UPDATE_CHECK=1", "DENO_NO_PACKAGE_JSON=1")
+	_, err = cmd.Output()
 	if err != nil {
 		err = fmt.Errorf("failed to compile %s: %s", path.Base(loaderExecPath), err.Error())
 	}

@@ -17,7 +17,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/esm-dev/esm.sh/internal/jsruntime"
+	"github.com/esm-dev/esm.sh/internal/jsrt"
 	"github.com/goccy/go-json"
 	"github.com/ije/gox/set"
 	"github.com/ije/gox/term"
@@ -83,7 +83,7 @@ func cjsModuleLexer(b *BuildContext, cjsEntry string) (ret cjsModuleLexerResult,
 
 	if cjsModuleLexerIgnoredPackages.Has(b.esmPath.PkgName) {
 		err = doOnce("check-deno", func() (err error) {
-			_, err = jsruntime.GetDenoPath(config.WorkDir)
+			_, err = jsrt.GetDenoPath(config.WorkDir)
 			return err
 		})
 		if err != nil {
@@ -95,7 +95,16 @@ func cjsModuleLexer(b *BuildContext, cjsEntry string) (ret cjsModuleLexerResult,
 			return
 		}
 		var data []byte
-		data, err = exec.Command(path.Join(config.WorkDir, "bin/deno"), "run", "--no-config", "--no-lock", "--no-prompt", "--quiet", js).Output()
+		cmd := exec.Command(
+			path.Join(config.WorkDir, "bin/deno"),
+			"run",
+			"--no-prompt",
+			"--no-config",
+			"--no-lock",
+			"--quiet",
+			js)
+		cmd.Env = append(os.Environ(), "DENO_NO_UPDATE_CHECK=1", "DENO_NO_PACKAGE_JSON=1")
+		data, err = cmd.Output()
 		if err != nil {
 			return
 		}
