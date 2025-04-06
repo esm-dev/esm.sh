@@ -590,24 +590,25 @@ func (s *Handler) ServeRPC(w http.ResponseWriter, r *http.Request, filename stri
 	}
 	defer os.Remove(importMapJsonPath)
 
-	loaderWorker := &JSWorker{
+	// todo: cache rpc worker
+	rpcWorker := &JSWorker{
 		wd:     s.config.AppDir,
-		config: ".importmap.json",
 		script: "rpc-worker.js",
+		config: ".importmap.json",
 	}
-	err = loaderWorker.Start()
+	err = rpcWorker.Start()
 	if err != nil {
 		fmt.Println(term.Red("Failed to start loader worker: " + err.Error()))
 		http.Error(w, "Failed to start loader worker: "+err.Error(), 500)
 		return
 	}
-	defer loaderWorker.Stop()
+	defer rpcWorker.Stop()
 
 	header := w.Header()
 	header.Set("Content-Type", "application/json; charset=utf-8")
 	header.Set("Cache-Control", "max-age=0, must-revalidate")
 
-	_, ret, err := loaderWorker.Call(filename, fn, args)
+	_, ret, err := rpcWorker.Call(filename, fn, args)
 	if err != nil {
 		json.NewEncoder(w).Encode(map[string]any{
 			"error": err.Error(),
