@@ -1,12 +1,15 @@
-# ESM App Handler for Go
+# Web App Handler for Go
+
+> [!WARNING]
+> The `web` package is still in development. Use it at your own risk.
 
 A golang `http.Handler` that serves _nobuild_ web applications.
 
 - Web applications are served _as-is_ without any build step.
 - Transpiles TypeScript, JSX, Vue, Svelte _on-the-fly_.
-- Staic files are served with _correct MIME types_.
 - Built-in [UnoCSS](https://unocss.dev) generator.
-- Hot Module Replacement (HMR) for development.
+- Staic files are served from the application directory.
+- Support Hot Module Replacement (HMR) for development
 
 ## Installation
 
@@ -31,8 +34,8 @@ import (
 func main() {
   http.Handle("GET /", web.NewHandler(web.Config{
     AppDir: "/path/to/webapp",
-    Fallback: "/index.html", // fallback to root index.html for SPA
-    Dev: false, // change to true to enable HMR
+    Fallback: "/index.html", // fallback to root index.html (SPA mode)
+    Dev: false, // change to `true` to enable HMR
   }))
   log.Fatal(http.ListenAndServe(":8080", nil))
 }

@@ -80,7 +80,7 @@ func (ctx *BuildContext) analyzeSplitting() (err error) {
 				if e == nil && n <= len(a)-1 {
 					ctx.splitting = set.NewReadOnly(a[1 : n+1]...)
 					if DEBUG {
-            ctx.logger.Debugf("build(%s): splitting.txt found with %d shared modules", ctx.esmPath.Specifier(), ctx.splitting.Len())
+						ctx.logger.Debugf("build(%s): splitting.txt found with %d shared modules", ctx.esmPath.Specifier(), ctx.splitting.Len())
 					}
 					return true
 				}
@@ -127,7 +127,7 @@ func (ctx *BuildContext) analyzeSplitting() (err error) {
 
 		refs := map[string]Ref{}
 		for _, exportName := range exportNames.Values() {
-      esmPath := ctx.esmPath
+			esmPath := ctx.esmPath
 			esmPath.SubPath = exportName
 			esmPath.SubModuleName = stripEntryModuleExt(exportName)
 			b := &BuildContext{
@@ -135,7 +135,7 @@ func (ctx *BuildContext) analyzeSplitting() (err error) {
 				logger:      ctx.logger,
 				db:          ctx.db,
 				storage:     ctx.storage,
-        esmPath:     esmPath,
+				esmPath:     esmPath,
 				args:        ctx.args,
 				externalAll: ctx.externalAll,
 				target:      ctx.target,
@@ -145,7 +145,7 @@ func (ctx *BuildContext) analyzeSplitting() (err error) {
 			}
 			_, includes, err := b.buildModule(true)
 			if err != nil {
-        return fmt.Errorf("failed to analyze %s: %v", esmPath.Specifier(), err)
+				return fmt.Errorf("failed to analyze %s: %v", esmPath.Specifier(), err)
 			}
 			for _, include := range includes {
 				module, importer := include[0], include[1]
@@ -198,7 +198,7 @@ func (ctx *BuildContext) analyzeSplitting() (err error) {
 			}
 			ctx.splitting = splitting.ReadOnly()
 			if DEBUG {
-        ctx.logger.Debugf("build(%s): found %d shared modules from %d modules", ctx.esmPath.Specifier(), shared.Len(), len(refs))
+				ctx.logger.Debugf("build(%s): found %d shared modules from %d modules", ctx.esmPath.Specifier(), shared.Len(), len(refs))
 			}
 		}
 	}

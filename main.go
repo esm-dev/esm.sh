@@ -12,9 +12,9 @@ const helpMessage = "\033[30mesm.sh - A nobuild tool for modern web development.
 Usage: esm.sh [command] <options>
 
 Commands:
-  add, i [...packages]    Add packages to "importmap" script
-  update                  Update packages in "importmap" script
-  tidy                    Tidy up "importmap" script
+  add, i [...packages]    Add packages to the "importmap" script
+  update                  Update packages in the "importmap" script
+  tidy                    Tidy up the "importmap" script
   init                    Create a new web application
   serve, x                Serve a web application
   dev                     Serve a web application in development mode
