@@ -48,7 +48,7 @@ func NewHandler(config Config) *Handler {
 		config.AppDir, _ = os.Getwd()
 	}
 	s := &Handler{config: &config}
-	s.etagSuffix = fmt.Sprintf("-v%d", VERSION)
+	s.etagSuffix = "-" + VERSION
 	if s.config.Dev {
 		s.etagSuffix += "-dev"
 	}
@@ -252,6 +252,7 @@ func (s *Handler) ServeHtml(w http.ResponseWriter, r *http.Request, filename str
 	defer htmlFile.Close()
 
 	u := url.URL{Path: filename}
+	im := base64.RawURLEncoding.EncodeToString([]byte(filename))
 	tokenizer := html.NewTokenizer(htmlFile)
 	hotLinks := []string{}
 	unocss := ""
@@ -295,7 +296,7 @@ func (s *Handler) ServeHtml(w http.ResponseWriter, r *http.Request, filename str
 						switch attrKey {
 						case "src":
 							w.Write([]byte(" src=\""))
-							w.Write([]byte(srcAttr + "?im=" + base64.RawURLEncoding.EncodeToString([]byte(filename))))
+							w.Write([]byte(srcAttr + "?im=" + im))
 							w.Write([]byte{'"'})
 						default:
 							w.Write([]byte{' '})
@@ -317,7 +318,7 @@ func (s *Handler) ServeHtml(w http.ResponseWriter, r *http.Request, filename str
 						hrefAttr = u.ResolveReference(&url.URL{Path: hrefAttr}).Path
 						if hrefAttr == "uno.css" || strings.HasSuffix(hrefAttr, "/uno.css") {
 							if unocss == "" {
-								unocssHref := hrefAttr + "?ctx=" + base64.RawURLEncoding.EncodeToString([]byte(filename))
+								unocssHref := hrefAttr + "?ctx=" + im
 								w.Write([]byte("<link rel=\"stylesheet\" href=\""))
 								w.Write([]byte(unocssHref))
 								w.Write([]byte{'"', '>'})
@@ -390,6 +391,7 @@ func (s *Handler) ServeHtml(w http.ResponseWriter, r *http.Request, filename str
 		}
 		w.Write(tokenizer.Raw())
 	}
+
 	if s.config.Dev {
 		// reload the page when the html file is modified
 		w.Write([]byte(`<script type="module">import createHotContext from"/@hmr";const hot=createHotContext("`))
@@ -408,6 +410,7 @@ func (s *Handler) ServeHtml(w http.ResponseWriter, r *http.Request, filename str
 			}
 			w.Write([]byte(`]){const el=$("link[href='"+href+"']");hot.watch(href,kind=>{if(kind==="modify")el.href=href+"?t="+Date.now().toString(36)})}`))
 		}
+
 		// reload the unocss when the module dependency tree is changed
 		if unocss != "" {
 			w.Write([]byte(`const uno="`))
@@ -420,6 +423,7 @@ func (s *Handler) ServeHtml(w http.ResponseWriter, r *http.Request, filename str
 			w.Write([]byte(filename))
 			w.Write([]byte("\",()=>location.reload());"))
 		}
+
 		w.Write([]byte("</script>"))
 		w.Write([]byte(`<script>console.log("%c💚 Built with esm.sh, please uncheck \"Disable cache\" in Network tab for better DX!", "color:green")</script>`))
 	}
@@ -431,10 +435,13 @@ func (s *Handler) ServeModule(w http.ResponseWriter, r *http.Request, filename s
 		http.Error(w, "Bad Request", 400)
 		return
 	}
-
-	importMapRaw, importMap, err := s.parseImportMap(string(im))
+	imfi, err := os.Lstat(filepath.Join(s.config.AppDir, string(im)))
 	if err != nil {
-		http.Error(w, "could not parse import map: "+err.Error(), 500)
+		if os.IsNotExist(err) {
+			http.Error(w, "Bad Request", 400)
+		} else {
+			http.Error(w, "Internal Server Error", 500)
+		}
 		return
 	}
 
@@ -458,9 +465,7 @@ func (s *Handler) ServeModule(w http.ResponseWriter, r *http.Request, filename s
 		modTime = uint64(fi.ModTime().UnixMilli())
 		size = fi.Size()
 	}
-	xx := xxhash.New()
-	xx.Write([]byte(importMapRaw))
-	etag := fmt.Sprintf("w/\"%x-%x-%x%s\"", modTime, size, xx.Sum(nil), s.etagSuffix)
+	etag := fmt.Sprintf("w/\"%x-%x-%x-%x%s\"", modTime, size, imfi.ModTime().UnixMilli(), imfi.Size(), s.etagSuffix)
 	if r.Header.Get("If-None-Match") == etag && !query.Has("t") {
 		w.WriteHeader(http.StatusNotModified)
 		return
@@ -485,11 +490,16 @@ func (s *Handler) ServeModule(w http.ResponseWriter, r *http.Request, filename s
 		http.Error(w, "Loader worker not started", 500)
 		return
 	}
+	_, importMap, err := s.parseImportMap(string(im))
+	if err != nil {
+		http.Error(w, "could not parse import map: "+err.Error(), 500)
+		return
+	}
 	args := []any{"tsx", filename, importMap, nil, s.config.Dev}
 	if preTransform != nil {
 		args[3] = string(preTransform)
 	}
-	_, js, err := s.callLoader(args...)
+	_, js, err := s.callLoaderJS(args...)
 	if err != nil {
 		fmt.Println(term.Red("[error] " + err.Error()))
 		http.Error(w, "Internal Server Error", 500)
@@ -700,12 +710,12 @@ func (s *Handler) ServeUnoCSS(w http.ResponseWriter, r *http.Request, query url.
 				for moreAttr {
 					var key, val []byte
 					key, val, moreAttr = tokenizer.TagAttr()
-					if bytes.Equal(key, []byte("src")) {
+					if bytes.Equal(key, []byte("type")) {
+						typeAttr = string(val)
+					} else if bytes.Equal(key, []byte("src")) {
 						srcAttr = string(val)
 					} else if bytes.Equal(key, []byte("href")) {
 						hrefAttr = string(val)
-					} else if bytes.Equal(key, []byte("type")) {
-						typeAttr = string(val)
 					}
 				}
 				if typeAttr == "importmap" {
@@ -885,15 +895,14 @@ func (s *Handler) ServeHmrWS(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Handler) parseImportMap(im string) (importMapRaw []byte, importMap importmap.ImportMap, err error) {
-	imHtmlFilename := filepath.Join(s.config.AppDir, im)
-	imHtmlFile, err := os.Open(imHtmlFilename)
+func (s *Handler) parseImportMap(filename string) (importMapRaw []byte, importMap importmap.ImportMap, err error) {
+	file, err := os.Open(filepath.Join(s.config.AppDir, filename))
 	if err != nil {
 		return
 	}
-	defer imHtmlFile.Close()
+	defer file.Close()
 
-	tokenizer := html.NewTokenizer(imHtmlFile)
+	tokenizer := html.NewTokenizer(file)
 	for {
 		tt := tokenizer.Next()
 		if tt == html.ErrorToken {
@@ -918,7 +927,7 @@ func (s *Handler) parseImportMap(im string) (importMapRaw []byte, importMap impo
 						err = errors.New("invalid import map")
 						return
 					}
-					importMap.Src = "file://" + string(im)
+					importMap.Src = "file://" + string(filename)
 					// todo: cache parsed import map
 					break
 				}
@@ -1004,7 +1013,7 @@ func (s *Handler) analyzeDependencyTree(entry string, importMap importmap.Import
 							if s.loaderWorker == nil {
 								return esbuild.OnLoadResult{}, errors.New("loader worker not started")
 							}
-							lang, code, err := s.callLoader(ext[1:], pathname, contents, importMap)
+							lang, code, err := s.callLoaderJS(ext[1:], pathname, contents, importMap)
 							if err != nil {
 								return esbuild.OnLoadResult{}, err
 							}
@@ -1083,22 +1092,75 @@ func (s *Handler) startLoaderWorker() (err error) {
 	if err != nil {
 		return err
 	}
-	go s.callLoader("tsx", "_.tsx", nil, "", false)
-	go func() {
-		entries, err := os.ReadDir(s.config.AppDir)
-		if err == nil {
-			for _, entry := range entries {
-				if entry.Type().IsRegular() && entry.Name() == "uno.css" {
-					go s.callLoader("unocss", "_uno.css", "flex")
-				}
-			}
-		}
-	}()
+	go s.preload()
 	s.loaderWorker = loaderWorker
 	return
 }
 
-func (s *Handler) callLoader(args ...any) (format string, code string, err error) {
+func (s *Handler) preload() {
+	indexHtmlFilename := filepath.Join(s.config.AppDir, "index.html")
+	indexHtmlFile, err := os.Open(indexHtmlFilename)
+	if err != nil {
+		return
+	}
+	defer indexHtmlFile.Close()
+	entries := map[string]struct{}{}
+	tokenizer := html.NewTokenizer(indexHtmlFile)
+	for {
+		tt := tokenizer.Next()
+		if tt == html.ErrorToken {
+			break
+		}
+		if tt == html.StartTagToken {
+			tagName, moreAttr := tokenizer.TagName()
+			if string(tagName) == "script" {
+				var (
+					srcAttr  string
+					hrefAttr string
+				)
+				for moreAttr {
+					var key, val []byte
+					key, val, moreAttr = tokenizer.TagAttr()
+					if bytes.Equal(key, []byte("src")) {
+						srcAttr = string(val)
+					} else if bytes.Equal(key, []byte("href")) {
+						hrefAttr = string(val)
+					}
+				}
+				if hrefAttr != "" && isHttpSepcifier(srcAttr) {
+					if !isHttpSepcifier(hrefAttr) && (hrefAttr == "uno.css" || strings.HasSuffix(hrefAttr, "/uno.css") || isModulePath(hrefAttr)) {
+						entries[hrefAttr] = struct{}{}
+					}
+				} else if !isHttpSepcifier(srcAttr) && isModulePath(srcAttr) {
+					entries[srcAttr] = struct{}{}
+				}
+			}
+		}
+	}
+	if len(entries) > 0 {
+		u := url.URL{Path: "/"}
+		im := base64.RawURLEncoding.EncodeToString([]byte("/index.html"))
+		w := &dummyResponseWriter{}
+		for entry := range entries {
+			pathname := u.ResolveReference(&url.URL{Path: entry}).Path
+			r := &http.Request{
+				Method: "GET",
+				URL: &url.URL{
+					Path: pathname,
+				},
+			}
+			if strings.HasSuffix(entry, "uno.css") {
+				r.URL.RawQuery = "ctx=" + im
+				s.ServeUnoCSS(w, r, r.URL.Query())
+			} else {
+				r.URL.RawQuery = "im=" + im
+				s.ServeModule(w, r, pathname, r.URL.Query(), nil)
+			}
+		}
+	}
+}
+
+func (s *Handler) callLoaderJS(args ...any) (format string, code string, err error) {
 	var data string
 	format, data, err = s.loaderWorker.Call(args...)
 	if err != nil {

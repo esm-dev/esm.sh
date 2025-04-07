@@ -2,6 +2,7 @@ package web
 
 import (
 	"errors"
+	"net/http"
 	"os"
 	"path"
 	"strings"
@@ -79,4 +80,23 @@ func validateModule(filename string) (namedExports []string, err error) {
 		i++
 	}
 	return
+}
+
+// dummyResponseWriter is a dummy http.ResponseWriter that does nothing.
+type dummyResponseWriter struct {
+	header http.Header
+}
+
+func (w *dummyResponseWriter) Header() http.Header {
+	if w.header == nil {
+		w.header = make(http.Header)
+	}
+	return w.header
+}
+
+func (w *dummyResponseWriter) WriteHeader(statusCode int) {
+}
+
+func (w *dummyResponseWriter) Write(b []byte) (int, error) {
+	return len(b), nil
 }

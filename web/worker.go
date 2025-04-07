@@ -87,17 +87,17 @@ func (jsw *JSWorker) Start() (err error) {
 	if err != nil {
 		jsw.stdin = nil
 		jsw.stdout = nil
-	} else {
-		jsw.outReader = bufio.NewReader(jsw.stdout)
-		if DEBUG {
-			cmd := exec.Command(denoPath, "-v")
-			cmd.Env = append(os.Environ(), "DENO_NO_UPDATE_CHECK=1")
-			denoVersion, _ := cmd.Output()
-			fmt.Println(term.Dim(fmt.Sprintf("[debug] js worker started (runtime: %s)", strings.TrimSpace(string(denoVersion)))))
-		}
+		return
 	}
 
 	jsw.process = cmd.Process
+	jsw.outReader = bufio.NewReader(jsw.stdout)
+	if DEBUG {
+		cmd := exec.Command(denoPath, "-v")
+		cmd.Env = append(os.Environ(), "DENO_NO_UPDATE_CHECK=1")
+		denoVersion, _ := cmd.Output()
+		fmt.Println(term.Dim(fmt.Sprintf("[debug] js worker started (runtime: %s)", strings.TrimSpace(string(denoVersion)))))
+	}
 	return
 }
 
