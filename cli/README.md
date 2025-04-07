@@ -1,9 +1,9 @@
 # esm.sh CLI
 
-A _nobuild_ tool for modern web development.
-
 > [!WARNING]
-> The `esm.sh` CLI is still in development and may not be stable. Use it at your own risk.
+> The `esm.sh` CLI is still in development. Use it at your own risk.
+
+A _nobuild_ tool for modern web development.
 
 ## Installation
 
@@ -32,9 +32,13 @@ $ esm.sh --help
 Usage: esm.sh [command] <options>
 
 Commands:
-  add, i [...packages]  Alias to 'importmap add'.
-  importmap, im         Manage "importmap" script.
-  init                  Create a new web application.
-  serve                 Serve a web application.
-  dev                   Serve a web app in development mode.
+  add, i [...packages]    Add packages to the "importmap" script
+  update                  Update packages in the "importmap" script
+  tidy                    Tidy up the "importmap" script
+  init                    Create a new web application
+  serve, x                Serve a web application
+  dev                     Serve a web application in development mode
+
+Options:
+  --help                  Show help message
 ```
