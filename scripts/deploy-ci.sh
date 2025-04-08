@@ -28,12 +28,13 @@ fi
 echo "--- installing server..."
 ssh esm.sh << EOF
   cd /tmp
+  rm -f esmd
   tar -xzf esmd.tar.gz
+  chmod +x esmd
   if [ "\$?" != "0" ]; then
     exit 1
   fi
   rm -f esmd.tar.gz
-  chmod +x esmd
 
   git version
   if [ "\$?" == "127" ]; then
