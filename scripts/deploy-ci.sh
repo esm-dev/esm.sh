@@ -28,11 +28,12 @@ fi
 echo "--- installing server..."
 ssh esm.sh << EOF
   cd /tmp
+  rm -f esmd
   tar -xzf esmd.tar.gz
+  chmod +x esmd
   if [ "\$?" != "0" ]; then
     exit 1
   fi
-  chmod +x esmd
   rm -f esmd.tar.gz
 
   git version
@@ -44,46 +45,46 @@ ssh esm.sh << EOF
   ufw version
   if [ "\$?" == "0" ]; then
     ufw allow http
+    ufw allow https
   fi
 
-  configfile=/etc/esmd/config.json
-  servicefile=/etc/systemd/system/esmd.service
+  configjson=/etc/esmd/config.json
+  servicerc=/etc/systemd/system/esmd.service
   reload=no
-  if [ ! -f \$servicefile ]; then
+
+  if [ ! -f \$servicerc ]; then
     addgroup esm
     adduser --ingroup esm --home /esm --disabled-login --disabled-password --gecos "" esm
-    if [ "\$?" != "0" ]; then
-      echo "Failed to add user 'esm'"
-      exit 1
-    fi
-    mkdir /etc/esmd
-    echo "[Unit]" >> \$servicefile
-    echo "Description=esm.sh service" >> \$servicefile
-    echo "After=network.target" >> \$servicefile
-    echo "StartLimitIntervalSec=0" >> \$servicefile
-    echo "[Service]" >> \$servicefile
-    echo "Type=simple" >> \$servicefile
-    echo "ExecStart=/usr/local/bin/esmd --config=\$configfile" >> \$servicefile
-    echo "WorkingDirectory=/esm" >> \$servicefile
-    echo "Group=esm" >> \$servicefile
-    echo "User=esm" >> \$servicefile
-    echo "AmbientCapabilities=CAP_NET_BIND_SERVICE" >> \$servicefile
-    echo "Restart=always" >> \$servicefile
-    echo "RestartSec=5" >> \$servicefile
-    echo "Environment=\"ESMDIR=/esm\"" >> \$servicefile
-    echo "[Install]" >> \$servicefile
-    echo "WantedBy=multi-user.target" >> \$servicefile
+    echo "[Unit]" >> \$servicerc
+    echo "Description=esm.sh service" >> \$servicerc
+    echo "After=network.target" >> \$servicerc
+    echo "StartLimitIntervalSec=0" >> \$servicerc
+    echo "[Service]" >> \$servicerc
+    echo "Type=simple" >> \$servicerc
+    echo "ExecStart=/usr/local/bin/esmd --config=\$configjson" >> \$servicerc
+    echo "WorkingDirectory=/esm" >> \$servicerc
+    echo "Group=esm" >> \$servicerc
+    echo "User=esm" >> \$servicerc
+    echo "AmbientCapabilities=CAP_NET_BIND_SERVICE" >> \$servicerc
+    echo "Restart=always" >> \$servicerc
+    echo "RestartSec=5" >> \$servicerc
+    echo "Environment=\"ESMDIR=/esm\"" >> \$servicerc
+    echo "[Install]" >> \$servicerc
+    echo "WantedBy=multi-user.target" >> \$servicerc
     reload=yes
   else
     systemctl stop esmd.service
     echo "Stopped esmd.service."
   fi
 
-  rm -f \$configfile
+  mv -f esmd /usr/local/bin/esmd
+
+  rm -f \$configjson
+  mkdir -p /etc/esmd
   if [ "$SERVER_CONFIG" != "" ]; then
-    echo '${SERVER_CONFIG}' >> \$configfile
+    echo '${SERVER_CONFIG}' >> \$configjson
   else
-    echo "{}" >> \$configfile
+    echo "{}" >> \$configjson
   fi
 
   if [ "$RESET_ON_DEPLOY" == "yes" ]; then
@@ -91,8 +92,6 @@ ssh esm.sh << EOF
     mv -f /esm/* /tmp/.esm
     nohup rm -rf /tmp/.esm &
   fi
-
-  mv -f esmd /usr/local/bin/esmd
 
   if [ "\$reload" == "yes" ]; then
     systemctl daemon-reload

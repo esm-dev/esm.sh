@@ -19,7 +19,10 @@ var efs embed.FS
 
 const initHelpMessage = "\033[30mesm.sh - A nobuild tool for modern web development.\033[0m" + `
 
-Usage: esm.sh init <project-name> <options>
+Usage: esm.sh init [project-name] [options]
+
+Arguments:
+  [project-name]     Name of the project, default is "esm-app"
 
 Options:
   --framework        JavaScript framework, Available options: Vanilla, React, Preact, Vue, Svelte

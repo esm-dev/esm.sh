@@ -21,8 +21,9 @@ type FetchClient struct {
 }
 
 // NewClient creates a new FetchClient.
-func NewClient(timeout int, userAgent string, reserveRedirect bool) (client *FetchClient, recycle func()) {
+func NewClient(userAgent string, timeout int, reserveRedirect bool) (client *FetchClient, recycle func()) {
 	client = clientPool.Get().(*FetchClient)
+	client.userAgent = userAgent
 	client.Timeout = time.Duration(timeout) * time.Second
 	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		if reserveRedirect && len(via) > 0 {
@@ -33,7 +34,6 @@ func NewClient(timeout int, userAgent string, reserveRedirect bool) (client *Fet
 		}
 		return nil
 	}
-	client.userAgent = userAgent
 	return client, func() { clientPool.Put(client) }
 }
 

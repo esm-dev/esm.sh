@@ -15,15 +15,18 @@ import (
 
 const addHelpMessage = "\033[30mesm.sh - A nobuild tool for modern web development.\033[0m" + `
 
-Usage: esm.sh add [...packages] <options>
+Usage: esm.sh add [...packages] [options]
 
 Examples:
   esm.sh add react@19.0.0
   esm.sh add react@19 react-dom@19
   esm.sh add react react-dom @esm.sh/router
 
+Arguments:
+  [...packages]    Packages to add, separated by space
+
 Options:
-  --help                 Show help message
+  --help           Show help message
 `
 
 const htmlTemplate = `<!DOCTYPE html>

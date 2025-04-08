@@ -63,7 +63,7 @@ func ghInstall(wd, name, tag string) (err error) {
 	if err != nil {
 		return
 	}
-	client, recycle := fetch.NewClient(30, "esmd/"+VERSION, false)
+	client, recycle := fetch.NewClient("esmd/"+VERSION, 30, false)
 	defer recycle()
 	res, err := client.Fetch(u, nil)
 	if err != nil {

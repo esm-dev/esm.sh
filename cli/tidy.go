@@ -7,10 +7,10 @@ import (
 
 const tidyHelpMessage = "\033[30mesm.sh - A nobuild tool for modern web development.\033[0m" + `
 
-Usage: esm.sh tidy <options>
+Usage: esm.sh tidy [options]
 
 Options:
-  --help                 Show help message
+  --help       Show help message
 `
 
 // Tidy tidies up "importmap" script

@@ -7,14 +7,17 @@ import (
 
 const updateHelpMessage = "\033[30mesm.sh - A nobuild tool for modern web development.\033[0m" + `
 
-Usage: esm.sh update [...packages] <options>
+Usage: esm.sh update [...packages] [options]
 
 Examples:
-  esm.sh update        # update all packages in "importmap" script
+  esm.sh update        # update all packages in the "importmap" script
 	esm.sh update react  # update a specific package
 
+Arguments:
+  [...packages]        Packages to update, separated by space
+
 Options:
-  --help                 Show help message
+  --help               Show help message
 `
 
 // Update updates packages in "importmap" script
