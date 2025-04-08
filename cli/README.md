@@ -32,13 +32,13 @@ $ esm.sh --help
 Usage: esm.sh [command] <options>
 
 Commands:
-  add, i [...packages]    Add packages to the "importmap" script
-  update                  Update packages in the "importmap" script
-  tidy                    Tidy up the "importmap" script
-  init                    Create a new web application
-  serve, x                Serve a web application
-  dev                     Serve a web application in development mode
+  add, i [...packages]    Add specified packages to the "importmap" script in index.html
+  update                  Update existing packages in the "importmap" script in index.html
+  tidy                    Clean up and optimize the "importmap" script in index.html
+  init                    Initialize a new web application
+  serve                   Serve the web application in production mode
+  dev                     Serve the web application in development mode with live reload
 
 Options:
-  --help                  Show help message
+  --help                  Display this help message
 ```

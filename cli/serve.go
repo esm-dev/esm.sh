@@ -14,7 +14,10 @@ import (
 
 const serveHelpMessage = "\033[30mesm.sh - A nobuild tool for modern web development.\033[0m" + `
 
-Usage: esm.sh serve <app-dir> <options>
+Usage: esm.sh serve [app-dir] [options]
+
+Arguments:
+  [app-dir]    Directory to serve, default is current directory
 
 Options:
   --port       Port to serve on, default is 3000

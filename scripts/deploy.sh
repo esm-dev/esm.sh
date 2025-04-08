@@ -48,13 +48,23 @@ if [ "$v" != "" ]; then
   sshPort="$v"
 fi
 
+src=$(dirname $0)/esmd.go
+if [ ! -f \$src ]; then
+  echo "package main" >> $src
+  echo "import \"github.com/esm-dev/esm.sh/server\"" >> $src
+  echo "func main() { server.Serve() }" >> $src
+fi
+
 echo "--- building(${goos}_$goarch)..."
 export GOOS=$goos
 export GOARCH=$goarch
-go build -ldflags="-s -w" -o esmd $(dirname $0)/../server/esmd/main.go
+go build -ldflags="-s -w" -o esmd $src
 if [ "$?" != "0" ]; then
+  rm -f $src
   exit
 fi
+rm -f $src
+du -h esmd
 
 echo "--- uploading..."
 tar -czf esmd.tar.gz esmd
@@ -72,8 +82,8 @@ ssh -p $sshPort ${user}@${host} << EOF
   if [ "\$?" != "0" ]; then
     exit 1
   fi
-  chmod +x esmd
   rm -f esmd.tar.gz
+  chmod +x esmd
 
   git version
   if [ "\$?" == "127" ]; then
@@ -81,45 +91,42 @@ ssh -p $sshPort ${user}@${host} << EOF
     apt-get install -y git
   fi
 
+  ufw version
+  if [ "\$?" == "0" ]; then
+    ufw allow http
+    ufw allow https
+  fi
+
+  configjson=/etc/esmd/config.json
+  servicerc=/etc/systemd/system/esmd.service
+
   if [ "$init" == "yes" ]; then
-    servicefile=/etc/systemd/system/esmd.service
-    if [ -f \$servicefile ]; then
-      rm -f servicefile
-    fi
     addgroup esm
     adduser --ingroup esm --home=/esm --disabled-login --disabled-password --gecos "" esm
-    if [ "\$?" != "0" ]; then
-      echo "Failed to add user 'esm'"
-      exit 1
-    fi
-    ufw version
-    if [ "\$?" == "0" ]; then
-      ufw allow http
-    fi
-    echo "[Unit]" >> \$servicefile
-    echo "Description=esm.sh service" >> \$servicefile
-    echo "After=network.target" >> \$servicefile
-    echo "StartLimitIntervalSec=0" >> \$servicefile
-    echo "[Service]" >> \$servicefile
-    echo "Type=simple" >> \$servicefile
+    rm -f \$servicerc
+    echo "[Unit]" >> \$servicerc
+    echo "Description=esm.sh service" >> \$servicerc
+    echo "After=network.target" >> \$servicerc
+    echo "StartLimitIntervalSec=0" >> \$servicerc
+    echo "[Service]" >> \$servicerc
+    echo "Type=simple" >> \$servicerc
     if [ "$config" != "" ]; then
-      configfile=/etc/esmd/config.json
+      rm -f \$configjson
       mkdir -p /etc/esmd
-      rm -f \$configfile
-      echo '$config' >> \$configfile
-      echo "ExecStart=/usr/local/bin/esmd --config=\$configfile" >> \$servicefile
+      echo '$config' >> \$configjson
+      echo "ExecStart=/usr/local/bin/esmd --config=\$configjson" >> \$servicerc
     else
-      echo "ExecStart=/usr/local/bin/esmd" >> \$servicefile
+      echo "ExecStart=/usr/local/bin/esmd" >> \$servicerc
     fi
-    echo "WorkingDirectory=/esm" >> \$servicefile
-    echo "Group=esm" >> \$servicefile
-    echo "User=esm" >> \$servicefile
-    echo "AmbientCapabilities=CAP_NET_BIND_SERVICE" >> \$servicefile
-    echo "Restart=always" >> \$servicefile
-    echo "RestartSec=5" >> \$servicefile
-    echo "Environment=\"ESMDIR=/esm\"" >> \$servicefile
-    echo "[Install]" >> \$servicefile
-    echo "WantedBy=multi-user.target" >> \$servicefile
+    echo "WorkingDirectory=/esm" >> \$servicerc
+    echo "Group=esm" >> \$servicerc
+    echo "User=esm" >> \$servicerc
+    echo "AmbientCapabilities=CAP_NET_BIND_SERVICE" >> \$servicerc
+    echo "Restart=always" >> \$servicerc
+    echo "RestartSec=5" >> \$servicerc
+    echo "Environment=\"ESMDIR=/esm\"" >> \$servicerc
+    echo "[Install]" >> \$servicerc
+    echo "WantedBy=multi-user.target" >> \$servicerc
   else
     systemctl stop esmd.service
     echo "Stopped esmd.service."

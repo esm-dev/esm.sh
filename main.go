@@ -7,20 +7,20 @@ import (
 	"github.com/esm-dev/esm.sh/cli"
 )
 
-const helpMessage = "\033[30mesm.sh - A nobuild tool for modern web development.\033[0m" + `
+const helpMessage = "\033[30mesm.sh - A no-build tool for modern web development.\033[0m" + `
 
-Usage: esm.sh [command] <options>
+Usage: esm.sh [command] [options]
 
 Commands:
-  add, i [...packages]    Add packages to the "importmap" script
-  update                  Update packages in the "importmap" script
-  tidy                    Tidy up the "importmap" script
-  init                    Create a new web application
-  serve, x                Serve a web application
-  dev                     Serve a web application in development mode
+  add, i [...packages]    Add specified packages to the "importmap" script in index.html
+  update                  Update existing packages in the "importmap" script in index.html
+  tidy                    Clean up and optimize the "importmap" script in index.html
+  init                    Initialize a new web application
+  serve                   Serve the web application in production mode
+  dev                     Serve the web application in development mode with live reload
 
 Options:
-  --help                  Show help message
+  --help                  Display this help message
 `
 
 func main() {
@@ -37,7 +37,7 @@ func main() {
 		cli.Tidy()
 	case "init":
 		cli.Init()
-	case "serve", "x":
+	case "serve":
 		cli.Serve(false)
 	case "dev":
 		cli.Serve(true)
