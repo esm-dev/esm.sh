@@ -11,20 +11,11 @@ echo "  User ${DEPLOY_SSH_USER}" >> ~/.ssh/config
 echo "  IdentityFile ~/.ssh/id_ed25519" >> ~/.ssh/config
 echo "  IdentitiesOnly yes" >> ~/.ssh/config
 
-src=$(dirname $0)/esmd.go
-if [ ! -f \$src ]; then
-  echo "package main" >> $src
-  echo "import \"github.com/esm-dev/esm.sh/server\"" >> $src
-  echo "func main() { server.Serve() }" >> $src
-fi
-
 echo "--- building server..."
-go build -ldflags="-s -w -X 'github.com/esm-dev/esm.sh/server.VERSION=${SERVER_VERSION}'" -o esmd $src
+go build -ldflags="-s -w -X 'github.com/esm-dev/esm.sh/server.VERSION=${SERVER_VERSION}'" -o esmd $(dirname $0)/../server/esmd/main.go
 if [ "$?" != "0" ]; then
-  rm -f $src
   exit 1
 fi
-rm -f $src
 du -h esmd
 
 echo "--- uploading server build..."

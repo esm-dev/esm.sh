@@ -48,22 +48,13 @@ if [ "$v" != "" ]; then
   sshPort="$v"
 fi
 
-src=$(dirname $0)/esmd.go
-if [ ! -f \$src ]; then
-  echo "package main" >> $src
-  echo "import \"github.com/esm-dev/esm.sh/server\"" >> $src
-  echo "func main() { server.Serve() }" >> $src
-fi
-
 echo "--- building(${goos}_$goarch)..."
 export GOOS=$goos
 export GOARCH=$goarch
-go build -ldflags="-s -w" -o esmd $src
+go build -ldflags="-s -w" -o esmd $(dirname $0)/../server/esmd/main.go
 if [ "$?" != "0" ]; then
-  rm -f $src
   exit
 fi
-rm -f $src
 du -h esmd
 
 echo "--- uploading..."
