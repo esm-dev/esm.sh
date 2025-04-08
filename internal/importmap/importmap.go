@@ -4,9 +4,8 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
 	"net/url"
+	"os"
 	"sort"
 	"strings"
 
@@ -16,6 +15,7 @@ import (
 	"github.com/ije/gox/sync"
 	"github.com/ije/gox/term"
 	"github.com/ije/gox/utils"
+	"golang.org/x/net/html"
 )
 
 type ImportMap struct {
@@ -26,6 +26,58 @@ type ImportMap struct {
 	Routes    map[string]string            `json:"routes,omitempty"`
 	Integrity map[string]string            `json:"integrity,omitempty"`
 	srcUrl    *url.URL
+}
+
+// ParseFromHtmlFile parses an import map from an HTML file.
+func ParseFromHtmlFile(filename string) (importMapRaw []byte, importMap ImportMap, err error) {
+	file, err := os.Open(filename)
+	if err != nil {
+		return
+	}
+	defer file.Close()
+
+	tokenizer := html.NewTokenizer(file)
+	for {
+		tt := tokenizer.Next()
+		if tt == html.ErrorToken {
+			break
+		}
+		if tt == html.StartTagToken {
+			tagName, moreAttr := tokenizer.TagName()
+			if string(tagName) == "script" {
+				var typeAttr string
+				for moreAttr {
+					var key, val []byte
+					key, val, moreAttr = tokenizer.TagAttr()
+					if string(key) == "type" {
+						typeAttr = string(val)
+						break
+					}
+				}
+				if typeAttr == "importmap" {
+					if tokenizer.Next() != html.TextToken {
+						err = errors.New("invalid import map")
+						return
+					}
+					importMapRaw = tokenizer.Raw()
+					if json.Unmarshal(importMapRaw, &importMap) != nil {
+						err = errors.New("invalid import map")
+						return
+					}
+					importMap.Src = "file://" + string(filename)
+					break
+				}
+			} else if string(tagName) == "body" {
+				break
+			}
+		} else if tt == html.EndTagToken {
+			tagName, _ := tokenizer.TagName()
+			if bytes.Equal(tagName, []byte("head")) {
+				break
+			}
+		}
+	}
+	return
 }
 
 func (im *ImportMap) Resolve(path string) (string, bool) {
@@ -227,7 +279,7 @@ func (im *ImportMap) MarshalJSON() ([]byte, error) {
 	buf.WriteString("      \"imports\": {")
 	if len(im.Imports) > 0 {
 		buf.WriteByte('\n')
-		formatImports(&buf, im.Imports, 4)
+		formatMap(&buf, im.Imports, 4)
 		buf.WriteString("      }")
 	} else {
 		buf.WriteString("}")
@@ -238,26 +290,26 @@ func (im *ImportMap) MarshalJSON() ([]byte, error) {
 			buf.WriteString("        \"")
 			buf.WriteString(scope)
 			buf.WriteString("\": {\n")
-			formatImports(&buf, imports, 5)
+			formatMap(&buf, imports, 5)
 			buf.WriteString("        }\n")
 		}
 		buf.WriteString("      }")
 	}
 	if len(im.Routes) > 0 {
 		buf.WriteString(",\n      \"routes\": {\n")
-		formatImports(&buf, im.Routes, 4)
+		formatMap(&buf, im.Routes, 4)
 		buf.WriteString("      }")
 	}
 	if len(im.Integrity) > 0 {
 		buf.WriteString(",\n      \"integrity\": {\n")
-		formatImports(&buf, im.Integrity, 4)
+		formatMap(&buf, im.Integrity, 4)
 		buf.WriteString("      }")
 	}
 	buf.WriteString("\n    }")
 	return buf.Bytes(), nil
 }
 
-func formatImports[T any](buf *bytes.Buffer, m map[string]T, indent int) {
+func formatMap(buf *bytes.Buffer, m map[string]string, indent int) {
 	keys := make([]string, 0, len(m))
 	for key := range m {
 		if keyLen := len(key); keyLen == 1 || (keyLen > 1 && !strings.HasSuffix(key, "/")) {
@@ -266,9 +318,9 @@ func formatImports[T any](buf *bytes.Buffer, m map[string]T, indent int) {
 	}
 	sort.Strings(keys)
 	for i, key := range keys {
-		value, ok := any(m[key]).(string)
+		value, ok := m[key]
 		if !ok || value == "" {
-			// ignore non-string value
+			// ignore empty values
 			continue
 		}
 		buf.WriteString(strings.Repeat("  ", indent))
@@ -277,104 +329,18 @@ func formatImports[T any](buf *bytes.Buffer, m map[string]T, indent int) {
 		buf.WriteString("\": \"")
 		buf.WriteString(value)
 		buf.WriteByte('"')
-		if value, ok := m[key+"/"]; ok {
-			if str, ok := any(value).(string); ok && str != "" {
-				buf.WriteString(",\n")
-				buf.WriteString(strings.Repeat("  ", indent))
-				buf.WriteByte('"')
-				buf.WriteString(key + "/")
-				buf.WriteString("\": \"")
-				buf.WriteString(str)
-				buf.WriteByte('"')
-			}
+		if value, ok := m[key+"/"]; ok && value != "" {
+			buf.WriteString(",\n")
+			buf.WriteString(strings.Repeat("  ", indent))
+			buf.WriteByte('"')
+			buf.WriteString(key + "/")
+			buf.WriteString("\": \"")
+			buf.WriteString(value)
+			buf.WriteByte('"')
 		}
 		if i < len(keys)-1 {
 			buf.WriteString(",")
 		}
 		buf.WriteByte('\n')
-	}
-}
-
-type PackageJSON struct {
-	Name             string            `json:"name"`
-	Version          string            `json:"version"`
-	Dependencies     map[string]string `json:"dependencies"`
-	PeerDependencies map[string]string `json:"peerDependencies"`
-}
-
-var (
-	cacheMutex sync.KeyedMutex
-	cacheStore sync.Map
-)
-
-func fetchPackageInfo(cdnOrigin string, pkg string) (pkgJSON PackageJSON, err error) {
-	url := fmt.Sprintf("%s/%s/package.json", cdnOrigin, pkg)
-
-	// check cache first
-	if v, ok := cacheStore.Load(url); ok {
-		pkgJSON, _ = v.(PackageJSON)
-		return
-	}
-
-	// only one fetch at a time for the same url
-	unlock := cacheMutex.Lock(url)
-	defer unlock()
-
-	// check cache again after get lock
-	if v, ok := cacheStore.Load(url); ok {
-		pkgJSON, _ = v.(PackageJSON)
-		return
-	}
-
-	resp, err := http.Get(url)
-	if err != nil {
-		err = errors.New("http request failed: " + err.Error())
-		return
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode == 404 {
-		err = errors.New("package not found: " + pkg)
-		return
-	}
-	if resp.StatusCode != 200 {
-		msg, _ := io.ReadAll(resp.Body)
-		err = errors.New(string(msg))
-		return
-	}
-
-	err = json.NewDecoder(resp.Body).Decode(&pkgJSON)
-	if err != nil {
-		err = errors.New("could not parse package.json")
-	}
-	if err == nil {
-		cacheStore.Store(url, pkgJSON)
-	}
-	return
-}
-
-func walkPackageDependencies(pkg PackageJSON, callback func(specifier, pkgName, pkgVersion, prefix string)) {
-	if len(pkg.Dependencies) > 0 {
-		walkDependencies(pkg.Dependencies, callback)
-	}
-	if len(pkg.PeerDependencies) > 0 {
-		walkDependencies(pkg.PeerDependencies, callback)
-	}
-}
-
-func walkDependencies(deps map[string]string, callback func(specifier, pkgName, pkgVersion, prefix string)) {
-	for specifier, pkgVersion := range deps {
-		pkgName := specifier
-		pkg, err := npm.ResolveDependencyVersion(pkgVersion)
-		if err == nil && pkg.Name != "" {
-			pkgName = pkg.Name
-			pkgVersion = pkg.Version
-		}
-		var prefix string
-		if pkg.Github {
-			prefix = "/gh"
-		} else if pkg.PkgPrNew {
-			prefix = "/pr"
-		}
-		callback(specifier, pkgName, pkgVersion, prefix)
 	}
 }

@@ -490,7 +490,7 @@ func (s *Handler) ServeModule(w http.ResponseWriter, r *http.Request, filename s
 		http.Error(w, "Loader worker not started", 500)
 		return
 	}
-	_, importMap, err := s.parseImportMap(string(im))
+	_, importMap, err := importmap.ParseFromHtmlFile(filepath.Join(s.config.AppDir, string(im)))
 	if err != nil {
 		http.Error(w, "could not parse import map: "+err.Error(), 500)
 		return
@@ -580,7 +580,7 @@ func (s *Handler) ServeRPC(w http.ResponseWriter, r *http.Request, filename stri
 		return
 	}
 
-	importMapRaw, _, err := s.parseImportMap(string(im))
+	importMapRaw, _, err := importmap.ParseFromHtmlFile(filepath.Join(s.config.AppDir, string(im)))
 	if err != nil {
 		http.Error(w, "could not parse import map: "+err.Error(), 500)
 		return
@@ -593,7 +593,7 @@ func (s *Handler) ServeRPC(w http.ResponseWriter, r *http.Request, filename stri
 	}
 
 	importMapJsonPath := filepath.Join(s.config.AppDir, ".importmap.json")
-	err = os.WriteFile(importMapJsonPath, []byte(importMapRaw), 0644)
+	err = os.WriteFile(importMapJsonPath, importMapRaw, 0644)
 	if err != nil {
 		http.Error(w, "Failed to write import map: "+err.Error(), 500)
 		return
@@ -893,55 +893,6 @@ func (s *Handler) ServeHmrWS(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-}
-
-func (s *Handler) parseImportMap(filename string) (importMapRaw []byte, importMap importmap.ImportMap, err error) {
-	file, err := os.Open(filepath.Join(s.config.AppDir, filename))
-	if err != nil {
-		return
-	}
-	defer file.Close()
-
-	tokenizer := html.NewTokenizer(file)
-	for {
-		tt := tokenizer.Next()
-		if tt == html.ErrorToken {
-			break
-		}
-		if tt == html.StartTagToken {
-			tagName, moreAttr := tokenizer.TagName()
-			if string(tagName) == "script" {
-				var typeAttr string
-				for moreAttr {
-					var key, val []byte
-					key, val, moreAttr = tokenizer.TagAttr()
-					if string(key) == "type" {
-						typeAttr = string(val)
-						break
-					}
-				}
-				if typeAttr == "importmap" {
-					tokenizer.Next()
-					importMapRaw = tokenizer.Text()
-					if json.Unmarshal(importMapRaw, &importMap) != nil {
-						err = errors.New("invalid import map")
-						return
-					}
-					importMap.Src = "file://" + string(filename)
-					// todo: cache parsed import map
-					break
-				}
-			} else if string(tagName) == "body" {
-				break
-			}
-		} else if tt == html.EndTagToken {
-			tagName, _ := tokenizer.TagName()
-			if bytes.Equal(tagName, []byte("head")) {
-				break
-			}
-		}
-	}
-	return
 }
 
 func (s *Handler) analyzeDependencyTree(entry string, importMap importmap.ImportMap) (tree map[string][]byte, err error) {
