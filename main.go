@@ -20,7 +20,8 @@ Commands:
   dev                     Serve the web application in development mode with live reload
 
 Options:
-  --help                  Display this help message
+  --version, -v           Show the version of esm.sh CLI
+  --help, -h              Display this help message
 `
 
 func main() {
@@ -41,7 +42,19 @@ func main() {
 		cli.Serve(false)
 	case "dev":
 		cli.Serve(true)
+	case "version":
+		fmt.Println("esm.sh CLI " + cli.Version)
 	default:
+		for _, arg := range os.Args[1:] {
+			if arg == "-v" {
+				fmt.Println(cli.Version)
+				return
+			}
+			if arg == "--version" {
+				fmt.Println("esm.sh CLI " + cli.Version)
+				return
+			}
+		}
 		fmt.Print(helpMessage)
 	}
 }
