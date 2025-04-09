@@ -3,12 +3,12 @@
 > [!WARNING]
 > The `web` package is still in development. Use it at your own risk.
 
-A golang `http.Handler` that serves _nobuild_ web applications.
+A golang `http.Handler` that serves _no-build_ web applications.
 
-- Web applications are served _as-is_ without any build step.
-- Transpiles TypeScript, JSX, Vue, Svelte _on-the-fly_.
-- Built-in [UnoCSS](https://unocss.dev) generator.
-- Staic files are served from the application directory.
+- Web applications are served _as-is_ without any build step
+- Transpiles TypeScript, JSX, Vue, Svelte _on-the-fly_
+- Built-in [UnoCSS](https://unocss.dev) generator
+- Staic files are served from the application directory
 - Support Hot Module Replacement (HMR) for development
 
 ## Installation

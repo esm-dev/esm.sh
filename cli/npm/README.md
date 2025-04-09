@@ -1,6 +1,6 @@
 # esm.sh CLI
 
-A _nobuild_ tool for modern web development.
+A _no-build_ tool for modern web development.
 
 ## Installation
 

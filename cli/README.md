@@ -3,7 +3,7 @@
 > [!WARNING]
 > The `esm.sh` CLI is still in development. Use it at your own risk.
 
-A _nobuild_ tool for modern web development.
+A _no-build_ tool for modern web development.
 
 ## Installation
 
