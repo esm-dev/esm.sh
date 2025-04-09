@@ -25,11 +25,11 @@ type ImportMap struct {
 	Scopes    map[string]map[string]string `json:"scopes,omitempty"`
 	Routes    map[string]string            `json:"routes,omitempty"`
 	Integrity map[string]string            `json:"integrity,omitempty"`
-	srcUrl    *url.URL
+	baseUrl   *url.URL                     // cached base URL
 }
 
 // ParseFromHtmlFile parses an import map from an HTML file.
-func ParseFromHtmlFile(filename string) (importMapRaw []byte, importMap ImportMap, err error) {
+func ParseFromHtmlFile(filename string) (importMap ImportMap, err error) {
 	file, err := os.Open(filename)
 	if err != nil {
 		return
@@ -59,8 +59,7 @@ func ParseFromHtmlFile(filename string) (importMapRaw []byte, importMap ImportMa
 						err = errors.New("invalid import map")
 						return
 					}
-					importMapRaw = tokenizer.Raw()
-					if json.Unmarshal(importMapRaw, &importMap) != nil {
+					if json.Unmarshal(tokenizer.Raw(), &importMap) != nil {
 						err = errors.New("invalid import map")
 						return
 					}
@@ -68,11 +67,13 @@ func ParseFromHtmlFile(filename string) (importMapRaw []byte, importMap ImportMa
 					break
 				}
 			} else if string(tagName) == "body" {
+				// stop parsing when we reach the body tag
 				break
 			}
 		} else if tt == html.EndTagToken {
 			tagName, _ := tokenizer.TagName()
 			if bytes.Equal(tagName, []byte("head")) {
+				// stop parsing when we reach the head end tag
 				break
 			}
 		}
@@ -87,20 +88,20 @@ func (im *ImportMap) Resolve(path string) (string, bool) {
 		query = "?" + query
 	}
 	imports := im.Imports
-	if im.srcUrl == nil && im.Src != "" {
-		im.srcUrl, _ = url.Parse(im.Src)
+	if im.baseUrl == nil && im.Src != "" {
+		im.baseUrl, _ = url.Parse(im.Src)
 	}
 	// todo: check `scopes`
 	if len(imports) > 0 {
 		if v, ok := imports[path]; ok {
-			return im.toAbsPath(v) + query, true
+			return normalizeUrl(im.baseUrl, v) + query, true
 		}
 		if strings.ContainsRune(path, '/') {
 			nonTrailingSlashImports := make([][2]string, 0, len(imports))
 			for k, v := range imports {
 				if strings.HasSuffix(k, "/") {
 					if strings.HasPrefix(path, k) {
-						return im.toAbsPath(v+path[len(k):]) + query, true
+						return normalizeUrl(im.baseUrl, v+path[len(k):]) + query, true
 					}
 				} else {
 					nonTrailingSlashImports = append(nonTrailingSlashImports, [2]string{k, v})
@@ -120,22 +121,12 @@ func (im *ImportMap) Resolve(path string) (string, bool) {
 					q = query
 				}
 				if strings.HasPrefix(path, k+"/") {
-					return im.toAbsPath(p+path[len(k):]) + q, true
+					return normalizeUrl(im.baseUrl, p+path[len(k):]) + q, true
 				}
 			}
 		}
 	}
 	return path + query, false
-}
-
-func (im *ImportMap) toAbsPath(path string) string {
-	if strings.HasPrefix(path, "./") || strings.HasPrefix(path, "../") {
-		if im.srcUrl != nil {
-			return im.srcUrl.ResolveReference(&url.URL{Path: path}).String()
-		}
-		return path
-	}
-	return path
 }
 
 func (im *ImportMap) AddPackages(packages []string) bool {
@@ -268,78 +259,130 @@ func (im *ImportMap) AddPackages(packages []string) bool {
 	return true
 }
 
-func (im *ImportMap) MarshalJSON() ([]byte, error) {
-	buf := bytes.Buffer{}
+func (im *ImportMap) FormatJSON(indent int) string {
+	buf := strings.Builder{}
+	indentStr := bytes.Repeat([]byte{' ', ' '}, indent+1)
+	buf.Write(indentStr[0 : 2*indent])
 	buf.WriteString("{\n")
 	if im.Cdn != "" {
-		buf.WriteString("      \"$cdn\": \"")
+		buf.Write(indentStr)
+		buf.WriteString("\"$cdn\": \"")
 		buf.WriteString(im.Cdn)
 		buf.WriteString("\",\n")
 	}
-	buf.WriteString("      \"imports\": {")
+	buf.Write(indentStr)
+	buf.WriteString("\"imports\": {")
 	if len(im.Imports) > 0 {
 		buf.WriteByte('\n')
-		formatMap(&buf, im.Imports, 4)
-		buf.WriteString("      }")
+		formatImports(&buf, im.Imports, indent+2)
+		buf.Write(indentStr)
+		buf.WriteByte('}')
 	} else {
-		buf.WriteString("}")
+		buf.WriteByte('}')
 	}
 	if len(im.Scopes) > 0 {
-		buf.WriteString(",\n      \"scopes\": {\n")
+		buf.WriteString(",\n")
+		buf.Write(indentStr)
+		buf.WriteString("\"scopes\": {\n")
 		for scope, imports := range im.Scopes {
-			buf.WriteString("        \"")
+			buf.Write(indentStr)
+			buf.WriteString("  \"")
 			buf.WriteString(scope)
 			buf.WriteString("\": {\n")
-			formatMap(&buf, imports, 5)
-			buf.WriteString("        }\n")
+			formatImports(&buf, imports, indent+3)
+			buf.Write(indentStr)
+			buf.WriteString("  }\n")
 		}
-		buf.WriteString("      }")
+		buf.Write(indentStr)
+		buf.WriteByte('}')
 	}
 	if len(im.Routes) > 0 {
-		buf.WriteString(",\n      \"routes\": {\n")
-		formatMap(&buf, im.Routes, 4)
-		buf.WriteString("      }")
+		buf.WriteString(",\n")
+		buf.Write(indentStr)
+		buf.WriteString("\"routes\": {\n")
+		formatMap(&buf, im.Routes, indent+2)
+		buf.Write(indentStr)
+		buf.WriteByte('}')
 	}
 	if len(im.Integrity) > 0 {
-		buf.WriteString(",\n      \"integrity\": {\n")
-		formatMap(&buf, im.Integrity, 4)
-		buf.WriteString("      }")
+		buf.WriteString(",\n")
+		buf.Write(indentStr)
+		buf.WriteString("\"integrity\": {\n")
+		formatMap(&buf, im.Integrity, indent+2)
+		buf.Write(indentStr)
+		buf.WriteByte('}')
 	}
-	buf.WriteString("\n    }")
-	return buf.Bytes(), nil
+	buf.WriteByte('\n')
+	buf.Write(indentStr[0 : 2*indent])
+	buf.WriteByte('}')
+	return buf.String()
 }
 
-func formatMap(buf *bytes.Buffer, m map[string]string, indent int) {
-	keys := make([]string, 0, len(m))
-	for key := range m {
+func normalizeUrl(baseUrl *url.URL, path string) string {
+	if baseUrl != nil && (strings.HasPrefix(path, "./") || strings.HasPrefix(path, "../")) {
+		return baseUrl.ResolveReference(&url.URL{Path: path}).String()
+	}
+	return path
+}
+
+func formatImports(buf *strings.Builder, imports map[string]string, indent int) {
+	keys := make([]string, 0, len(imports))
+	for key := range imports {
 		if keyLen := len(key); keyLen == 1 || (keyLen > 1 && !strings.HasSuffix(key, "/")) {
 			keys = append(keys, key)
 		}
 	}
 	sort.Strings(keys)
+	indentStr := bytes.Repeat([]byte{' ', ' '}, indent)
+	for i, key := range keys {
+		url, ok := imports[key]
+		if !ok || url == "" {
+			// ignore empty values
+			continue
+		}
+		buf.Write(indentStr)
+		buf.WriteByte('"')
+		buf.WriteString(key)
+		buf.WriteString("\": \"")
+		buf.WriteString(url)
+		buf.WriteByte('"')
+		if url, ok := imports[key+"/"]; ok && url != "" {
+			buf.WriteString(",\n")
+			buf.Write(indentStr)
+			buf.WriteByte('"')
+			buf.WriteString(key + "/")
+			buf.WriteString("\": \"")
+			buf.WriteString(url)
+			buf.WriteByte('"')
+		}
+		if i < len(keys)-1 {
+			buf.WriteByte(',')
+		}
+		buf.WriteByte('\n')
+	}
+}
+
+func formatMap(buf *strings.Builder, m map[string]string, indent int) {
+	keys := make([]string, 0, len(m))
+	for key := range m {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	indentStr := bytes.Repeat([]byte{' ', ' '}, indent)
 	for i, key := range keys {
 		value, ok := m[key]
 		if !ok || value == "" {
 			// ignore empty values
 			continue
 		}
-		buf.WriteString(strings.Repeat("  ", indent))
+		buf.Write(indentStr)
 		buf.WriteByte('"')
 		buf.WriteString(key)
 		buf.WriteString("\": \"")
 		buf.WriteString(value)
 		buf.WriteByte('"')
-		if value, ok := m[key+"/"]; ok && value != "" {
-			buf.WriteString(",\n")
-			buf.WriteString(strings.Repeat("  ", indent))
-			buf.WriteByte('"')
-			buf.WriteString(key + "/")
-			buf.WriteString("\": \"")
-			buf.WriteString(value)
-			buf.WriteByte('"')
-		}
 		if i < len(keys)-1 {
-			buf.WriteString(",")
+			buf.WriteByte(',')
 		}
 		buf.WriteByte('\n')
 	}

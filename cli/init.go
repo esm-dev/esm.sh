@@ -17,7 +17,7 @@ import (
 //go:embed demo
 var efs embed.FS
 
-const initHelpMessage = "\033[30mesm.sh - A nobuild tool for modern web development.\033[0m" + `
+const initHelpMessage = "\033[30mesm.sh - A no-build tool for modern web development.\033[0m" + `
 
 Usage: esm.sh init [project-name] [options]
 

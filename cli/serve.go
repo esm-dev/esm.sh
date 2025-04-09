@@ -12,7 +12,7 @@ import (
 	"github.com/ije/gox/term"
 )
 
-const serveHelpMessage = "\033[30mesm.sh - A nobuild tool for modern web development.\033[0m" + `
+const serveHelpMessage = "\033[30mesm.sh - A no-build tool for modern web development.\033[0m" + `
 
 Usage: esm.sh serve [app-dir] [options]
 

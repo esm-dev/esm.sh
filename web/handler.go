@@ -490,7 +490,7 @@ func (s *Handler) ServeModule(w http.ResponseWriter, r *http.Request, filename s
 		http.Error(w, "Loader worker not started", 500)
 		return
 	}
-	_, importMap, err := importmap.ParseFromHtmlFile(filepath.Join(s.config.AppDir, string(im)))
+	importMap, err := importmap.ParseFromHtmlFile(filepath.Join(s.config.AppDir, string(im)))
 	if err != nil {
 		http.Error(w, "could not parse import map: "+err.Error(), 500)
 		return
@@ -580,7 +580,7 @@ func (s *Handler) ServeRPC(w http.ResponseWriter, r *http.Request, filename stri
 		return
 	}
 
-	importMapRaw, _, err := importmap.ParseFromHtmlFile(filepath.Join(s.config.AppDir, string(im)))
+	importMap, err := importmap.ParseFromHtmlFile(filepath.Join(s.config.AppDir, string(im)))
 	if err != nil {
 		http.Error(w, "could not parse import map: "+err.Error(), 500)
 		return
@@ -593,7 +593,7 @@ func (s *Handler) ServeRPC(w http.ResponseWriter, r *http.Request, filename stri
 	}
 
 	importMapJsonPath := filepath.Join(s.config.AppDir, ".importmap.json")
-	err = os.WriteFile(importMapJsonPath, importMapRaw, 0644)
+	err = os.WriteFile(importMapJsonPath, []byte(importMap.FormatJSON(0)), 0644)
 	if err != nil {
 		http.Error(w, "Failed to write import map: "+err.Error(), 500)
 		return

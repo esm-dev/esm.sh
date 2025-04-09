@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-const tidyHelpMessage = "\033[30mesm.sh - A nobuild tool for modern web development.\033[0m" + `
+const tidyHelpMessage = "\033[30mesm.sh - A no-build tool for modern web development.\033[0m" + `
 
 Usage: esm.sh tidy [options]
 

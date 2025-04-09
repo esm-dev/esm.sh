@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-const updateHelpMessage = "\033[30mesm.sh - A nobuild tool for modern web development.\033[0m" + `
+const updateHelpMessage = "\033[30mesm.sh - A no-build tool for modern web development.\033[0m" + `
 
 Usage: esm.sh update [...packages] [options]
 

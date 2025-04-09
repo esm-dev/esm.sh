@@ -13,13 +13,13 @@ import (
 	"golang.org/x/net/html"
 )
 
-const addHelpMessage = "\033[30mesm.sh - A nobuild tool for modern web development.\033[0m" + `
+const addHelpMessage = "\033[30mesm.sh - A no-build tool for modern web development.\033[0m" + `
 
 Usage: esm.sh add [...packages] [options]
 
 Examples:
   esm.sh add react@19.0.0
-  esm.sh add react@19 react-dom@19
+  esm.sh add react@19
   esm.sh add react react-dom @esm.sh/router
 
 Arguments:
@@ -36,7 +36,7 @@ const htmlTemplate = `<!DOCTYPE html>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Hello, world!</title>
   <script type="importmap">
-    %s
+%s
   </script>
 </head>
 <body>
@@ -90,13 +90,12 @@ func updateImportMap(packages []string) (err error) {
 			if token == html.EndTagToken {
 				tagName, _ := tokenizer.TagName()
 				if string(tagName) == "head" && !updated {
-					buf.WriteString("  <script type=\"importmap\">\n    ")
+					buf.WriteString("  <script type=\"importmap\">\n")
 					importMap := importmap.ImportMap{}
 					if !importMap.AddPackages(packages) {
 						return
 					}
-					imJson, _ := importMap.MarshalJSON()
-					buf.Write(imJson)
+					buf.WriteString(importMap.FormatJSON(2))
 					buf.WriteString("\n  </script>\n")
 					buf.Write(tokenizer.Raw())
 					updated = true
@@ -116,13 +115,12 @@ func updateImportMap(packages []string) (err error) {
 						}
 					}
 					if typeAttr != "importmap" && !updated {
-						buf.WriteString("<script type=\"importmap\">\n    ")
+						buf.WriteString("<script type=\"importmap\">\n")
 						importMap := importmap.ImportMap{}
 						if !importMap.AddPackages(packages) {
 							return
 						}
-						imJson, _ := importMap.MarshalJSON()
-						buf.Write(imJson)
+						buf.WriteString(importMap.FormatJSON(2))
 						buf.WriteString("\n  </script>\n  ")
 						buf.Write(tokenizer.Raw())
 						updated = true
@@ -141,12 +139,11 @@ func updateImportMap(packages []string) (err error) {
 								}
 							}
 						}
-						buf.WriteString("\n    ")
+						buf.WriteString("\n")
 						if !importMap.AddPackages(packages) {
 							return
 						}
-						imJson, _ := importMap.MarshalJSON()
-						buf.Write(imJson)
+						buf.WriteString(importMap.FormatJSON(2))
 						buf.WriteString("\n  ")
 						if token == html.EndTagToken {
 							buf.Write(tokenizer.Raw())
@@ -169,8 +166,7 @@ func updateImportMap(packages []string) (err error) {
 		if !importMap.AddPackages(packages) {
 			return
 		}
-		imJson, _ := importMap.MarshalJSON()
-		err = os.WriteFile(indexHtml, fmt.Appendf(nil, htmlTemplate, string(imJson)), 0644)
+		err = os.WriteFile(indexHtml, fmt.Appendf(nil, htmlTemplate, importMap.FormatJSON(2)), 0644)
 		if err == nil {
 			fmt.Println(term.Dim("Created index.html with importmap script."))
 		}
