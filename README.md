@@ -24,14 +24,14 @@ With [import maps](https://developer.mozilla.org/en-US/docs/Web/HTML/Element/scr
 <script type="importmap">
   {
     "imports": {
-      "react": "https://esm.sh/react@18.2.0",
-      "react-dom/": "https://esm.sh/react-dom@18.2.0/"
+      "react": "https://esm.sh/react@19.1.0",
+      "react-dom/": "https://esm.sh/react-dom@19.1.0/"
     }
   }
 </script>
 <script type="module">
-  import React from "react"; // → https://esm.sh/react@18.2.0
-  import { render } from "react-dom/client"; // → https://esm.sh/react-dom@18.2.0/client
+  import React from "react"; // → https://esm.sh/react@19.1.0
+  import { render } from "react-dom/client"; // → https://esm.sh/react-dom@19.1.0/client
 </script>
 ```
 
@@ -43,8 +43,8 @@ With [import maps](https://developer.mozilla.org/en-US/docs/Web/HTML/Element/scr
   ```js
   // Examples
   import React from "https://esm.sh/react"; // latest
-  import React from "https://esm.sh/react@17"; // 17.0.2
-  import React from "https://esm.sh/react@beta"; // latest beta
+  import React from "https://esm.sh/react@18"; // 18.2.0
+  import React from "https://esm.sh/react@next"; // next tag
   import { renderToString } from "https://esm.sh/react-dom/server"; // sub-modules
   ```
 - **[JSR](https://jsr.io)** (starts with `/jsr/`):
@@ -67,23 +67,23 @@ With [import maps](https://developer.mozilla.org/en-US/docs/Web/HTML/Element/scr
   import { Bench } from "https://esm.sh/pr/tinybench@a832a55"; // --compact
   ```
 
-### Transforming `.ts(x)`/`.vue`/`.svelte` on the Fly
+### Transforming `.ts(x)|.vue|.svelte` on the Fly
 
 esm.sh allows you to import `.ts(x)`, `.vue`, and `.svelte` files directly in the browser without any build steps.
 
 ```js
-import { Airplay } from "https://esm.sh/gh/phosphor-icons/react@v2.1.5/src/csr/Airplay.tsx?deps=react@18.2.0";
+import { Airplay } from "https://esm.sh/gh/phosphor-icons/react@v2.1.5/src/csr/Airplay.tsx?deps=react@19.1.0";
 import IconAirplay from "https://esm.sh/gh/phosphor-icons/vue@v2.2.0/src/icons/PhAirplay.vue?deps=vue@3.5.8";
 ```
 
 ### Specifying Dependencies
 
 By default, esm.sh rewrites import specifiers based on the package dependencies. To specify the version of these
-dependencies, you can add `?deps=PACKAGE@VERSION` to the import URL. To specify multiple dependencies, separate them with commas, like this: `?deps=react@17.0.2,react-dom@17.0.2`.
+dependencies, you can add `?deps=PACKAGE@VERSION` to the import URL. To specify multiple dependencies, separate them with commas, like this: `?deps=react@18.2.0,react-dom@18.2.0`.
 
 ```js
-import React from "https://esm.sh/react@17.0.2";
-import useSWR from "https://esm.sh/swr?deps=react@17.0.2";
+import React from "https://esm.sh/react@18.2.0";
+import useSWR from "https://esm.sh/swr?deps=react@18.2.0";
 ```
 
 ### Aliasing Dependencies
@@ -97,7 +97,7 @@ import useSWR from "https://esm.sh/swr?alias=react:preact/compat";
 in combination with `?deps`:
 
 ```js
-import useSWR from "https://esm.sh/swr?alias=react:preact/compat&deps=preact@10.5.14";
+import useSWR from "https://esm.sh/swr?alias=react:preact/compat&deps=preact@10.10.0";
 ```
 
 ### Bundling Strategy
@@ -107,23 +107,21 @@ By default, esm.sh bundles sub-modules of a package that are not shared by entry
 Bundling sub-modules can reduce the number of network requests, improving performance. However, it may result in repeated bundling of shared modules. In extreme cases, this can break package side effects or alter the `import.meta.url` semantics. To prevent this, you can disable the default bundling behavior by adding `?bundle=false`:
 
 ```js
-import "https://esm.sh/@pyscript/core?bundle=false";
+import "https://esm.sh/svelte?bundle=false";
 ```
 
 For package authors, it is recommended to define the `exports` field in `package.json`. This specifies the entry modules of the package, allowing esm.sh to accurately analyze the dependency tree and bundle the modules without duplication.
 
-```jsonc
+```json
 {
   "name": "foo",
   "exports": {
     ".": {
-      "import": "./index.js",
-      "require": "./index.cjs",
+      "import": "./index.mjs",
       "types": "./index.d.ts"
     },
     "./submodule": {
-      "import": "./submodule.js",
-      "require": "./submodule.cjs",
+      "import": "./submodule.mjs",
       "types": "./submodule.d.ts"
     }
   }
@@ -253,9 +251,9 @@ esm.sh introduces the `?external` for specifying external dependencies. By emplo
 <script type="importmap">
 {
   "imports": {
-    "preact": "https://esm.sh/preact@10.7.2",
-    "preact/": "https://esm.sh/preact@10.7.2/",
-    "preact-render-to-string": "https://esm.sh/preact-render-to-string@5.2.0?external=preact"
+    "preact": "https://esm.sh/preact@10.10.0",
+    "preact/": "https://esm.sh/preact@10.10.0/",
+    "preact-render-to-string": "https://esm.sh/preact-render-to-string@6.5.0?external=preact"
   }
 }
 </script>
@@ -268,13 +266,13 @@ esm.sh introduces the `?external` for specifying external dependencies. By emplo
 
 Alternatively, you can **mark all dependencies as external** by adding a `*` prefix before the package name:
 
-```json
+```jsonc
 {
   "imports": {
-    "preact": "https://esm.sh/preact@10.7.2",
-    "preact-render-to-string": "https://esm.sh/*preact-render-to-string@5.2.0",
-    "swr": "https://esm.sh/*swr@1.3.0",
-    "react": "https://esm.sh/preact@10.7.2/compat"
+    "preact": "https://esm.sh/preact@10.10.0",
+    "preact-render-to-string": "https://esm.sh/*preact-render-to-string@6.5.0",
+    "react": "https://esm.sh/preact@10.10.0/compat",
+    "swr": "https://esm.sh/*swr@1.3.0" // preact/compat is imported instead of react
   }
 }
 ```
@@ -286,8 +284,8 @@ you to use query params with trailing slash: change the query prefix `?` to `&` 
 ```json
 {
   "imports": {
-    "react-dom": "https://esm.sh/react-dom@18.2.0?dev",
-    "react-dom/": "https://esm.sh/react-dom@18.2.0&dev/"
+    "react-dom": "https://esm.sh/react-dom@19.1.0?dev",
+    "react-dom/": "https://esm.sh/react-dom@19.1.0&dev/"
   }
 }
 ```
@@ -307,8 +305,8 @@ In development mode (open the page on localhost), `esm.sh/tsx` uses [@esm.sh/tsx
   <script type="importmap">
     {
       "imports": {
-        "react": "https://esm.sh/react@18.2.0",
-        "react-dom/client": "https://esm.sh/react-dom@18.2.0/client"
+        "react": "https://esm.sh/react@19.1.0",
+        "react-dom/client": "https://esm.sh/react-dom@19.1.0/client"
       }
     }
   </script>
