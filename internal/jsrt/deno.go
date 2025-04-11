@@ -16,12 +16,12 @@ import (
 	"github.com/ije/gox/utils"
 )
 
-func GetDenoPath(workDir string) (denoPath string, err error) {
-	if workDir == "" {
+func GetDenoPath(appDataDir string) (denoPath string, err error) {
+	if appDataDir == "" {
 		return "", errors.New("workDir is empty")
 	}
 
-	denoPath = filepath.Join(workDir, "bin/deno")
+	denoPath = filepath.Join(appDataDir, "bin/deno")
 	if runtime.GOOS == "windows" {
 		denoPath += ".exe"
 	}
