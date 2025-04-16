@@ -36,7 +36,7 @@ func (jsw *JSWorker) Start() (err error) {
 		return
 	}
 
-	appDataDir, err := env.GetAppDataDir("esm.sh")
+	appDataDir, err := env.AppDataDir("esm.sh")
 	if err != nil {
 		return
 	}
@@ -57,7 +57,7 @@ func (jsw *JSWorker) Start() (err error) {
 
 	args := []string{
 		"run",
-		"--allow-read=" + appDataDir,
+		"--allow-read",
 		"--allow-write=" + appDataDir,
 		"--allow-env",
 		"--allow-net",
@@ -111,7 +111,7 @@ func (jsw *JSWorker) Stop() (err error) {
 }
 
 func (jsw *JSWorker) Call(args ...any) (format string, output string, err error) {
-	// only one load call can be invoked at a time
+	// only one worker call can be invoked at a time
 	jsw.lock.Lock()
 	defer jsw.lock.Unlock()
 
