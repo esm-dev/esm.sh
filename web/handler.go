@@ -37,7 +37,7 @@ type Config struct {
 type Handler struct {
 	config           *Config
 	etagSuffix       string
-	loaderWorker     *JSWorker
+	loaderJSWorker   *JSWorker
 	loaderCache      sync.Map
 	watchDataMapLock sync.RWMutex
 	watchData        map[*websocket.Conn]map[string]int64
@@ -430,19 +430,35 @@ func (s *Handler) ServeHtml(w http.ResponseWriter, r *http.Request, filename str
 }
 
 func (s *Handler) ServeModule(w http.ResponseWriter, r *http.Request, filename string, query url.Values, preTransform []byte) {
-	im, err := base64.RawURLEncoding.DecodeString(query.Get("im"))
-	if err != nil {
-		http.Error(w, "Bad Request", 400)
-		return
-	}
-	imfi, err := os.Lstat(filepath.Join(s.config.AppDir, string(im)))
-	if err != nil {
-		if os.IsNotExist(err) {
-			http.Error(w, "Bad Request", 400)
-		} else {
-			http.Error(w, "Internal Server Error", 500)
+	var imSrc string
+	var imSrcMtime int64
+	var imSrcSize int64
+	if imQuery := query.Get("im"); imQuery == "" {
+		imfi, err := os.Lstat(filepath.Join(s.config.AppDir, "/index.html"))
+		if err == nil {
+			imSrc = "/index.html"
+			imSrcMtime = imfi.ModTime().UnixMilli()
+			imSrcSize = imfi.Size()
 		}
-		return
+	} else {
+		data, err := base64.RawURLEncoding.DecodeString(imQuery)
+		if err != nil {
+			http.Error(w, "Invalid `im` query", 400)
+			return
+		}
+		imSrc = string(data)
+		imfi, err := os.Lstat(filepath.Join(s.config.AppDir, imSrc))
+		if err != nil {
+			if os.IsNotExist(err) {
+				http.Error(w, "Invalid `im` query", 400)
+			} else {
+				fmt.Println(term.Red("[error] ") + err.Error())
+				http.Error(w, "Internal Server Error", 500)
+			}
+			return
+		}
+		imSrcMtime = imfi.ModTime().UnixMilli()
+		imSrcSize = imfi.Size()
 	}
 
 	var modTime uint64
@@ -458,6 +474,7 @@ func (s *Handler) ServeModule(w http.ResponseWriter, r *http.Request, filename s
 			if os.IsNotExist(err) {
 				http.Error(w, "Not Found", 404)
 			} else {
+				fmt.Println(term.Red("[error] ") + err.Error())
 				http.Error(w, "Internal Server Error", 500)
 			}
 			return
@@ -465,11 +482,12 @@ func (s *Handler) ServeModule(w http.ResponseWriter, r *http.Request, filename s
 		modTime = uint64(fi.ModTime().UnixMilli())
 		size = fi.Size()
 	}
-	etag := fmt.Sprintf("w/\"%x-%x-%x-%x%s\"", modTime, size, imfi.ModTime().UnixMilli(), imfi.Size(), s.etagSuffix)
+	etag := fmt.Sprintf("w/\"%x-%x-%x-%x%s\"", modTime, size, imSrcMtime, imSrcSize, s.etagSuffix)
 	if r.Header.Get("If-None-Match") == etag && !query.Has("t") {
 		w.WriteHeader(http.StatusNotModified)
 		return
 	}
+
 	cacheKey := fmt.Sprintf("module-%s", filename)
 	etagCacheKey := fmt.Sprintf("module-%s.etag", filename)
 	if js, ok := s.loaderCache.Load(cacheKey); ok {
@@ -486,25 +504,29 @@ func (s *Handler) ServeModule(w http.ResponseWriter, r *http.Request, filename s
 			}
 		}
 	}
-	if s.loaderWorker == nil {
-		http.Error(w, "Loader worker not started", 500)
-		return
+
+	var importMap *importmap.ImportMap
+	if imSrc != "" {
+		im, err := importmap.ParseFromHtmlFile(filepath.Join(s.config.AppDir, imSrc))
+		if err != nil {
+			http.Error(w, "Could not parse import map from "+imSrc, 500)
+			return
+		}
+		im.Src = imSrc
+		importMap = &im
 	}
-	importMap, err := importmap.ParseFromHtmlFile(filepath.Join(s.config.AppDir, string(im)))
-	if err != nil {
-		http.Error(w, "could not parse import map: "+err.Error(), 500)
-		return
-	}
+
 	args := []any{"tsx", filename, importMap, nil, s.config.Dev}
 	if preTransform != nil {
 		args[3] = string(preTransform)
 	}
 	_, js, err := s.callLoaderJS(args...)
 	if err != nil {
-		fmt.Println(term.Red("[error] " + err.Error()))
+		fmt.Println(term.Red("[error] ") + err.Error())
 		http.Error(w, "Internal Server Error", 500)
 		return
 	}
+
 	s.loaderCache.Store(cacheKey, []byte(js))
 	s.loaderCache.Store(etagCacheKey, etag)
 	header := w.Header()
@@ -523,6 +545,7 @@ func (s *Handler) ServeRPCModule(w http.ResponseWriter, r *http.Request, filenam
 		if os.IsNotExist(err) {
 			http.Error(w, "Not Found", 404)
 		} else {
+			fmt.Println(term.Red("[error] ") + err.Error())
 			http.Error(w, "Internal Server Error", 500)
 		}
 		return
@@ -640,7 +663,9 @@ func (s *Handler) ServeCSSModule(w http.ResponseWriter, r *http.Request, query u
 		Bundle:           true,
 	})
 	if len(ret.Errors) > 0 {
-		fmt.Println(term.Red(ret.Errors[0].Text))
+		for _, err := range ret.Errors {
+			fmt.Println(term.Red("[error] ") + err.Text)
+		}
 		http.Error(w, "Internal Server Error", 500)
 		return
 	}
@@ -683,6 +708,7 @@ func (s *Handler) ServeUnoCSS(w http.ResponseWriter, r *http.Request, query url.
 		if os.IsNotExist(err) {
 			http.Error(w, "Bad Request", 400)
 		} else {
+			fmt.Println(term.Red("[error] ") + err.Error())
 			http.Error(w, "Internal Server Error", 500)
 		}
 		return
@@ -753,6 +779,7 @@ func (s *Handler) ServeUnoCSS(w http.ResponseWriter, r *http.Request, query url.
 		if os.IsNotExist(err) {
 			http.Error(w, "Not Found", 404)
 		}
+		fmt.Println(term.Red("[error] ") + err.Error())
 		http.Error(w, "Internal Server Error", 500)
 		return
 	}
@@ -799,16 +826,10 @@ func (s *Handler) ServeUnoCSS(w http.ResponseWriter, r *http.Request, query url.
 			}
 		}
 	}
-	if s.loaderWorker == nil {
-		http.Error(w, "Loader worker not started", 500)
-		return
-	}
 	config := map[string]any{"filename": r.URL.Path, "css": string(configCSS)}
-	_, cssRaw, err := s.loaderWorker.Call("unocss", r.URL.Path+"?"+r.URL.RawQuery, string(bytes.Join(contents, []byte{'\n'})), config)
-	var css string
-	json.Unmarshal([]byte(cssRaw), &css)
+	_, css, err := s.callLoaderJS("unocss", r.URL.Path+"?"+r.URL.RawQuery, string(bytes.Join(contents, []byte{'\n'})), config)
 	if err != nil {
-		fmt.Println(term.Red("[error] " + err.Error()))
+		fmt.Println(term.Red("[error] ") + err.Error())
 		http.Error(w, "Internal Server Error", 500)
 		return
 	}
@@ -826,8 +847,7 @@ func (s *Handler) ServeUnoCSS(w http.ResponseWriter, r *http.Request, query url.
 func (s *Handler) ServeInternalJS(w http.ResponseWriter, r *http.Request, name string) {
 	data, err := efs.ReadFile("internal/" + name + ".js")
 	if err != nil {
-		http.Error(w, "Internal Server Error", 500)
-		return
+		panic(err)
 	}
 	xx := xxhash.New()
 	xx.Write(data)
@@ -854,7 +874,6 @@ func (s *Handler) ServeHmrWS(w http.ResponseWriter, r *http.Request) {
 	}
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		http.Error(w, "Internal Server Error", 500)
 		return
 	}
 	defer conn.Close()
@@ -961,9 +980,6 @@ func (s *Handler) analyzeDependencyTree(entry string, importMap importmap.Import
 									}
 								}
 							}
-							if s.loaderWorker == nil {
-								return esbuild.OnLoadResult{}, errors.New("loader worker not started")
-							}
 							lang, code, err := s.callLoaderJS(ext[1:], pathname, contents, importMap)
 							if err != nil {
 								return esbuild.OnLoadResult{}, err
@@ -1032,7 +1048,7 @@ func (s *Handler) purgeLoaderCache(filename string) {
 }
 
 func (s *Handler) startLoaderWorker() (err error) {
-	if s.loaderWorker != nil {
+	if s.loaderJSWorker != nil {
 		return nil
 	}
 	loaderWorker := &JSWorker{
@@ -1044,7 +1060,7 @@ func (s *Handler) startLoaderWorker() (err error) {
 		return err
 	}
 	go s.preload()
-	s.loaderWorker = loaderWorker
+	s.loaderJSWorker = loaderWorker
 	return
 }
 
@@ -1112,11 +1128,19 @@ func (s *Handler) preload() {
 }
 
 func (s *Handler) callLoaderJS(args ...any) (format string, code string, err error) {
+	if s.loaderJSWorker == nil {
+		err := s.startLoaderWorker()
+		if err != nil {
+			panic("could not start loader.js worker: " + err.Error())
+		}
+	}
+
 	var data string
-	format, data, err = s.loaderWorker.Call(args...)
+	format, data, err = s.loaderJSWorker.Call(args...)
 	if err != nil {
 		return
 	}
+
 	err = json.Unmarshal([]byte(data), &code)
 	return
 }
