@@ -67,6 +67,10 @@ func (s *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "/@hmr", "/@refresh", "/@prefresh", "/@vdr", "/@rpc-runtime":
 		s.ServeInternalJS(w, r, pathname[2:])
 	case "/@hmr-ws":
+		if !s.config.Dev {
+			http.Error(w, "Not Found", 404)
+			return
+		}
 		if s.watchData == nil {
 			s.watchData = make(map[*websocket.Conn]map[string]int64)
 			go s.watchFS()
@@ -847,7 +851,8 @@ func (s *Handler) ServeUnoCSS(w http.ResponseWriter, r *http.Request, query url.
 func (s *Handler) ServeInternalJS(w http.ResponseWriter, r *http.Request, name string) {
 	data, err := efs.ReadFile("internal/" + name + ".js")
 	if err != nil {
-		panic(err)
+		http.Error(w, "Not Found", 404)
+		return
 	}
 	xx := xxhash.New()
 	xx.Write(data)
