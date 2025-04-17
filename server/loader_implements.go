@@ -10,8 +10,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/esm-dev/esm.sh/internal/env"
 	"github.com/esm-dev/esm.sh/internal/importmap"
-	"github.com/esm-dev/esm.sh/internal/jsrt"
 	"github.com/esm-dev/esm.sh/internal/npm"
 	"github.com/ije/gox/term"
 )
@@ -266,8 +266,8 @@ func compileUnocssLoader(npmrc *NpmRC, loaderVersion string, loaderExecPath stri
 		return
 	}
 
-	err = doOnce("check-deno", func() (err error) {
-		_, err = jsrt.GetDenoPath(config.WorkDir)
+	err = doOnce("ensure-deno-path", func() (err error) {
+		_, err = env.DenoPath(config.WorkDir)
 		return err
 	})
 	if err != nil {
