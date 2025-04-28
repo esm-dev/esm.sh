@@ -12,6 +12,7 @@ import (
 	"github.com/Masterminds/semver/v3"
 	"github.com/esm-dev/esm.sh/internal/npm"
 	"github.com/goccy/go-json"
+	"github.com/ije/gox/set"
 	"github.com/ije/gox/sync"
 	"github.com/ije/gox/term"
 	"github.com/ije/gox/utils"
@@ -129,45 +130,90 @@ func (im *ImportMap) Resolve(path string) (string, bool) {
 	return path + query, false
 }
 
-func (im *ImportMap) AddPackages(packages []string) bool {
-	cdnOrigin := im.Cdn
-	if cdnOrigin == "" {
-		cdnOrigin = "https://esm.sh"
-	}
+func (im *ImportMap) AddPackages(packages []string, expandMode bool) (updated bool) {
+	cdnOrigin := im.cdnOrign()
+	resolvedPackages := make([]PackageInfo, 0, len(packages))
 
-	var resolvedPackages []PackageJSON
-	var errors []error
 	var wg sync.WaitGroup
-	for _, pkg := range packages {
+	var errs []error
+
+	for _, specifier := range packages {
 		wg.Add(1)
-		go func(pkg string) {
+		go func(specifier string) {
 			defer wg.Done()
-			scopeName := ""
-			pkgName := pkg
-			if pkg[0] == '@' {
-				scopeName, pkgName = utils.SplitByFirstByte(pkg[1:], '/')
+			var scopeName string
+			var pkgName string
+			var regPrefix string
+			if strings.HasPrefix(specifier, "jsr:") {
+				regPrefix = "jsr/"
+				specifier = specifier[4:]
+			} else if strings.ContainsRune(specifier, '/') && specifier[0] != '@' {
+				regPrefix = "gh/"
+				specifier = strings.Replace(specifier, "#", "@", 1) // owner/repo#branch -> owner/repo@branch
 			}
-			pkgName, version := utils.SplitByFirstByte(pkgName, '@')
-			if !npm.Naming.Match(pkgName) || !(scopeName == "" || npm.Naming.Match(scopeName[1:])) || !(version == "" || npm.Versioning.Match(version)) {
-				errors = append(errors, fmt.Errorf("invalid package name or version: %s", pkg))
+			if len(specifier) > 0 && (specifier[0] == '@' || regPrefix == "gh/") {
+				scopeName, pkgName = utils.SplitByFirstByte(specifier, '/')
+			} else {
+				pkgName = specifier
+			}
+			if pkgName == "" {
+				// ignore empty package name
 				return
 			}
-			pkgJson, err := fetchPackageInfo(cdnOrigin, pkg)
+			pkgName, version := utils.SplitByFirstByte(pkgName, '@')
+			if pkgName == "" || !npm.Naming.Match(pkgName) || !(scopeName == "" || npm.Naming.Match(strings.TrimPrefix(scopeName, "@"))) || !(version == "" || npm.Versioning.Match(version)) {
+				errs = append(errs, fmt.Errorf("invalid package name or version: %s", specifier))
+				return
+			}
+			if scopeName != "" {
+				pkgName = scopeName + "/" + pkgName
+			}
+			pkgJson, err := fetchPackageInfo(cdnOrigin, regPrefix, pkgName, version)
 			if err != nil {
-				errors = append(errors, err)
+				errs = append(errs, err)
 				return
 			}
 			resolvedPackages = append(resolvedPackages, pkgJson)
-		}(pkg)
+		}(specifier)
 	}
+
 	wg.Wait()
 
-	if len(errors) > 0 {
-		for _, err := range errors {
+	if len(errs) > 0 {
+		for _, err := range errs {
 			fmt.Println(term.Red("✖︎"), err.Error())
 		}
 		return false
 	}
+
+	marker := set.New[string]()
+	for _, pkg := range resolvedPackages {
+		errs := im.addPackage(pkg.Name, pkg, expandMode, nil, marker)
+		if len(errs) > 0 {
+			for _, err := range errs {
+				fmt.Println(term.Red("✖︎"), err.Error())
+			}
+			return false
+		}
+	}
+
+	installed := make([]string, 0, len(resolvedPackages))
+	for _, pkg := range resolvedPackages {
+		installed = append(installed, pkg.Name+term.Dim("@"+pkg.Version))
+	}
+	sort.Strings(installed)
+	for _, pkg := range installed {
+		fmt.Println(term.Green("✔"), pkg)
+	}
+	return true
+}
+
+func (im *ImportMap) addPackage(specifier string, pkg PackageInfo, expandMode bool, targetImports map[string]string, marker *set.Set[string]) (errs []error) {
+	markId := pkg.String()
+	if marker.Has(markId) {
+		return
+	}
+	marker.Add(markId)
 
 	if im.Imports == nil {
 		im.Imports = map[string]string{}
@@ -176,87 +222,73 @@ func (im *ImportMap) AddPackages(packages []string) bool {
 		im.Scopes = map[string]map[string]string{}
 	}
 
-	cdnScopeImports, hasCdnScopedImports := im.Scopes[cdnOrigin+"/"]
-	if !hasCdnScopedImports {
+	cdnOrigin := im.cdnOrign()
+	cdnScopeImports, cdnScoped := im.Scopes[cdnOrigin+"/"]
+	if !cdnScoped {
 		cdnScopeImports = map[string]string{}
 		im.Scopes[cdnOrigin+"/"] = cdnScopeImports
 	}
-	for _, pkg := range resolvedPackages {
-		url := cdnOrigin + "/"
-		if len(pkg.Dependencies) > 0 || len(pkg.PeerDependencies) > 0 {
-			url += "*" // externall deps marker
-		}
-		url += pkg.Name + "@" + pkg.Version
-		im.Imports[pkg.Name] = url
-		im.Imports[pkg.Name+"/"] = url + "/"
-		if hasCdnScopedImports {
-			delete(cdnScopeImports, pkg.Name)
-			delete(cdnScopeImports, pkg.Name+"/")
-		}
+
+	indirect := true
+	if targetImports == nil {
+		indirect = false
+		targetImports = im.Imports
 	}
-	for _, pkg := range resolvedPackages {
-		walkPackageDependencies(pkg, func(specifier, pkgName, pkgVersion, prefix string) {
-			if _, ok := im.Imports[specifier]; !ok {
-				prevUrl, prev := cdnScopeImports[specifier]
-				deepCheck := true
-			checkPrevUrl:
-				if prev {
-					pathname := strings.TrimPrefix(strings.TrimPrefix(strings.TrimPrefix(prevUrl, cdnOrigin+"/"), "*"), "@")
-					_, prevVersion := utils.SplitByFirstByte(pathname, '@')
-					prevVersion, _ = utils.SplitByFirstByte(prevVersion, '/')
-					if npm.IsExactVersion(prevVersion) {
-						if npm.IsExactVersion(pkgVersion) {
-							if pkgVersion == prevVersion {
-								if _, ok := cdnScopeImports[specifier+"/"]; !ok {
-									cdnScopeImports[specifier+"/"] = prevUrl + "/"
-								}
-								return
-							}
-						} else {
-							c, err := semver.NewConstraint(pkgVersion)
-							if err == nil && c.Check(semver.MustParse(prevVersion)) {
-								if _, ok := cdnScopeImports[specifier+"/"]; !ok {
-									cdnScopeImports[specifier+"/"] = prevUrl + "/"
-								}
-								return
-							}
-						}
-					}
-				}
-				if deepCheck {
-					if scopeImports, ok := im.Scopes[cdnOrigin+"/"+pkg.Name+"@"+pkg.Version+"/"]; ok {
-						prevUrl, prev = scopeImports[specifier]
-						if prev {
-							deepCheck = false
-							goto checkPrevUrl
-						}
-					}
-				}
-				p, err := fetchPackageInfo(cdnOrigin, pkgName+"@"+pkgVersion)
-				if err != nil {
-					errors = append(errors, err)
-					return
-				}
-				url := cdnOrigin + prefix + "/"
-				if len(p.Dependencies) > 0 || len(p.PeerDependencies) > 0 {
-					url += "*"
-				}
-				url += pkgName + "@" + p.Version
-				cdnScopeImports[specifier] = url
-				cdnScopeImports[specifier+"/"] = url + "/"
+
+	url := cdnOrigin + "/"
+	if pkg.Github {
+		url += "gh/"
+	} else if pkg.Jsr {
+		url += "jsr/"
+	}
+	if len(pkg.Dependencies) > 0 || len(pkg.PeerDependencies) > 0 {
+		url += "*" // external all modifier
+	}
+	url += pkg.Name + "@" + pkg.Version
+	targetImports[specifier] = url
+	if !expandMode {
+		targetImports[specifier+"/"] = url + "/"
+	}
+	if !indirect {
+		delete(cdnScopeImports, specifier)
+		delete(cdnScopeImports, specifier+"/")
+	}
+
+	var deps []Dependency
+	walkPackageDependencies(pkg, func(dep Dependency) {
+		// if the version of the dependency is not exact,
+		// check if it is satisfied with the version in the import map
+		if !npm.IsExactVersion(dep.Version) {
+			importUrl, exists := im.Imports[pkg.Name]
+			if !exists || strings.HasPrefix(importUrl, cdnOrigin+"/") {
+				importUrl, exists = cdnScopeImports[pkg.Name]
 			}
-		})
-	}
-	if len(errors) > 0 {
-		for _, err := range errors {
-			fmt.Println(term.Red("✖︎"), err.Error())
+			if exists && strings.HasPrefix(importUrl, cdnOrigin+"/") {
+				var version string
+				if npm.IsExactVersion(version) {
+					c, err := semver.NewConstraint(dep.Version)
+					if err == nil && c.Check(semver.MustParse(version)) {
+						dep.Version = version
+					}
+				}
+			}
 		}
-		return false
+		deps = append(deps, dep)
+	})
+
+	return
+}
+
+func (im *ImportMap) cdnOrign() string {
+	cdnOrigin := im.Cdn
+	if cdnOrigin == "" {
+		return "https://esm.sh"
 	}
-	for _, pkg := range resolvedPackages {
-		fmt.Println(term.Green("✔"), pkg.Name+term.Dim("@"+pkg.Version))
-	}
-	return true
+	return cdnOrigin
+}
+
+func (im *ImportMap) MarshalJSON() ([]byte, error) {
+	return []byte(im.FormatJSON(0)), nil
 }
 
 func (im *ImportMap) FormatJSON(indent int) string {
@@ -264,7 +296,7 @@ func (im *ImportMap) FormatJSON(indent int) string {
 	indentStr := bytes.Repeat([]byte{' ', ' '}, indent+1)
 	buf.Write(indentStr[0 : 2*indent])
 	buf.WriteString("{\n")
-	if im.Cdn != "" {
+	if im.Cdn != "" && im.Cdn != "https://esm.sh" {
 		buf.Write(indentStr)
 		buf.WriteString("\"$cdn\": \"")
 		buf.WriteString(im.Cdn)

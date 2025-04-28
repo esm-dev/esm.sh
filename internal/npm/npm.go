@@ -56,14 +56,14 @@ func ResolveDependencyVersion(v string) (Package, error) {
 		return Package{}, errors.New("unsupported file dependency")
 	}
 	if strings.HasPrefix(v, "npm:") {
-		pkgName, pkgVersion := splitPackageVersion(v[4:])
+		pkgName, pkgVersion := ExtractPackageSpecifer(v[4:])
 		return Package{
 			Name:    pkgName,
 			Version: pkgVersion,
 		}, nil
 	}
 	if strings.HasPrefix(v, "jsr:") {
-		pkgName, pkgVersion := splitPackageVersion(v[4:])
+		pkgName, pkgVersion := ExtractPackageSpecifer(v[4:])
 		if !strings.HasPrefix(pkgName, "@") || !strings.ContainsRune(pkgName, '/') {
 			return Package{}, errors.New("invalid jsr dependency")
 		}
@@ -128,17 +128,18 @@ func ResolveDependencyVersion(v string) (Package, error) {
 	return Package{}, nil
 }
 
-func splitPackageVersion(v string) (string, string) {
-	if strings.HasPrefix(v, "@") {
-		if i := strings.IndexByte(v[1:], '@'); i > 0 {
-			return v[:i+1], v[i+2:]
+// ExtractPackageSpecifer extracts the package name and version from a specifier.
+func ExtractPackageSpecifer(specifier string) (string, string) {
+	if strings.HasPrefix(specifier, "@") {
+		if i := strings.IndexByte(specifier[1:], '@'); i > 0 {
+			return specifier[:i+1], specifier[i+2:]
 		}
-		return v, ""
+		return specifier, ""
 	}
-	if i := strings.IndexByte(v, '@'); i > 0 {
-		return v[:i], v[i+1:]
+	if i := strings.IndexByte(specifier, '@'); i > 0 {
+		return specifier[:i], specifier[i+1:]
 	}
-	return v, ""
+	return specifier, ""
 }
 
 // IsDistTag returns true if the given version is a distribution tag.
@@ -210,7 +211,7 @@ func NormalizePackageVersion(version string) string {
 }
 
 // ToTypesPackageName converts a package name to a types package name.
-// If the package name is scoped, it returns "@types/@scope__name".
+// If the package name is scoped, it returns "@types/[scope]__[name]".
 func ToTypesPackageName(pkgName string) string {
 	if strings.HasPrefix(pkgName, "@") {
 		pkgName = strings.Replace(pkgName[1:], "/", "__", 1)

@@ -1,96 +1,188 @@
 package importmap
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 
+	"github.com/esm-dev/esm.sh/internal/env"
 	"github.com/esm-dev/esm.sh/internal/npm"
 	"github.com/goccy/go-json"
 	"github.com/ije/gox/sync"
 )
 
 var (
-	cacheMutex sync.KeyedMutex
-	cacheStore sync.Map
+	keyedMutex sync.KeyedMutex
+	fetchCache sync.Map
 )
 
-type PackageJSON struct {
+type PackageInfo struct {
 	Name             string            `json:"name"`
 	Version          string            `json:"version"`
 	Dependencies     map[string]string `json:"dependencies"`
 	PeerDependencies map[string]string `json:"peerDependencies"`
+	Github           bool              `json:"-"`
+	Jsr              bool              `json:"-"`
 }
 
-func fetchPackageInfo(cdnOrigin string, pkg string) (pkgJSON PackageJSON, err error) {
-	url := fmt.Sprintf("%s/%s/package.json", cdnOrigin, pkg)
+type Dependency struct {
+	Specifier string
+	Name      string
+	Version   string
+	Peer      bool
+	Github    bool
+	Jsr       bool
+}
+
+func (pkg PackageInfo) String() string {
+	b := strings.Builder{}
+	if pkg.Github {
+		b.WriteString("gh/")
+	} else if pkg.Jsr {
+		b.WriteString("jsr/")
+	}
+	b.WriteString(pkg.Name)
+	b.WriteByte('@')
+	b.WriteString(pkg.Version)
+	return b.String()
+}
+
+func fetchPackageInfo(cdnOrigin string, regPrefix string, pkgName string, pkgVersion string) (pkgInfo PackageInfo, err error) {
+	url := fmt.Sprintf("%s/%s%s@%s/package.json", cdnOrigin, regPrefix, pkgName, pkgVersion)
 
 	// check cache first
-	if v, ok := cacheStore.Load(url); ok {
-		pkgJSON, _ = v.(PackageJSON)
+	if v, ok := fetchCache.Load(url); ok {
+		pkgInfo, _ = v.(PackageInfo)
 		return
 	}
 
 	// only one fetch at a time for the same url
-	unlock := cacheMutex.Lock(url)
+	unlock := keyedMutex.Lock(url)
 	defer unlock()
 
-	// check cache again after get lock
-	if v, ok := cacheStore.Load(url); ok {
-		pkgJSON, _ = v.(PackageJSON)
+	// check cache again after acquiring the lock state
+	if v, ok := fetchCache.Load(url); ok {
+		pkgInfo, _ = v.(PackageInfo)
 		return
+	}
+
+	// if the version is exact, check the cache on disk
+	if npm.IsExactVersion(pkgVersion) {
+		cacheDir, err := env.CachDir("esm.sh")
+		if err == nil {
+			cachePath := filepath.Join(cacheDir, regPrefix, pkgName+"@"+pkgVersion, "package.json")
+			f, err := os.Open(cachePath)
+			if err == nil {
+				defer f.Close()
+				err = json.NewDecoder(f).Decode(&pkgInfo)
+				if err == nil {
+					switch regPrefix {
+					case "gh/":
+						pkgInfo.Github = true
+					case "jsr/":
+						pkgInfo.Name = pkgName
+						pkgInfo.Jsr = true
+					}
+					fetchCache.Store(url, pkgInfo)
+					return pkgInfo, nil
+				}
+				// if decode error, remove the cache file
+				// and try to fetch again
+				_ = os.Remove(cachePath)
+			}
+		}
 	}
 
 	resp, err := http.Get(url)
 	if err != nil {
-		err = errors.New("http request failed: " + err.Error())
 		return
 	}
 	defer resp.Body.Close()
+
 	if resp.StatusCode == 404 {
-		err = errors.New("package not found: " + pkg)
-		return
-	}
-	if resp.StatusCode != 200 {
-		msg, _ := io.ReadAll(resp.Body)
-		err = errors.New(string(msg))
+		err = fmt.Errorf("package not found: %s@%s", pkgName, pkgVersion)
 		return
 	}
 
-	err = json.NewDecoder(resp.Body).Decode(&pkgJSON)
+	if resp.StatusCode != 200 {
+		msg, _ := io.ReadAll(resp.Body)
+		err = fmt.Errorf("unexpected http status %d: %s", resp.StatusCode, msg)
+		return
+	}
+
+	jsonData, err := io.ReadAll(resp.Body)
 	if err != nil {
-		err = errors.New("could not parse package.json")
+		err = fmt.Errorf("could not read %s@%s/package.json: %s", pkgName, pkgVersion, err.Error())
+		return
 	}
-	if err == nil {
-		cacheStore.Store(url, pkgJSON)
+
+	err = json.Unmarshal(jsonData, &pkgInfo)
+	if err != nil {
+		err = fmt.Errorf("could not decode %s@%s/package.json: %s", pkgName, pkgVersion, err.Error())
+		return
 	}
+
+	switch regPrefix {
+	case "gh/":
+		pkgInfo.Github = true
+	case "jsr/":
+		pkgInfo.Name = pkgName
+		pkgInfo.Jsr = true
+	}
+
+	// cache the package.json on disk
+	if cacheDir, err := env.CachDir("esm.sh"); err == nil {
+		cachePath := filepath.Join(cacheDir, pkgInfo.String(), "package.json")
+		_ = os.MkdirAll(filepath.Dir(cachePath), 0755)
+		_ = os.WriteFile(cachePath, jsonData, 0644)
+	}
+
+	// cache the package info in memory
+	fetchCache.Store(url, pkgInfo)
 	return
 }
 
-func walkPackageDependencies(pkg PackageJSON, callback func(specifier, pkgName, pkgVersion, prefix string)) {
-	if len(pkg.Dependencies) > 0 {
-		walkDependencies(pkg.Dependencies, callback)
-	}
+func walkPackageDependencies(pkg PackageInfo, callback func(dep Dependency)) error {
 	if len(pkg.PeerDependencies) > 0 {
-		walkDependencies(pkg.PeerDependencies, callback)
+		err := walkDependencies(pkg.PeerDependencies, true, callback)
+		if err != nil {
+			return err
+		}
 	}
+	if len(pkg.Dependencies) > 0 {
+		err := walkDependencies(pkg.Dependencies, false, callback)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
-func walkDependencies(deps map[string]string, callback func(specifier, pkgName, pkgVersion, prefix string)) {
-	for specifier, pkgVersion := range deps {
-		pkgName := specifier
-		pkg, err := npm.ResolveDependencyVersion(pkgVersion)
-		if err == nil && pkg.Name != "" {
-			pkgName = pkg.Name
-			pkgVersion = pkg.Version
+func walkDependencies(deps map[string]string, peer bool, callback func(dep Dependency)) error {
+	for specifier, version := range deps {
+		pkg, err := npm.ResolveDependencyVersion(version)
+		if err != nil {
+			return err
 		}
-		var prefix string
-		if pkg.Github {
-			prefix = "/gh"
-		} else if pkg.PkgPrNew {
-			prefix = "/pr"
+		dep := Dependency{
+			Specifier: specifier,
+			Name:      specifier,
+			Version:   version,
+			Peer:      peer,
 		}
-		callback(specifier, pkgName, pkgVersion, prefix)
+		if pkg.Name != "" {
+			dep.Name = pkg.Name
+			dep.Version = pkg.Version
+			dep.Github = pkg.Github
+		}
+		if strings.HasPrefix(pkg.Name, "@jsr/") {
+			dep.Name = "@" + strings.Replace(dep.Name[5:], "__", "/", 1)
+			dep.Jsr = true
+		}
+		callback(dep)
 	}
+	return nil
 }
