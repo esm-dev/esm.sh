@@ -18,7 +18,7 @@ esm.sh allows you to import [JavaScript modules](https://developer.mozilla.org/e
 import * as mod from "https://esm.sh/PKG[@SEMVER][/PATH]";
 ```
 
-With [import maps](https://developer.mozilla.org/en-US/docs/Web/HTML/Element/script/type/importmap), you can even use bare import specifiers intead of URLs:
+With [import maps](https://developer.mozilla.org/en-US/docs/Web/HTML/Element/script/type/importmap), you can even use bare import specifiers instead of URLs:
 
 ```html
 <script type="importmap">
