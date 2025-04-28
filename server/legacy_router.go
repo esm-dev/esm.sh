@@ -190,6 +190,20 @@ func legacyESM(ctx *rex.Context, buildStorage storage.Storage, buildVersionPrefi
 				ctx.SetHeader("Content-Type", ctJavaScript)
 			case ".ts", ".mts":
 				ctx.SetHeader("Content-Type", ctTypeScript)
+				// resolve hostname in typescript definition files if the origin is not "https://esm.sh"
+				if endsWith(pathname, ".d.ts", ".d.mts") {
+					origin := getOrigin(ctx)
+					if origin != "https://esm.sh" {
+						defer f.Close()
+						data, err := io.ReadAll(f)
+						if err != nil {
+							return rex.Status(500, "Failed to read data from storage")
+						}
+						data = bytes.ReplaceAll(data, []byte("https://esm.sh/v"), []byte(origin+"/v"))
+						data = bytes.ReplaceAll(data, []byte(config.LegacyServer+"/v"), []byte(origin+"/v"))
+						return data
+					}
+				}
 			case ".map":
 				ctx.SetHeader("Content-Type", ctJSON)
 			case ".css":
@@ -273,19 +287,20 @@ func legacyESM(ctx *rex.Context, buildStorage storage.Storage, buildVersionPrefi
 		if err != nil {
 			return rex.Status(500, "Failed to fetch data from the legacy esm.sh server")
 		}
-		if endsWith(pathname, ".d.ts", ".d.mts") {
-			origin := getOrigin(ctx)
-			if origin != "https://esm.sh" {
-				data = bytes.ReplaceAll(data, []byte("https://esm.sh"), []byte(origin))
-			}
-			data = bytes.ReplaceAll(data, []byte(config.LegacyServer), []byte(origin))
-		}
 		err = buildStorage.Put(savePath, bytes.NewReader(data))
 		if err != nil {
 			return rex.Status(500, "Storage error: "+err.Error())
 		}
 		ctx.SetHeader("Content-Type", res.Header.Get("Content-Type"))
 		ctx.SetHeader("Control-Cache", ccImmutable)
+		// resolve hostname in typescript definition files if the origin is not "https://esm.sh"
+		if endsWith(pathname, ".d.ts", ".d.mts") {
+			origin := getOrigin(ctx)
+			if origin != "https://esm.sh" {
+				data = bytes.ReplaceAll(data, []byte("https://esm.sh/v"), []byte(origin+"/v"))
+				data = bytes.ReplaceAll(data, []byte(config.LegacyServer+"/v"), []byte(origin+"/v"))
+			}
+		}
 		return data
 	} else {
 		code, err := io.ReadAll(res.Body)
