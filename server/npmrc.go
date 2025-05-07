@@ -333,6 +333,11 @@ func (npmrc *NpmRC) installPackage(pkg npm.Package) (packageJson *npm.PackageJSO
 				return
 			}
 		}
+	} else if pkg.Tgz {
+		url, err := url.PathUnescape(pkg.Version)
+		if err == nil {
+			err = fetchPackageTarball(&NpmRegistry{}, installDir, pkg.Name, url)
+		}
 	} else if pkg.PkgPrNew {
 		err = fetchPackageTarball(&NpmRegistry{}, installDir, pkg.Name, "https://pkg.pr.new/"+pkg.Name+"@"+pkg.Version)
 	} else {
@@ -391,7 +396,7 @@ func (npmrc *NpmRC) installDependencies(wd string, pkgJson *npm.PackageJSON, npm
 				// skip installing `@types/*` packages
 				return
 			}
-			if !npm.IsExactVersion(pkg.Version) && !pkg.Github && !pkg.PkgPrNew {
+			if !npm.IsExactVersion(pkg.Version) && !pkg.Github && !pkg.PkgPrNew && !pkg.Tgz {
 				p, e := npmrc.getPackageInfo(pkg.Name, pkg.Version)
 				if e != nil {
 					return

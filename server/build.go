@@ -1138,6 +1138,8 @@ REBUILD:
 				header.WriteString("github:")
 			} else if ctx.esmPath.PrPrefix {
 				header.WriteString("pkg.pr.new/")
+			} else if ctx.esmPath.TgzPrefix {
+				header.WriteString("tgz/")
 			}
 			header.WriteString(ctx.esmPath.PkgName)
 			if ctx.esmPath.GhPrefix {
@@ -1350,7 +1352,7 @@ REBUILD:
 			finalJS.Write(jsContent)
 
 			// check if the package is deprecated
-			if !ctx.esmPath.GhPrefix && !ctx.esmPath.PrPrefix {
+			if !ctx.esmPath.GhPrefix && !ctx.esmPath.PrPrefix && !ctx.esmPath.TgzPrefix {
 				deprecated, _ := ctx.npmrc.isDeprecated(ctx.pkgJson.Name, ctx.pkgJson.Version)
 				if deprecated != "" {
 					fmt.Fprintf(finalJS, `console.warn("%%c[esm.sh]%%c %%cdeprecated%%c %s@%s: " + %s, "color:grey", "", "color:red", "");%s`, ctx.esmPath.PkgName, ctx.esmPath.PkgVersion, utils.MustEncodeJSON(deprecated), "\n")
@@ -1459,7 +1461,7 @@ func (ctx *BuildContext) install() (err error) {
 			return err
 		}
 
-		if ctx.esmPath.GhPrefix || ctx.esmPath.PrPrefix {
+		if ctx.esmPath.GhPrefix || ctx.esmPath.PrPrefix || ctx.esmPath.TgzPrefix {
 			// if the name in package.json is not the same as the repository name
 			if p.Name != ctx.esmPath.PkgName {
 				p.PkgName = p.Name
