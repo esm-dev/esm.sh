@@ -32,6 +32,7 @@ type Package struct {
 	Version  string
 	Github   bool
 	PkgPrNew bool
+	Tgz      bool
 }
 
 func (p *Package) String() string {
@@ -41,6 +42,9 @@ func (p *Package) String() string {
 	}
 	if p.PkgPrNew {
 		return "pr/" + s
+	}
+	if p.Tgz {
+		return "tgz/" + s
 	}
 	return s
 }
