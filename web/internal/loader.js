@@ -143,7 +143,7 @@ async function unocss(_id, content, config) {
   }
   let uno = once.unoGenerators.get(generatorId);
   if (!uno || uno.configCSS !== config?.css) {
-    uno = import("npm:@esm.sh/unocss@0.5.0-beta.3").then(({ init }) => init({ configCSS: config?.css }));
+    uno = import("npm:@esm.sh/unocss@0.5.0").then(({ init }) => init({ configCSS: config?.css }));
     uno.configCSS = config?.css;
     once.unoGenerators.set(generatorId, uno);
   }

@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-	"os"
 	"os/exec"
 	"path"
 	"strconv"
@@ -174,7 +173,7 @@ func resolveVueVersion(npmrc *NpmRC, importMap importmap.ImportMap) (vueVersion 
 }
 
 func generateUnoCSS(npmrc *NpmRC, configCSS string, content string) (out *LoaderOutput, err error) {
-	loaderVersion := "0.5.0-beta.3"
+	loaderVersion := "0.5.0"
 	loaderExecPath := path.Join(config.WorkDir, "bin", "unocss-"+loaderVersion)
 
 	err = doOnce(loaderExecPath, func() (err error) {
@@ -282,6 +281,7 @@ func compileUnocssLoader(npmrc *NpmRC, loaderVersion string, loaderExecPath stri
 		"--no-check",
 		"--include=jsr:@std/tar/untar-stream",
 		"--no-prompt",
+		"--allow-env",
 		"--allow-read="+config.WorkDir+"/cache",
 		"--allow-write="+config.WorkDir+"/cache",
 		"--allow-net=registry.npmjs.org,fonts.googleapis.com",
@@ -289,7 +289,7 @@ func compileUnocssLoader(npmrc *NpmRC, loaderVersion string, loaderExecPath stri
 		"--output", loaderExecPath,
 		path.Join(wd, "loader.js"),
 	)
-	cmd.Env = append(os.Environ(), "DENO_NO_UPDATE_CHECK=1", "DENO_NO_PACKAGE_JSON=1")
+	cmd.Env = []string{"DENO_NO_UPDATE_CHECK=1"}
 	_, err = cmd.Output()
 	if err != nil {
 		err = fmt.Errorf("failed to compile %s: %s", path.Base(loaderExecPath), err.Error())
