@@ -42,6 +42,7 @@ func parseDts(r io.Reader, w *bytes.Buffer, resolve func(specifier string, kind 
 	var multiLineComment bool
 	var importOrExportDeclFound bool
 	scanner := bufio.NewScanner(r)
+	scanner.Buffer(nil, 1024*1024)
 	for scanner.Scan() {
 		line, trimedSpaces := trimSpace(scanner.Bytes())
 		w.Write(trimedSpaces)
@@ -99,6 +100,7 @@ func parseDts(r io.Reader, w *bytes.Buffer, resolve func(specifier string, kind 
 		} else {
 			var i int
 			stmtScanner := bufio.NewScanner(bytes.NewReader(line))
+			stmtScanner.Buffer(nil, 1024*1024)
 			stmtScanner.Split(splitJSStmt)
 			for stmtScanner.Scan() {
 				if i > 0 {
@@ -205,7 +207,7 @@ func parseDts(r io.Reader, w *bytes.Buffer, resolve func(specifier string, kind 
 func splitJSStmt(data []byte, atEOF bool) (advance int, token []byte, err error) {
 	var commentScope bool
 	var stringScope byte
-	for i := 0; i < len(data); i++ {
+	for i := range data {
 		var prev, next byte
 		if i > 0 {
 			prev = data[i-1]

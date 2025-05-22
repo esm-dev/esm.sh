@@ -98,19 +98,26 @@ func cjsModuleLexer(b *BuildContext, cjsEntry string) (ret cjsModuleLexerResult,
 		cmd := exec.Command(
 			path.Join(config.WorkDir, "bin/deno"),
 			"run",
+			"--allow-env",
 			"--no-prompt",
 			"--no-config",
 			"--no-lock",
 			"--quiet",
 			js)
-		cmd.Env = append(os.Environ(), "DENO_NO_UPDATE_CHECK=1", "DENO_NO_PACKAGE_JSON=1")
-		data, err = cmd.Output()
+		cmd.Env = []string{"DENO_NO_UPDATE_CHECK=1"}
+		data, err = cmd.CombinedOutput()
 		if err != nil {
+			msg := err.Error()
+			if data != nil {
+				msg = string(data)
+			}
+			err = errors.New("cjsModuleLexer(fallback mode): " + msg)
 			return
 		}
 		var namedExports []string
 		err = json.Unmarshal(data, &namedExports)
 		if err != nil {
+			err = errors.New("cjsModuleLexer(fallback mode): " + err.Error())
 			return
 		}
 		for _, name := range namedExports {

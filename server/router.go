@@ -1635,8 +1635,8 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 					// then re-build the module
 					key := npmrc.zoneId + ":" + build.Path()
 					db.Delete(key)
-					cacheStore.Delete("lru:" + key)
-					return rex.Status(500, "Storage error")
+					cacheLRU.Remove(key)
+					return rex.Status(500, "Storage error, please try again")
 				}
 				return rex.Status(500, err.Error())
 			}
