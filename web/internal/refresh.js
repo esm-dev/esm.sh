@@ -11,7 +11,6 @@ export const __REFRESH_RUNTIME__ = {
 };
 
 export const __REFRESH__ = (module) => {
-  console.log(module)
   if (timer !== null) {
     clearTimeout(timer);
   }

@@ -66,6 +66,8 @@ async function tsx(filename, importMap, sourceCode, isDev) {
     once.tsxWasm = import("npm:@esm.sh/tsx@1.2.0").then(async (m) => {
       await m.init();
       return m;
+    }, () => {
+      once.tsxWasm = null;
     });
   }
   const react = imports?.react;

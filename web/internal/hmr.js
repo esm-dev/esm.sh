@@ -9,11 +9,11 @@ let ws = null;
 
 /** connect to the dev server */
 function connect(recoveryMode) {
-  const wsUrl = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/@hmr-ws`;
-  const socket = new WebSocket(wsUrl);
+  const url = "ws" + location.protocol.slice(4) + "//" + location.host + "/@hmr-ws";
+  const socket = new WebSocket(url);
   const ping = (callback) => {
     setTimeout(() => {
-      const ws = new WebSocket(wsUrl);
+      const ws = new WebSocket(url);
       ws.addEventListener("open", callback);
       ws.addEventListener("error", () => {
         // retry
@@ -64,10 +64,10 @@ function connect(recoveryMode) {
       if (command[0] in colors) {
         const [kind, id] = command;
         console.log(
-          `%c[HMR] %c${kind}`,
+          "%c[HMR] %c" + kind,
           "color:#999",
-          `color:${colors[kind]}`,
-          `${JSON.stringify(id)}`,
+          "color:" + colors[kind],
+          JSON.stringify(id),
         );
         watchers.get(id)?.forEach((cb) => cb(kind, id));
         watchers.get("*")?.forEach((cb) => cb(kind, id));
@@ -89,36 +89,35 @@ function sendMessage(msg) {
 
 /** watch for file changes */
 function watch(id, callback) {
-  if (typeof id === "string" && typeof callback === "function") {
-    if (watchers.has(id)) {
-      const callbacks = watchers.get(id);
-      const i = callbacks.indexOf(reload);
-      if (i >= 0) {
-        // remove the default reload callback
-        callbacks.splice(i, 1);
-      }
-      callbacks.push(callback);
-    } else {
-      watchers.set(id, [callback]);
-      if (id !== "*") {
-        sendMessage("watch:" + id);
-      }
+  if (watchers.has(id)) {
+    const callbacks = watchers.get(id);
+    const i = callbacks.indexOf(reload);
+    if (i >= 0) {
+      // remove the default reload callback
+      callbacks.splice(i, 1);
+    }
+    callbacks.push(callback);
+  } else {
+    watchers.set(id, [callback]);
+    if (id !== "*") {
+      sendMessage("watch:" + id);
     }
   }
 }
 
-/** HotContext class */
 class HotContext {
   #url;
   #locked = false;
   constructor(url) {
     this.#url = url;
+    watch(url.pathname, reload);
   }
   get locked() {
     return this.#locked;
   }
   lock() {
     this.#locked = true;
+    return this;
   }
   accept(callback) {
     if (this.#locked) {
@@ -142,25 +141,24 @@ class HotContext {
       callback = maybeUrl;
       maybeUrl = undefined;
     }
-    if (maybeUrl) {
-      watch(new URL(maybeUrl, location).pathname, callback);
-    } else {
-      watch(this.#url.pathname, callback);
+    if (typeof callback === "function") {
+      if (typeof maybeUrl === "string") {
+        watch(new URL(maybeUrl, location).pathname, callback);
+      } else {
+        watch(this.#url.pathname, callback);
+      }
     }
   }
 }
 
-/** create a hot context */
 export default function createHotContext(url) {
   url = new URL(url, location);
   let ctx = registry.get(url.pathname);
   if (ctx) {
-    ctx.lock();
-    return ctx;
+    return ctx.lock();
   }
   ctx = new HotContext(url);
   registry.set(url.pathname, ctx);
-  watch(url.pathname, reload);
   return ctx;
 }
 
