@@ -8,12 +8,12 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/esm-dev/esm.sh/internal/npm"
 	"github.com/goccy/go-json"
 	"github.com/ije/gox/set"
-	"github.com/ije/gox/sync"
 	"github.com/ije/gox/term"
 	"github.com/ije/gox/utils"
 	"golang.org/x/net/html"

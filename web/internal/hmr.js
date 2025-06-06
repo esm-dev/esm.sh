@@ -28,8 +28,8 @@ function connect(recoveryMode) {
     }
   };
   const colors = {
-    modify: "#056CF0",
     create: "#20B44B",
+    modify: "#056CF0",
     remove: "#F00C08",
   };
 
