@@ -849,6 +849,14 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 						}, nil
 					}
 
+					// check if the specifier is in the `imports` field and is a http module
+					if ctx.externalAll && isHttpSepcifier(specifier) {
+						return esbuild.OnResolveResult{
+							Path:     args.Path,
+							External: true,
+						}, nil
+					}
+
 					// dynamic external
 					sideEffects := esbuild.SideEffectsTrue
 					if specifier == pkgJson.Name || specifier == pkgJson.PkgName || strings.HasPrefix(specifier, pkgJson.Name+"/") || strings.HasPrefix(specifier, pkgJson.Name+"/") {

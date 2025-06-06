@@ -381,7 +381,7 @@ func (npmrc *NpmRC) installDependencies(wd string, pkgJson *npm.PackageJSON, npm
 			defer wg.Done()
 			pkg := npm.Package{Name: name, Version: version}
 			p, err := npm.ResolveDependencyVersion(version)
-			if err != nil {
+			if err != nil || p.Url != "" {
 				return
 			}
 			if p.Name != "" {

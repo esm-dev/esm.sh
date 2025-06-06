@@ -30,6 +30,7 @@ func ValidatePackageName(pkgName string) bool {
 type Package struct {
 	Name     string
 	Version  string
+	Url      string
 	Github   bool
 	PkgPrNew bool
 }
@@ -96,24 +97,29 @@ func ResolveDependencyVersion(v string) (Package, error) {
 			Version: strings.TrimPrefix(url.QueryEscape(gitUrl.Fragment), "semver:"),
 		}, nil
 	}
-	// https://pkg.pr.new
-	if strings.HasPrefix(v, "https://") || strings.HasPrefix(v, "http://") {
+	// http dependencies
+	if strings.HasPrefix(v, "https:") || strings.HasPrefix(v, "http:") {
 		u, e := url.Parse(v)
-		if e != nil || u.Host != "pkg.pr.new" {
+		if e != nil || !strings.ContainsRune(u.Host, '.') {
 			return Package{}, errors.New("unsupported http dependency")
 		}
-		pkgName, rest := utils.SplitByLastByte(u.Path[1:], '@')
-		if rest == "" {
-			return Package{}, errors.New("unsupported http dependency")
-		}
-		version, _ := utils.SplitByFirstByte(rest, '/')
-		if version == "" {
-			return Package{}, errors.New("unsupported http dependency")
+		if u.Host == "pkg.pr.new" {
+			pkgName, rest := utils.SplitByLastByte(u.Path[1:], '@')
+			if rest == "" {
+				return Package{}, errors.New("unsupported http dependency")
+			}
+			version, _ := utils.SplitByFirstByte(rest, '/')
+			if version == "" {
+				return Package{}, errors.New("unsupported http dependency")
+			}
+			return Package{
+				PkgPrNew: true,
+				Name:     pkgName,
+				Version:  version,
+			}, nil
 		}
 		return Package{
-			PkgPrNew: true,
-			Name:     pkgName,
-			Version:  version,
+			Url: v,
 		}, nil
 	}
 	// see https://docs.npmjs.com/cli/v10/configuring-npm/package-json#git-urls-as-dependencies
