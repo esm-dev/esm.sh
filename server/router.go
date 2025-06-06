@@ -418,6 +418,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 			} else {
 				ctx.SetHeader("Content-Type", ctJavaScript)
 			}
+			ctx.SetHeader("Content-Length", fmt.Sprintf("%d", fi.Size()))
 			ctx.SetHeader("Last-Modified", fi.ModTime().UTC().Format(http.TimeFormat))
 			ctx.SetHeader("Cache-Control", ccImmutable)
 			return f // auto closed
@@ -558,13 +559,14 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 				h.Write([]byte(target))
 				h.Write([]byte(v))
 				savePath := normalizeSavePath(zoneIdHeader, path.Join("modules/x", hex.EncodeToString(h.Sum(nil))+".css"))
-				r, _, err := buildStorage.Get(savePath)
+				r, fi, err := buildStorage.Get(savePath)
 				if err != nil && err != storage.ErrNotFound {
 					return rex.Status(500, err.Error())
 				}
 				if err == nil {
 					ctx.SetHeader("Cache-Control", ccImmutable)
 					ctx.SetHeader("Content-Type", ctCSS)
+					ctx.SetHeader("Content-Length", fmt.Sprintf("%d", fi.Size()))
 					return r // auto closed
 				}
 				res, err := fetchClient.Fetch(ctxUrl, nil)
@@ -701,7 +703,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 				h.Write([]byte(target))
 				h.Write([]byte(v))
 				savePath := normalizeSavePath(zoneIdHeader, path.Join("modules/x", hex.EncodeToString(h.Sum(nil))+".mjs"))
-				content, _, err := buildStorage.Get(savePath)
+				content, fi, err := buildStorage.Get(savePath)
 				if err != nil && err != storage.ErrNotFound {
 					return rex.Status(500, err.Error())
 				}
@@ -786,6 +788,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 						return rex.Status(500, err.Error())
 					}
 					body = bytes.NewReader([]byte(out.Code))
+					fi = nil
 					go buildStorage.Put(savePath, strings.NewReader(out.Code))
 				}
 				if extname == ".css" && query.Has("module") {
@@ -797,12 +800,16 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 						return rex.Status(500, "Failed to read css")
 					}
 					body = strings.NewReader(fmt.Sprintf("var style = document.createElement('style');\nstyle.textContent = %s;\ndocument.head.appendChild(style);\nexport default null;", utils.MustEncodeJSON(string(css))))
+					fi = nil
 				}
 				ctx.SetHeader("Cache-Control", ccImmutable)
 				if extname == ".css" {
 					ctx.SetHeader("Content-Type", ctCSS)
 				} else {
 					ctx.SetHeader("Content-Type", ctJavaScript)
+				}
+				if fi != nil {
+					ctx.SetHeader("Content-Length", fmt.Sprintf("%d", fi.Size()))
 				}
 				return body // auto closed
 			}
@@ -1162,6 +1169,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 						ctx.SetHeader("Content-Type", contentType)
 					}
 				}
+				ctx.SetHeader("Content-Length", fmt.Sprintf("%d", stat.Size()))
 				if cacheHit {
 					ctx.SetHeader("X-Raw-File-Cache-Status", "HIT")
 				}
@@ -1239,8 +1247,9 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 							xxh := xxhash.New()
 							xxh.Write([]byte(strings.Join(exports, ",")))
 							savePath = strings.TrimSuffix(savePath, ".mjs") + "_" + base64.RawURLEncoding.EncodeToString(xxh.Sum(nil)) + ".mjs"
-							f2, _, err := buildStorage.Get(savePath)
+							f2, stat, err := buildStorage.Get(savePath)
 							if err == nil {
+								ctx.SetHeader("Content-Length", fmt.Sprintf("%d", stat.Size()))
 								return f2 // auto closed
 							}
 							if err != storage.ErrNotFound {
@@ -1275,6 +1284,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 						}
 						return bytes.ReplaceAll(buffer, []byte("{ESM_CDN_ORIGIN}"), []byte(origin))
 					}
+					ctx.SetHeader("Content-Length", fmt.Sprintf("%d", stat.Size()))
 					return f // auto closed
 				}
 			}
@@ -1665,8 +1675,9 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 					xxh := xxhash.New()
 					xxh.Write([]byte(strings.Join(exports, ",")))
 					savePath = strings.TrimSuffix(savePath, ".mjs") + "_" + base64.RawURLEncoding.EncodeToString(xxh.Sum(nil)) + ".mjs"
-					f2, _, err := buildStorage.Get(savePath)
+					f2, stat, err := buildStorage.Get(savePath)
 					if err == nil {
+						ctx.SetHeader("Content-Length", fmt.Sprintf("%d", stat.Size()))
 						return f2 // auto closed
 					}
 					if err != storage.ErrNotFound {
@@ -1685,6 +1696,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 					return ret
 				}
 			}
+			ctx.SetHeader("Content-Length", fmt.Sprintf("%d", fi.Size()))
 			return f // auto closed
 		}
 
