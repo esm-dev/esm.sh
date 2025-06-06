@@ -1026,6 +1026,11 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 	} else if ctx.target == "node" {
 		conditions = append(conditions, "node")
 	}
+	minify := config.Minify
+	if ctx.dev {
+		// disable minification for development build
+		minify = false
+	}
 	options := esbuild.BuildOptions{
 		AbsWorkingDir:     ctx.wd,
 		PreserveSymlinks:  true,
@@ -1037,9 +1042,9 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 		JSX:               esbuild.JSXAutomatic,
 		JSXImportSource:   "react",
 		Bundle:            true,
-		MinifyWhitespace:  config.Minify,
-		MinifyIdentifiers: config.Minify,
-		MinifySyntax:      config.Minify,
+		MinifyWhitespace:  minify,
+		MinifyIdentifiers: minify,
+		MinifySyntax:      minify,
 		KeepNames:         ctx.args.KeepNames,         // prevent class/function names erasing
 		IgnoreAnnotations: ctx.args.IgnoreAnnotations, // some libs maybe use wrong side-effect annotations
 		Conditions:        conditions,
