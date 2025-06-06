@@ -538,12 +538,6 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 					} else if isRelPathSpecifier(specifier) && args.ResolveDir != "" {
 						filename = path.Join(args.ResolveDir, specifier)
 					} else {
-						if ctx.externalAll {
-							return esbuild.OnResolveResult{
-								Path:     args.Path,
-								External: true,
-							}, nil
-						}
 						filename = path.Join(ctx.wd, "node_modules", specifier)
 					}
 
@@ -852,6 +846,14 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 							Path:       specifier,
 							PluginData: replacement.ESM,
 							Namespace:  "npm-replacement",
+						}, nil
+					}
+
+					// check if the specifier is in the `imports` field and is a http module
+					if ctx.externalAll && isHttpSepcifier(specifier) {
+						return esbuild.OnResolveResult{
+							Path:     args.Path,
+							External: true,
 						}, nil
 					}
 
