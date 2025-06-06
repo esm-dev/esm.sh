@@ -701,6 +701,15 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 		return
 	}
 
+	// if it's a http module
+	if isHttpSepcifier(specifier) {
+		return specifier, nil
+	}
+
+	if strings.HasPrefix(specifier, "file:") {
+		return "", errors.New("file: protocol is not supported: " + specifier)
+	}
+
 	// if it's `main` entry of current package
 	if pkgJson := ctx.pkgJson; specifier == pkgJson.Name || specifier == pkgJson.PkgName {
 		resolvedPath = ctx.getImportPath(EsmPath{
@@ -783,6 +792,10 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 	p, err := npm.ResolveDependencyVersion(pkgVersion)
 	if err != nil {
 		resolvedPath = fmt.Sprintf("/error.js?type=%s&name=%s&importer=%s", strings.ReplaceAll(err.Error(), " ", "-"), pkgName, ctx.esmPath.Specifier())
+		return
+	}
+	if p.Url != "" {
+		resolvedPath = p.Url
 		return
 	}
 	if p.Name != "" {

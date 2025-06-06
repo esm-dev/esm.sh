@@ -538,6 +538,12 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 					} else if isRelPathSpecifier(specifier) && args.ResolveDir != "" {
 						filename = path.Join(args.ResolveDir, specifier)
 					} else {
+						if ctx.externalAll {
+							return esbuild.OnResolveResult{
+								Path:     args.Path,
+								External: true,
+							}, nil
+						}
 						filename = path.Join(ctx.wd, "node_modules", specifier)
 					}
 
