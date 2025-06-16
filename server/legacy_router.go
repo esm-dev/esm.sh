@@ -256,7 +256,7 @@ func legacyESM(ctx *rex.Context, buildStorage storage.Storage, buildVersionPrefi
 		return rex.Status(http.StatusBadRequest, "Invalid url")
 	}
 
-	client, recycle := fetch.NewClient(ctx.UserAgent(), 60, true)
+	client, recycle := fetch.NewClient(ctx.UserAgent(), 60, true, nil)
 	defer recycle()
 
 	res, err := client.Fetch(url, nil)

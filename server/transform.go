@@ -217,6 +217,12 @@ func bundleHttpModule(npmrc *NpmRC, entry string, importMap importmap.ImportMap,
 						}
 						defer res.Body.Close()
 						if res.StatusCode != 200 {
+							if res.StatusCode == 404 {
+								return esbuild.OnLoadResult{}, errors.New("module not found: " + args.Path)
+							}
+							if res.StatusCode == 301 || res.StatusCode == 302 || res.StatusCode == 307 || res.StatusCode == 308 {
+								return esbuild.OnLoadResult{}, errors.New("failed to fetch module " + args.Path + ": redirect not allowed")
+							}
 							return esbuild.OnLoadResult{}, errors.New("failed to fetch module " + args.Path + ": " + res.Status)
 						}
 						data, err := io.ReadAll(io.LimitReader(res.Body, 5*MB))

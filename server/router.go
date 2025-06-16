@@ -217,7 +217,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 			indexHTML, err := withCache("index.html", time.Duration(cacheTtl)*time.Second, func() (indexHTML []byte, _ string, err error) {
 				readme, err := os.ReadFile("README.md")
 				if err != nil {
-					fetchClient, recycle := fetch.NewClient(ctx.UserAgent(), 15, false)
+					fetchClient, recycle := fetch.NewClient(ctx.UserAgent(), 15, false, nil)
 					defer recycle()
 					readmeUrl, _ := url.Parse("https://raw.githubusercontent.com/esm-dev/esm.sh/refs/heads/main/README.md")
 					var res *http.Response
@@ -537,7 +537,9 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 			if v != "" && (!npm.Versioning.Match(v) || len(v) > 32) {
 				return rex.Status(400, "Invalid Version Param")
 			}
-			fetchClient, recycle := fetch.NewClient(ctx.UserAgent(), 15, false)
+			allowedHosts := map[string]struct{}{}
+			allowedHosts[modUrl.Host] = struct{}{}
+			fetchClient, recycle := fetch.NewClient(ctx.UserAgent(), 15, false, allowedHosts)
 			defer recycle()
 			if strings.HasSuffix(modUrl.Path, "/uno.css") {
 				ctxParam := query.Get("ctx")
@@ -725,7 +727,13 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 						}
 						defer res.Body.Close()
 						if res.StatusCode != 200 {
-							return rex.Status(500, "Failed to fetch import map")
+							if res.StatusCode == 404 {
+								return rex.Status(404, "Import map not found")
+							}
+							if res.StatusCode == 301 || res.StatusCode == 302 || res.StatusCode == 307 || res.StatusCode == 308 {
+								return rex.Status(400, "Failed to fetch import map: redirects are not allowed")
+							}
+							return rex.Status(500, "Failed to fetch import map: "+res.Status)
 						}
 						tokenizer := html.NewTokenizer(io.LimitReader(res.Body, 5*MB))
 						for {
