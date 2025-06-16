@@ -15,6 +15,12 @@ Deno.test("transform", async (t) => {
     if (pathname.endsWith("/")) {
       pathname += "index.html";
     }
+    if (pathname == "/readme.md") {
+      return new Response("# esm.sh");
+    }
+    if (pathname == "/SSRF/readme.md") {
+      return Response.redirect("http://192.168.1.42/readme.md", 302);
+    }
     try {
       const file = join(demoRootDir, pathname);
       const f = await Deno.open(file);
@@ -183,6 +189,23 @@ Deno.test("transform", async (t) => {
   });
 
   await t.step("transform module: markdown", async () => {
+    {
+      const res = await fetch(`http://localhost:8080/http://localhost:8083/readme.md`);
+      assertEquals(res.status, 200);
+      assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
+      assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
+      const js = await res.text();
+      assertStringIncludes(js, `h1 id="esmsh">esm.sh</h1>`);
+    }
+    {
+      const res = await fetch(`http://localhost:8080/http://localhost:8083/SSRF/readme.md`);
+      assertEquals(res.status, 500);
+      const error = await res.text();
+      assertStringIncludes(
+        error,
+        "Failed to build module: failed to fetch module http://localhost:8083/SSRF/readme.md: redirect not allowed",
+      );
+    }
     {
       const res = await fetch(`http://localhost:8080/https://raw.githubusercontent.com/esm-dev/esm.sh/refs/heads/main/README.md`);
       assertEquals(res.status, 200);
