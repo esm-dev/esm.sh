@@ -15,6 +15,7 @@ import (
 type PackageMetadata struct {
 	DistTags map[string]string         `json:"dist-tags"`
 	Versions map[string]PackageJSONRaw `json:"versions"`
+	Time     map[string]string         `json:"time"`
 }
 
 // PackageJSONRaw defines the package.json of a NPM package

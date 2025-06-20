@@ -127,6 +127,10 @@ func (npmrc *NpmRC) getRegistryByPackageName(packageName string) *NpmRegistry {
 }
 
 func (npmrc *NpmRC) getPackageInfo(pkgName string, version string) (packageJson *npm.PackageJSON, err error) {
+	return npmrc.getPackageInfoWithAt(pkgName, version, "")
+}
+
+func (npmrc *NpmRC) getPackageInfoWithAt(pkgName string, version string, at string) (packageJson *npm.PackageJSON, err error) {
 	reg := npmrc.getRegistryByPackageName(pkgName)
 	getCacheKey := func(pkgName string, pkgVersion string) string {
 		return reg.Registry + pkgName + "@" + pkgVersion
@@ -209,6 +213,19 @@ func (npmrc *NpmRC) getPackageInfo(pkgName string, version string) (packageJson 
 
 		if len(metadata.Versions) == 0 {
 			return nil, "", fmt.Errorf("version %s of '%s' not found", version, pkgName)
+		}
+
+		// Handle at parameter for date-based version resolution
+		if at != "" {
+			resolvedVersion, err := npm.ResolveVersionByTimeWithConstraint(&metadata, at, version)
+			if err != nil {
+				return nil, "", fmt.Errorf("date-based version resolution failed: %s", err.Error())
+			}
+			raw, ok := metadata.Versions[resolvedVersion]
+			if ok {
+				return raw.ToNpmPackage(), getCacheKey(pkgName, raw.Version), nil
+			}
+			return nil, "", fmt.Errorf("resolved version %s of '%s' not found", resolvedVersion, pkgName)
 		}
 
 	CHECK:
