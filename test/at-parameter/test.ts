@@ -27,10 +27,13 @@ Deno.test("at parameter with date formats", async () => {
   ];
 
   for (const test of tests) {
-    const response = await fetch(test.url);
+    const response = await fetch(test.url, { redirect: "manual" });
     
     // Should redirect to an exact version
     assertEquals(response.status, 302, `${test.name}: Expected redirect`);
+    
+    // Consume response body to prevent resource leaks
+    await response.body?.cancel();
     
     const location = response.headers.get("location");
     if (location) {
@@ -52,8 +55,11 @@ Deno.test("at parameter with unix timestamp", async () => {
   const timestamp = "1672531200"; // 2023-01-01 00:00:00 UTC
   const url = `${origin}/lodash?at=${timestamp}`;
   
-  const response = await fetch(url);
+  const response = await fetch(url, { redirect: "manual" });
   assertEquals(response.status, 302, "Expected redirect for timestamp");
+  
+  // Consume response body to prevent resource leaks
+  await response.body?.cancel();
   
   const location = response.headers.get("location");
   if (location) {
@@ -84,8 +90,11 @@ Deno.test("at parameter with version constraints", async () => {
   ];
 
   for (const test of tests) {
-    const response = await fetch(test.url);
+    const response = await fetch(test.url, { redirect: "manual" });
     assertEquals(response.status, 302, `${test.name}: Expected redirect`);
+    
+    // Consume response body to prevent resource leaks
+    await response.body?.cancel();
     
     const location = response.headers.get("location");
     if (location) {
@@ -105,8 +114,11 @@ Deno.test("at parameter should be ignored for exact versions", async () => {
   // When exact version is specified, at parameter should be ignored
   const url = `${origin}/lodash@4.17.21?at=2020-01-01`;
   
-  const response = await fetch(url);
+  const response = await fetch(url, { redirect: "manual" });
   assertEquals(response.status, 302, "Expected redirect for exact version");
+  
+  // Consume response body to prevent resource leaks
+  await response.body?.cancel();
   
   const location = response.headers.get("location");
   if (location) {
@@ -132,7 +144,7 @@ Deno.test("invalid at parameter formats", async () => {
 
   for (const format of invalidFormats) {
     const url = `${origin}/lodash?at=${format}`;
-    const response = await fetch(url);
+    const response = await fetch(url, { redirect: "manual" });
     
     assertEquals(
       response.status,
