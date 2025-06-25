@@ -2,7 +2,7 @@
  * Test the "at" query parameter functionality for date-based version resolution
  */
 
-import { assertEquals } from "https://deno.land/std@0.220.0/testing/asserts.ts";
+import { assertEquals } from "jsr:@std/assert";
 
 const origin = Deno.env.get("ORIGIN") || "http://localhost:8080";
 
