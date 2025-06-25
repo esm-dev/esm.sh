@@ -51,7 +51,7 @@ func (p EsmPath) Specifier() string {
 	return p.Name()
 }
 
-func praseEsmPath(npmrc *NpmRC, pathname string, at string) (esm EsmPath, extraQuery string, exactVersion bool, hasTargetSegment bool, err error) {
+func parseEsmPath(npmrc *NpmRC, pathname string, at string) (esm EsmPath, extraQuery string, exactVersion bool, hasTargetSegment bool, err error) {
 	// see https://pkg.pr.new
 	if strings.HasPrefix(pathname, "/pr/") || strings.HasPrefix(pathname, "/pkg.pr.new/") {
 		if strings.HasPrefix(pathname, "/pr/") {

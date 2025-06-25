@@ -842,7 +842,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 			pathname = "/pr/" + pathname[13:]
 		}
 
-		esm, extraQuery, isExactVersion, hasTargetSegment, err := praseEsmPath(npmrc, pathname, "")
+		esm, extraQuery, isExactVersion, hasTargetSegment, err := parseEsmPath(npmrc, pathname, "")
 		if err != nil {
 			status := 500
 			message := err.Error()
@@ -939,7 +939,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 
 		// Handle date-based version resolution by re-parsing the path with timestamp
 		if atTimestamp != "" && !isExactVersion {
-			esm, extraQuery, isExactVersion, hasTargetSegment, err = praseEsmPath(npmrc, pathname, atTimestamp)
+			esm, extraQuery, isExactVersion, hasTargetSegment, err = parseEsmPath(npmrc, pathname, atTimestamp)
 			if err != nil {
 				status := 500
 				message := err.Error()
@@ -1411,7 +1411,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 			for _, v := range strings.Split(query.Get("deps"), ",") {
 				v = strings.TrimSpace(v)
 				if v != "" {
-					m, _, _, _, err := praseEsmPath(npmrc, v, "")
+					m, _, _, _, err := parseEsmPath(npmrc, v, "")
 					if err != nil {
 						return rex.Status(400, fmt.Sprintf("Invalid deps query: %v not found", v))
 					}
