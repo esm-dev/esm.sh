@@ -994,7 +994,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 		}
 
 		// redirect to the url with exact package version
-		if !isExactVersion {
+		if !isExactVersion || atTimestamp != "" {
 			if hasTargetSegment {
 				pkgName := esm.Name()
 				subPath := ""
@@ -1013,12 +1013,23 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 					subPath = "/" + esm.SubPath
 				}
 				if rawQuery != "" {
-					query = "?" + rawQuery
+					// Remove the "at" parameter from the redirect URL since we've resolved to exact version
+					if atTimestamp != "" {
+						values, err := url.ParseQuery(rawQuery)
+						if err == nil {
+							values.Del("at")
+							if len(values) > 0 {
+								query = "?" + values.Encode()
+							}
+						}
+					} else {
+						query = "?" + rawQuery
+					}
 				}
 				ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", config.NpmQueryCacheTTL))
 				return redirect(ctx, fmt.Sprintf("%s/%s%s%s", origin, pkgName, subPath, query), false)
 			}
-			if pathKind != EsmEntry {
+			if pathKind != EsmEntry || (atTimestamp != "" && pathKind == EsmEntry && !hasTargetSegment) {
 				pkgName := esm.PkgName
 				pkgVersion := esm.PkgVersion
 				subPath := ""
@@ -1044,7 +1055,18 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 					pkgVersion += "&" + extraQuery
 				}
 				if rawQuery != "" {
-					query = "?" + rawQuery
+					// Remove the "at" parameter from the redirect URL since we've resolved to exact version
+					if atTimestamp != "" {
+						values, err := url.ParseQuery(rawQuery)
+						if err == nil {
+							values.Del("at")
+							if len(values) > 0 {
+								query = "?" + values.Encode()
+							}
+						}
+					} else {
+						query = "?" + rawQuery
+					}
 				}
 				ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", config.NpmQueryCacheTTL))
 				return redirect(ctx, fmt.Sprintf("%s%s/%s@%s%s%s", origin, registryPrefix, pkgName, pkgVersion, subPath, query), false)

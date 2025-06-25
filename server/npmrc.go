@@ -133,7 +133,11 @@ func (npmrc *NpmRC) getPackageInfo(pkgName string, version string) (packageJson 
 func (npmrc *NpmRC) getPackageInfoWithAt(pkgName string, version string, at string) (packageJson *npm.PackageJSON, err error) {
 	reg := npmrc.getRegistryByPackageName(pkgName)
 	getCacheKey := func(pkgName string, pkgVersion string) string {
-		return reg.Registry + pkgName + "@" + pkgVersion
+		key := reg.Registry + pkgName + "@" + pkgVersion
+		if at != "" {
+			key += "@at=" + at
+		}
+		return key
 	}
 
 	version = npm.NormalizePackageVersion(version)
@@ -148,7 +152,8 @@ func (npmrc *NpmRC) getPackageInfoWithAt(pkgName string, version string, at stri
 		}
 
 		regUrl := reg.Registry + pkgName
-		isWellknownVersion := (npm.IsExactVersion(version) || npm.IsDistTag(version)) && strings.HasPrefix(regUrl, npmRegistry)
+		isWellknownVersion := (npm.IsExactVersion(version) || npm.IsDistTag(version)) && strings.HasPrefix(regUrl, npmRegistry) && at == ""
+		// When using at parameter, we need full package metadata with time info, not version-specific endpoint
 		if isWellknownVersion {
 			// npm registry supports url like `https://registry.npmjs.org/<name>/<version>`
 			regUrl += "/" + version

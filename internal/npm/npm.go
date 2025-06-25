@@ -404,12 +404,19 @@ func ResolveVersionByTimeWithConstraint(metadata *PackageMetadata, atTimestamp s
 			continue
 		}
 
-		// If we have a version constraint, check if this version satisfies it
-		if constraint != nil {
-			// ignore prerelease versions if constraint doesn't include prereleases
-			if !strings.ContainsRune(versionConstraint, '-') && strings.ContainsRune(version, '-') {
+		// Filter out prerelease versions (beta, alpha, rc, etc.) unless explicitly requested
+		if strings.ContainsRune(version, '-') {
+			// If there's a version constraint that includes prereleases, allow them
+			if constraint != nil && strings.ContainsRune(versionConstraint, '-') {
+				// Version constraint explicitly includes prereleases, so allow them
+			} else {
+				// Skip prerelease versions for date-based resolution to prefer stable releases
 				continue
 			}
+		}
+
+		// If we have a version constraint, check if this version satisfies it
+		if constraint != nil {
 			
 			ver, err := semver.NewVersion(version)
 			if err != nil {
