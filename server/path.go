@@ -15,6 +15,7 @@ import (
 type EsmPath struct {
 	GhPrefix      bool
 	PrPrefix      bool
+	TgzPrefix     bool
 	PkgName       string
 	PkgVersion    string
 	SubPath       string
@@ -25,6 +26,7 @@ func (p EsmPath) Package() npm.Package {
 	return npm.Package{
 		Github:   p.GhPrefix,
 		PkgPrNew: p.PrPrefix,
+		Tgz:      p.TgzPrefix,
 		Name:     p.PkgName,
 		Version:  p.PkgVersion,
 	}
@@ -41,6 +43,9 @@ func (p EsmPath) Name() string {
 	if p.PrPrefix {
 		return "pr/" + name
 	}
+	if p.TgzPrefix {
+		return "tgz/" + name
+	}
 	return name
 }
 
@@ -52,6 +57,36 @@ func (p EsmPath) Specifier() string {
 }
 
 func praseEsmPath(npmrc *NpmRC, pathname string) (esm EsmPath, extraQuery string, exactVersion bool, hasTargetSegment bool, err error) {
+	if strings.HasPrefix(pathname, "/tgz/") {
+		pathname = pathname[5:]
+		var pkgName string
+		var subPath string
+		var rest string
+		if pathname[0] == '@' {
+			var scope string
+			scope, rest = utils.SplitByFirstByte(pathname, '/')
+			pkgName, rest = utils.SplitByFirstByte(rest, '@')
+			pkgName = scope + "/" + pkgName
+		} else {
+			pkgName, rest = utils.SplitByFirstByte(pathname, '@')
+		}
+		tarballUrl, subPath := utils.SplitByFirstByte(rest, '/')
+		tarballUrl, err = url.PathUnescape(tarballUrl)
+		if err != nil {
+			return
+		}
+		tarballUrl = url.PathEscape(tarballUrl)
+		exactVersion = true
+		hasTargetSegment = validateTargetSegment(strings.Split(subPath, "/"))
+		esm = EsmPath{
+			PkgName:       pkgName,
+			PkgVersion:    tarballUrl,
+			SubPath:       subPath,
+			SubModuleName: stripEntryModuleExt(subPath),
+			TgzPrefix:     true,
+		}
+		return
+	}
 	// see https://pkg.pr.new
 	if strings.HasPrefix(pathname, "/pr/") || strings.HasPrefix(pathname, "/pkg.pr.new/") {
 		if strings.HasPrefix(pathname, "/pr/") {
