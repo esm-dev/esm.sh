@@ -180,7 +180,7 @@ func legacyESM(ctx *rex.Context, buildStorage storage.Storage, buildVersionPrefi
 	}
 	savePath := "legacy/" + normalizeSavePath("", ctx.R.URL.Path[1:])
 	if (buildVersionPrefix != "" && isStatic) || endsWith(pathname, ".d.ts", ".d.mts") {
-		f, _, e := buildStorage.Get(savePath)
+		f, fi, e := buildStorage.Get(savePath)
 		if e != nil && e != storage.ErrNotFound {
 			return rex.Status(500, "Storage error: "+e.Error())
 		}
@@ -212,6 +212,7 @@ func legacyESM(ctx *rex.Context, buildStorage storage.Storage, buildVersionPrefi
 				f.Close()
 				return rex.Status(404, "Module Not Found")
 			}
+			ctx.SetHeader("Content-Length", strconv.FormatInt(fi.Size(), 10))
 			ctx.SetHeader("Control-Cache", ccImmutable)
 			return f // auto closed
 		}
