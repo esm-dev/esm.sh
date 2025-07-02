@@ -842,7 +842,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 			pathname = "/pr/" + pathname[13:]
 		}
 
-		esm, extraQuery, isExactVersion, hasTargetSegment, err := parseEsmPath(npmrc, pathname, "")
+		esm, extraQuery, isExactVersion, hasTargetSegment, err := parseEsmPath(npmrc, pathname)
 		if err != nil {
 			status := 500
 			message := err.Error()
@@ -927,29 +927,6 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 		// parse the query
 		query := ctx.Query()
 
-		// Parse at query parameter and validate format
-		atParam := query.Get("at")
-		atTimestamp := ""
-		if atParam != "" {
-			atTimestamp, err = npm.ParseAtParam(atParam)
-			if err != nil {
-				return rex.Status(400, "Invalid at parameter: "+err.Error())
-			}
-		}
-
-		// Handle date-based version resolution by re-parsing the path with timestamp
-		if atTimestamp != "" && !isExactVersion {
-			esm, extraQuery, isExactVersion, hasTargetSegment, err = parseEsmPath(npmrc, pathname, atTimestamp)
-			if err != nil {
-				status := 500
-				message := err.Error()
-				if strings.HasPrefix(message, "invalid") {
-					status = 400
-				}
-				return rex.Status(status, message)
-			}
-		}
-
 		// use `?path=$PATH` query to override the pathname
 		if v := query.Get("path"); v != "" {
 			esm.SubPath = utils.NormalizePathname(v)[1:]
@@ -994,7 +971,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 		}
 
 		// redirect to the url with exact package version
-		if !isExactVersion || atTimestamp != "" {
+		if !isExactVersion {
 			if hasTargetSegment {
 				pkgName := esm.Name()
 				subPath := ""
@@ -1013,23 +990,12 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 					subPath = "/" + esm.SubPath
 				}
 				if rawQuery != "" {
-					// Remove the "at" parameter from the redirect URL since we've resolved to exact version
-					if atTimestamp != "" {
-						values, err := url.ParseQuery(rawQuery)
-						if err == nil {
-							values.Del("at")
-							if len(values) > 0 {
-								query = "?" + values.Encode()
-							}
-						}
-					} else {
-						query = "?" + rawQuery
-					}
+					query = "?" + rawQuery
 				}
 				ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", config.NpmQueryCacheTTL))
 				return redirect(ctx, fmt.Sprintf("%s/%s%s%s", origin, pkgName, subPath, query), false)
 			}
-			if pathKind != EsmEntry || (atTimestamp != "" && pathKind == EsmEntry && !hasTargetSegment) {
+			if pathKind != EsmEntry {
 				pkgName := esm.PkgName
 				pkgVersion := esm.PkgVersion
 				subPath := ""
@@ -1055,18 +1021,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 					pkgVersion += "&" + extraQuery
 				}
 				if rawQuery != "" {
-					// Remove the "at" parameter from the redirect URL since we've resolved to exact version
-					if atTimestamp != "" {
-						values, err := url.ParseQuery(rawQuery)
-						if err == nil {
-							values.Del("at")
-							if len(values) > 0 {
-								query = "?" + values.Encode()
-							}
-						}
-					} else {
-						query = "?" + rawQuery
-					}
+					query = "?" + rawQuery
 				}
 				ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", config.NpmQueryCacheTTL))
 				return redirect(ctx, fmt.Sprintf("%s%s/%s@%s%s%s", origin, registryPrefix, pkgName, pkgVersion, subPath, query), false)
@@ -1411,7 +1366,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 			for _, v := range strings.Split(query.Get("deps"), ",") {
 				v = strings.TrimSpace(v)
 				if v != "" {
-					m, _, _, _, err := parseEsmPath(npmrc, v, "")
+					m, _, _, _, err := parseEsmPath(npmrc, v)
 					if err != nil {
 						return rex.Status(400, fmt.Sprintf("Invalid deps query: %v not found", v))
 					}
