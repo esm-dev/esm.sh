@@ -261,8 +261,8 @@ func (npmrc *NpmRC) getPackageInfo(pkgName string, version string) (packageJson 
 }
 
 func (npmrc *NpmRC) getPackageInfoByDate(pkgName string, dateVersion string) (packageJson *npm.PackageJSON, err error) {
-	// Convert date to timestamp
-	timestamp, err := npm.ConvertDateVersionToTimestamp(dateVersion)
+	// Convert date to time
+	targetTime, err := npm.ConvertDateVersionToTime(dateVersion)
 	if err != nil {
 		return nil, err
 	}
@@ -320,8 +320,8 @@ func (npmrc *NpmRC) getPackageInfoByDate(pkgName string, dateVersion string) (pa
 			return nil, "", fmt.Errorf("no versions found for package '%s'", pkgName)
 		}
 
-		// Resolve version using timestamp (always use "latest" constraint for date-based resolution)
-		resolvedVersion, err := npm.ResolveVersionByTimeWithConstraint(&metadata, timestamp, "latest")
+		// Resolve version using target time
+		resolvedVersion, err := npm.ResolveVersionByTime(&metadata, targetTime)
 		if err != nil {
 			return nil, "", fmt.Errorf("date-based version resolution failed for %s@%s: %s", pkgName, dateVersion, err.Error())
 		}
