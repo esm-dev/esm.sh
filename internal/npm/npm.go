@@ -5,11 +5,9 @@ import (
 	"net/url"
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
-	"github.com/Masterminds/semver/v3"
 	"github.com/ije/gox/utils"
 	"github.com/ije/gox/valid"
 )
@@ -221,10 +219,10 @@ func IsDateVersion(version string) bool {
 	return err == nil
 }
 
-// ConvertDateVersionToTimestamp converts a date version (yyyy-mm-dd) to a timestamp string.
-func ConvertDateVersionToTimestamp(version string) (string, error) {
+// ConvertDateVersionToTime converts a date version (yyyy-mm-dd) to a time.Time.
+func ConvertDateVersionToTime(version string) (time.Time, error) {
 	if !IsDateVersion(version) {
-		return "", errors.New("not a valid date version")
+		return time.Time{}, errors.New("not a valid date version")
 	}
 
 	dateRegex := regexp.MustCompile(`^(\d{4})-(\d{1,2})-(\d{1,2})$`)
@@ -245,10 +243,10 @@ func ConvertDateVersionToTimestamp(version string) (string, error) {
 	dateStr := year + "-" + month + "-" + day + "T00:00:00Z"
 	t, err := time.Parse(time.RFC3339, dateStr)
 	if err != nil {
-		return "", errors.New("invalid date format")
+		return time.Time{}, errors.New("invalid date format")
 	}
 
-	return strconv.FormatInt(t.Unix(), 10) + "s", nil
+	return t, nil
 }
 
 func isNumericString(s string) bool {
@@ -285,19 +283,8 @@ func ToTypesPackageName(pkgName string) string {
 }
 
 
-// ResolveVersionByTime finds the latest version published before or at the given timestamp.
-// The atTimestamp should be in format "<unix_seconds>s".
-func ResolveVersionByTime(metadata *PackageMetadata, atTimestamp string) (string, error) {
-	if !strings.HasSuffix(atTimestamp, "s") {
-		return "", errors.New("timestamp must end with 's'")
-	}
-
-	targetUnix, err := strconv.ParseInt(strings.TrimSuffix(atTimestamp, "s"), 10, 64)
-	if err != nil {
-		return "", errors.New("invalid timestamp format")
-	}
-	targetTime := time.Unix(targetUnix, 0)
-
+// ResolveVersionByTime finds the latest version published before or at the given time.
+func ResolveVersionByTime(metadata *PackageMetadata, targetTime time.Time) (string, error) {
 	type versionTime struct {
 		version string
 		time    time.Time
@@ -340,115 +327,3 @@ func ResolveVersionByTime(metadata *PackageMetadata, atTimestamp string) (string
 	return validVersions[0].version, nil
 }
 
-// ResolveVersionByTimeWithConstraint finds the latest version published before or at the given timestamp
-// that also satisfies the given version constraint.
-func ResolveVersionByTimeWithConstraint(metadata *PackageMetadata, atTimestamp string, versionConstraint string) (string, error) {
-	if !strings.HasSuffix(atTimestamp, "s") {
-		return "", errors.New("timestamp must end with 's'")
-	}
-
-	targetUnix, err := strconv.ParseInt(strings.TrimSuffix(atTimestamp, "s"), 10, 64)
-	if err != nil {
-		return "", errors.New("invalid timestamp format")
-	}
-	targetTime := time.Unix(targetUnix, 0)
-
-	type versionTime struct {
-		version string
-		time    time.Time
-	}
-
-	var validVersions []versionTime
-	
-	// Handle dist tags first
-	if distVersion, ok := metadata.DistTags[versionConstraint]; ok {
-		if timeStr, timeExists := metadata.Time[distVersion]; timeExists {
-			if publishTime, err := time.Parse(time.RFC3339, timeStr); err == nil {
-				if publishTime.Before(targetTime) || publishTime.Equal(targetTime) {
-					if _, exists := metadata.Versions[distVersion]; exists {
-						return distVersion, nil
-					}
-				}
-			}
-		}
-		// If dist tag doesn't satisfy time constraint, fall back to semver matching
-		versionConstraint = "latest"
-	}
-
-	// Parse version constraint
-	var constraint *semver.Constraints
-	if versionConstraint == "latest" || versionConstraint == "" {
-		// For latest, we want all versions
-		constraint = nil
-	} else {
-		constraint, err = semver.NewConstraint(versionConstraint)
-		if err != nil {
-			// If constraint is invalid, fall back to latest
-			constraint = nil
-		}
-	}
-
-	for version, timeStr := range metadata.Time {
-		// Skip special entries like "created", "modified"
-		if version == "created" || version == "modified" {
-			continue
-		}
-		// Only include versions that exist in the versions map
-		if _, exists := metadata.Versions[version]; !exists {
-			continue
-		}
-
-		publishTime, err := time.Parse(time.RFC3339, timeStr)
-		if err != nil {
-			continue // Skip invalid timestamps
-		}
-
-		// Only include versions published before or at the target time
-		if !(publishTime.Before(targetTime) || publishTime.Equal(targetTime)) {
-			continue
-		}
-
-		// Filter out prerelease versions (beta, alpha, rc, etc.) unless explicitly requested
-		if strings.ContainsRune(version, '-') {
-			// If there's a version constraint that includes prereleases, allow them
-			if constraint != nil && strings.ContainsRune(versionConstraint, '-') {
-				// Version constraint explicitly includes prereleases, so allow them
-			} else {
-				// Skip prerelease versions for date-based resolution to prefer stable releases
-				continue
-			}
-		}
-
-		// If we have a version constraint, check if this version satisfies it
-		if constraint != nil {
-			
-			ver, err := semver.NewVersion(version)
-			if err != nil {
-				continue // Skip invalid semver versions
-			}
-			
-			if !constraint.Check(ver) {
-				continue // Version doesn't satisfy constraint
-			}
-		}
-
-		validVersions = append(validVersions, versionTime{
-			version: version,
-			time:    publishTime,
-		})
-	}
-
-	if len(validVersions) == 0 {
-		if constraint != nil {
-			return "", errors.New("no versions found for the specified date and version constraint")
-		}
-		return "", errors.New("no versions found for the specified date")
-	}
-
-	// Sort by publish time, latest first
-	sort.Slice(validVersions, func(i, j int) bool {
-		return validVersions[i].time.After(validVersions[j].time)
-	})
-
-	return validVersions[0].version, nil
-}
