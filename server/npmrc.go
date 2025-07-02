@@ -127,17 +127,9 @@ func (npmrc *NpmRC) getRegistryByPackageName(packageName string) *NpmRegistry {
 }
 
 func (npmrc *NpmRC) getPackageInfo(pkgName string, version string) (packageJson *npm.PackageJSON, err error) {
-	return npmrc.getPackageInfoWithAt(pkgName, version, "")
-}
-
-func (npmrc *NpmRC) getPackageInfoWithAt(pkgName string, version string, at string) (packageJson *npm.PackageJSON, err error) {
 	reg := npmrc.getRegistryByPackageName(pkgName)
 	getCacheKey := func(pkgName string, pkgVersion string) string {
-		key := reg.Registry + pkgName + "@" + pkgVersion
-		if at != "" {
-			key += "@at=" + at
-		}
-		return key
+		return reg.Registry + pkgName + "@" + pkgVersion
 	}
 
 	version = npm.NormalizePackageVersion(version)
@@ -152,8 +144,8 @@ func (npmrc *NpmRC) getPackageInfoWithAt(pkgName string, version string, at stri
 		}
 
 		regUrl := reg.Registry + pkgName
-		isWellknownVersion := (npm.IsExactVersion(version) || npm.IsDistTag(version)) && strings.HasPrefix(regUrl, npmRegistry) && at == ""
-		// When using at parameter, we need full package metadata with time info, not version-specific endpoint
+		// For exact versions and dist tags, use version-specific endpoint for better performance
+		isWellknownVersion := (npm.IsExactVersion(version) || npm.IsDistTag(version)) && strings.HasPrefix(regUrl, npmRegistry)
 		if isWellknownVersion {
 			// npm registry supports url like `https://registry.npmjs.org/<name>/<version>`
 			regUrl += "/" + version
@@ -197,11 +189,11 @@ func (npmrc *NpmRC) getPackageInfoWithAt(pkgName string, version string, at stri
 		}
 
 		if res.StatusCode != 200 {
-			msg, _ := io.ReadAll(res.Body)
-			return nil, "", fmt.Errorf("could not get metadata of package '%s' (%s: %s)", pkgName, res.Status, string(msg))
+			return nil, "", fmt.Errorf("npm registry returned %d for package '%s'", res.StatusCode, pkgName)
 		}
 
 		if isWellknownVersion {
+			// for version-specific endpoint, the response is the package.json directly
 			var raw npm.PackageJSONRaw
 			err = json.NewDecoder(res.Body).Decode(&raw)
 			if err != nil {
@@ -210,6 +202,7 @@ func (npmrc *NpmRC) getPackageInfoWithAt(pkgName string, version string, at stri
 			return raw.ToNpmPackage(), getCacheKey(pkgName, raw.Version), nil
 		}
 
+		// for package-level endpoint, the response contains all versions
 		var metadata npm.PackageMetadata
 		err = json.NewDecoder(res.Body).Decode(&metadata)
 		if err != nil {
@@ -218,19 +211,6 @@ func (npmrc *NpmRC) getPackageInfoWithAt(pkgName string, version string, at stri
 
 		if len(metadata.Versions) == 0 {
 			return nil, "", fmt.Errorf("version %s of '%s' not found", version, pkgName)
-		}
-
-		// Handle at parameter for date-based version resolution
-		if at != "" {
-			resolvedVersion, err := npm.ResolveVersionByTimeWithConstraint(&metadata, at, version)
-			if err != nil {
-				return nil, "", fmt.Errorf("date-based version resolution failed: %s", err.Error())
-			}
-			raw, ok := metadata.Versions[resolvedVersion]
-			if ok {
-				return raw.ToNpmPackage(), getCacheKey(pkgName, raw.Version), nil
-			}
-			return nil, "", fmt.Errorf("resolved version %s of '%s' not found", resolvedVersion, pkgName)
 		}
 
 	CHECK:
@@ -258,13 +238,9 @@ func (npmrc *NpmRC) getPackageInfoWithAt(pkgName string, version string, at stri
 				if !strings.ContainsRune(version, '-') && strings.ContainsRune(v, '-') {
 					continue
 				}
-				var ver *semver.Version
-				ver, err = semver.NewVersion(v)
-				if err != nil {
-					return nil, "", err
-				}
-				if c.Check(ver) {
-					vs[i] = ver
+				sv, err := semver.NewVersion(v)
+				if err == nil && c.Check(sv) {
+					vs[i] = sv
 					i++
 				}
 			}
@@ -279,9 +255,88 @@ func (npmrc *NpmRC) getPackageInfoWithAt(pkgName string, version string, at stri
 				}
 			}
 		}
+
 		return nil, "", fmt.Errorf("version %s of '%s' not found", version, pkgName)
 	})
 }
+
+func (npmrc *NpmRC) getPackageInfoByDate(pkgName string, dateVersion string) (packageJson *npm.PackageJSON, err error) {
+	// Convert date to timestamp
+	timestamp, err := npm.ConvertDateVersionToTimestamp(dateVersion)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create cache key specifically for date-based resolution
+	reg := npmrc.getRegistryByPackageName(pkgName)
+	cacheKey := reg.Registry + pkgName + "@date=" + dateVersion
+	
+	return withCache(cacheKey, time.Duration(config.NpmQueryCacheTTL)*time.Second, func() (*npm.PackageJSON, string, error) {
+		// Get full package metadata (not version-specific)
+		regUrl := reg.Registry + pkgName
+		u, err := url.Parse(regUrl)
+		if err != nil {
+			return nil, "", err
+		}
+
+		header := http.Header{}
+		if reg.Token != "" {
+			header.Set("Authorization", "Bearer "+reg.Token)
+		} else if reg.User != "" && reg.Password != "" {
+			header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(reg.User+":"+reg.Password)))
+		}
+
+		fetchClient, recycle := fetch.NewClient("esmd/"+VERSION, 15, false, nil)
+		defer recycle()
+
+		retryTimes := 0
+	RETRY:
+		res, err := fetchClient.Fetch(u, header)
+		if err != nil {
+			if retryTimes < 3 {
+				retryTimes++
+				time.Sleep(time.Duration(retryTimes) * 100 * time.Millisecond)
+				goto RETRY
+			}
+			return nil, "", err
+		}
+		defer res.Body.Close()
+
+		if res.StatusCode == 404 || res.StatusCode == 401 {
+			return nil, "", fmt.Errorf("package '%s' not found", pkgName)
+		}
+
+		if res.StatusCode != 200 {
+			return nil, "", fmt.Errorf("npm registry returned %d for package '%s'", res.StatusCode, pkgName)
+		}
+
+		var metadata npm.PackageMetadata
+		err = json.NewDecoder(res.Body).Decode(&metadata)
+		if err != nil {
+			return nil, "", err
+		}
+
+		if len(metadata.Versions) == 0 {
+			return nil, "", fmt.Errorf("no versions found for package '%s'", pkgName)
+		}
+
+		// Resolve version using timestamp (always use "latest" constraint for date-based resolution)
+		resolvedVersion, err := npm.ResolveVersionByTimeWithConstraint(&metadata, timestamp, "latest")
+		if err != nil {
+			return nil, "", fmt.Errorf("date-based version resolution failed for %s@%s: %s", pkgName, dateVersion, err.Error())
+		}
+
+		raw, ok := metadata.Versions[resolvedVersion]
+		if !ok {
+			return nil, "", fmt.Errorf("resolved version %s of '%s' not found", resolvedVersion, pkgName)
+		}
+
+		// Cache the result under the exact version for future lookups
+		exactVersionCacheKey := reg.Registry + pkgName + "@" + raw.Version
+		return raw.ToNpmPackage(), exactVersionCacheKey, nil
+	})
+}
+
 
 func (npmrc *NpmRC) installPackage(pkg npm.Package) (packageJson *npm.PackageJSON, err error) {
 	installDir := path.Join(npmrc.StoreDir(), pkg.String())

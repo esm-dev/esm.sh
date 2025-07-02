@@ -196,6 +196,61 @@ func IsExactVersion(version string) bool {
 	return true
 }
 
+// IsDateVersion returns true if the given version is a date in yyyy-mm-dd format.
+func IsDateVersion(version string) bool {
+	dateRegex := regexp.MustCompile(`^(\d{4})-(\d{1,2})-(\d{1,2})$`)
+	matches := dateRegex.FindStringSubmatch(version)
+	if matches == nil {
+		return false
+	}
+
+	year := matches[1]
+	month := matches[2]
+	day := matches[3]
+
+	if len(month) == 1 {
+		month = "0" + month
+	}
+	if len(day) == 1 {
+		day = "0" + day
+	}
+
+	// Parse and validate the date
+	dateStr := year + "-" + month + "-" + day + "T00:00:00Z"
+	_, err := time.Parse(time.RFC3339, dateStr)
+	return err == nil
+}
+
+// ConvertDateVersionToTimestamp converts a date version (yyyy-mm-dd) to a timestamp string.
+func ConvertDateVersionToTimestamp(version string) (string, error) {
+	if !IsDateVersion(version) {
+		return "", errors.New("not a valid date version")
+	}
+
+	dateRegex := regexp.MustCompile(`^(\d{4})-(\d{1,2})-(\d{1,2})$`)
+	matches := dateRegex.FindStringSubmatch(version)
+	
+	year := matches[1]
+	month := matches[2]
+	day := matches[3]
+
+	if len(month) == 1 {
+		month = "0" + month
+	}
+	if len(day) == 1 {
+		day = "0" + day
+	}
+
+	// Parse and validate the date
+	dateStr := year + "-" + month + "-" + day + "T00:00:00Z"
+	t, err := time.Parse(time.RFC3339, dateStr)
+	if err != nil {
+		return "", errors.New("invalid date format")
+	}
+
+	return strconv.FormatInt(t.Unix(), 10) + "s", nil
+}
+
 func isNumericString(s string) bool {
 	for _, c := range s {
 		if c < '0' || c > '9' {
@@ -229,57 +284,6 @@ func ToTypesPackageName(pkgName string) string {
 	return "@types/" + pkgName
 }
 
-// ParseAtParam parses the at query parameter and returns a normalized timestamp string.
-// Supports formats:
-// - yyyy[-mm[-dd]] (date format, defaults to beginning of period)  
-// - <number> (unix timestamp in seconds)
-func ParseAtParam(at string) (string, error) {
-	if at == "" {
-		return "", errors.New("at parameter is empty")
-	}
-
-	// Handle date formats first (yyyy[-mm[-dd]])
-	dateRegex := regexp.MustCompile(`^(\d{4})(?:-(\d{1,2})(?:-(\d{1,2}))?)?$`)
-	matches := dateRegex.FindStringSubmatch(at)
-	if matches != nil {
-		year := matches[1]
-		month := "01"
-		day := "01"
-
-		if matches[2] != "" {
-			month = matches[2]
-			if len(month) == 1 {
-				month = "0" + month
-			}
-		}
-		if matches[3] != "" {
-			day = matches[3]
-			if len(day) == 1 {
-				day = "0" + day
-			}
-		}
-
-		// Parse and validate the date
-		dateStr := year + "-" + month + "-" + day + "T00:00:00Z"
-		t, err := time.Parse(time.RFC3339, dateStr)
-		if err != nil {
-			return "", errors.New("invalid date format")
-		}
-
-		return strconv.FormatInt(t.Unix(), 10) + "s", nil
-	}
-
-	// Handle numeric timestamp (seconds since epoch) - only if it's not a 4-digit year
-	if regexp.MustCompile(`^\d+$`).MatchString(at) && len(at) != 4 {
-		_, err := strconv.ParseInt(at, 10, 64)
-		if err != nil {
-			return "", errors.New("invalid timestamp")
-		}
-		return at + "s", nil
-	}
-
-	return "", errors.New("invalid at format, expected yyyy[-mm[-dd]] or unix timestamp")
-}
 
 // ResolveVersionByTime finds the latest version published before or at the given timestamp.
 // The atTimestamp should be in format "<unix_seconds>s".
