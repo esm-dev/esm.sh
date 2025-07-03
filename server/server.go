@@ -4,7 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"net/http"
-	"net/http/pprof"
 	"os"
 	"os/signal"
 	"path"
@@ -24,7 +23,6 @@ func Serve() {
 	var cfile string
 	var err error
 
-	pprof.Handler("Ddd")
 	flag.StringVar(&cfile, "config", "config.json", "the config file path")
 	flag.Parse()
 
