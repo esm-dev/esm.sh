@@ -144,6 +144,8 @@ if (import.meta.main) {
       }
     }
     timeUsed = Math.ceil(timeUsed / 1000);
+    console.log("Heap usage:");
+    await run("go", "tool", "pprof", "-top", "http://localhost:8080/debug/pprof/heap");
     console.log(
       `Done! Total time spent: %c${Math.floor(timeUsed / 60)}m${timeUsed % 60}s`,
       "color: blue",
