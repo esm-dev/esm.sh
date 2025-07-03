@@ -1,6 +1,7 @@
 package server
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -11,7 +12,6 @@ import (
 	"github.com/esm-dev/esm.sh/internal/fetch"
 	"github.com/esm-dev/esm.sh/internal/gfm"
 	"github.com/esm-dev/esm.sh/internal/importmap"
-	"github.com/goccy/go-json"
 	esbuild "github.com/ije/esbuild-internal/api"
 	"github.com/ije/gox/utils"
 )

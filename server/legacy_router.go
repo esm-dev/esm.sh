@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,7 +15,6 @@ import (
 	"github.com/esm-dev/esm.sh/internal/fetch"
 	"github.com/esm-dev/esm.sh/internal/npm"
 	"github.com/esm-dev/esm.sh/internal/storage"
-	"github.com/goccy/go-json"
 	"github.com/ije/esbuild-internal/xxhash"
 	"github.com/ije/gox/utils"
 	"github.com/ije/gox/valid"
