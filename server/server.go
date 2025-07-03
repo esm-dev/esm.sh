@@ -80,9 +80,9 @@ func Serve() {
 		rex.Header("Server", "esm.sh"),
 		cors(config.CorsAllowOrigins),
 		rex.Logger(logger),
+		pprofRouter(),
 		rex.Optional(rex.AccessLogger(accessLogger), config.AccessLog),
 		rex.Optional(rex.Compress(), config.Compress),
-		rex.Optional(pprofRouter(), DEBUG || config.Pprof),
 		rex.Optional(customLandingPage(&config.CustomLandingPage), config.CustomLandingPage.Origin != ""),
 		rex.Optional(esmLegacyRouter(buildStorage), config.LegacyServer != ""),
 		esmRouter(db, buildStorage, logger),
@@ -147,26 +147,6 @@ func setCorsHeaders(h http.Header, isOptionsMethod bool, origin string) {
 	if isOptionsMethod {
 		h.Set("Access-Control-Allow-Headers", "*")
 		h.Set("Access-Control-Max-Age", "86400")
-	}
-}
-
-func pprofRouter() rex.Handle {
-	return func(ctx *rex.Context) any {
-		switch ctx.R.URL.Path {
-		case "/debug/pprof/cmdline":
-			return http.HandlerFunc(pprof.Cmdline)
-		case "/debug/pprof/profile":
-			return http.HandlerFunc(pprof.Profile)
-		case "/debug/pprof/symbol":
-			return http.HandlerFunc(pprof.Symbol)
-		case "/debug/pprof/trace":
-			return http.HandlerFunc(pprof.Trace)
-		default:
-			if strings.HasPrefix(ctx.R.URL.Path, "/debug/pprof/") {
-				return http.HandlerFunc(pprof.Index)
-			}
-			return rex.Next()
-		}
 	}
 }
 
