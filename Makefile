@@ -1,10 +1,10 @@
-debug/cli/dev:
+run/cli/dev:
 	@go run -tags debug main.go dev cli/demo/${app}
 
-debug/cli/serve:
+run/cli/serve:
 	@go run -tags debug main.go serve cli/demo/${app}
 
-debug/server: config.json
+run/server: config.json
 	@rm -rf .esmd/log
 	@rm -rf .esmd/storage
 	@rm -rf .esmd/esm.db

@@ -5,6 +5,7 @@ import (
 	"crypto/sha1"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -24,7 +25,6 @@ import (
 	"github.com/esm-dev/esm.sh/internal/mime"
 	"github.com/esm-dev/esm.sh/internal/npm"
 	"github.com/esm-dev/esm.sh/internal/storage"
-	"github.com/goccy/go-json"
 	esbuild "github.com/ije/esbuild-internal/api"
 	"github.com/ije/esbuild-internal/xxhash"
 	"github.com/ije/gox/log"
@@ -1185,6 +1185,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 				ctx.SetHeader("Last-Modified", stat.ModTime().UTC().Format(http.TimeFormat))
 				ctx.SetHeader("Cache-Control", ccImmutable)
 				if strings.HasSuffix(esm.SubPath, ".json") && query.Has("module") {
+					defer content.Close()
 					jsonData, err := io.ReadAll(content)
 					if err != nil {
 						return rex.Status(500, err.Error())

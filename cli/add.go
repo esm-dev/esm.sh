@@ -2,13 +2,13 @@ package cli
 
 import (
 	"bytes"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"os"
 
 	"github.com/esm-dev/esm.sh/internal/importmap"
-	"github.com/goccy/go-json"
 	"github.com/ije/gox/term"
 	"golang.org/x/net/html"
 )

@@ -78,6 +78,7 @@ func Serve() {
 		rex.Header("Server", "esm.sh"),
 		cors(config.CorsAllowOrigins),
 		rex.Logger(logger),
+		pprofRouter(),
 		rex.Optional(rex.AccessLogger(accessLogger), config.AccessLog),
 		rex.Optional(rex.Compress(), config.Compress),
 		rex.Optional(customLandingPage(&config.CustomLandingPage), config.CustomLandingPage.Origin != ""),
