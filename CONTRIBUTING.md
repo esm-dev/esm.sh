@@ -33,7 +33,7 @@ More server options please check [config.exmaple.jsonc](./config.example.jsonc).
 ## Running the Server in Debug Mode
 
 ```bash
-make debug/server
+make run/server
 ```
 
 Then you can import `React` from "http://localhost:8080/react"
