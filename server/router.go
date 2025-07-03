@@ -1094,6 +1094,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 					}
 					entry := b.resolveEntry(esm)
 					if entry.main == "" {
+						ctx.SetHeader("Cache-Control", ccImmutable)
 						return rex.Status(404, "File Not Found")
 					}
 					query := ""
@@ -1135,11 +1136,13 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 					}
 					if err != nil {
 						if os.IsNotExist(err) {
+							ctx.SetHeader("Cache-Control", ccImmutable)
 							return rex.Status(404, "File Not Found")
 						}
 						return rex.Status(500, err.Error())
 					}
 					if stat.(os.FileInfo).IsDir() {
+						ctx.SetHeader("Cache-Control", ccImmutable)
 						return rex.Status(404, "File Not Found")
 					}
 					// limit the file size up to 50MB
@@ -1464,6 +1467,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 				case output := <-ch:
 					if output.err != nil {
 						if output.err.Error() == "types not found" {
+							ctx.SetHeader("Cache-Control", ccImmutable)
 							return rex.Status(404, "Types Not Found")
 						}
 						return rex.Status(500, "Failed to build types: "+output.err.Error())
@@ -1578,6 +1582,11 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 				if output.err != nil {
 					msg := output.err.Error()
 					if msg == "could not resolve build entry" || strings.HasSuffix(msg, " not found") || strings.Contains(msg, "is not exported from package") || strings.Contains(msg, "no such file or directory") {
+						if strings.HasSuffix(msg, "version ") && strings.HasSuffix(msg, " not found") {
+							ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", config.NpmQueryCacheTTL))
+						} else {
+							ctx.SetHeader("Cache-Control", ccImmutable)
+						}
 						return rex.Status(404, msg)
 					}
 					return rex.Status(500, msg)
