@@ -25,7 +25,6 @@ var (
 type Config struct {
 	Port                uint16                 `json:"port"`
 	TlsPort             uint16                 `json:"tlsPort"`
-	LegacyServer        string                 `json:"legacyServer"` // normally you don't need to set this
 	CustomLandingPage   LandingPageOptions     `json:"customLandingPage"`
 	WorkDir             string                 `json:"workDir"`
 	CorsAllowOrigins    []string               `json:"corsAllowOrigins"`
@@ -47,6 +46,8 @@ type Config struct {
 	MinifyRaw           json.RawMessage        `json:"minify"`
 	SourceMapRaw        json.RawMessage        `json:"sourceMap"`
 	CompressRaw         json.RawMessage        `json:"compress"`
+	LegacyServer        string                 `json:"legacyServer"` // normally you don't need to set this
+	Pprof               bool                   `json:"pprof"`
 	Minify              bool                   `json:"-"`
 	SourceMap           bool                   `json:"-"`
 	Compress            bool                   `json:"-"`
