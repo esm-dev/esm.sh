@@ -174,6 +174,7 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 							}
 							*/
 							exportEntry = ctx.resolveConditionExportEntry(resloveAsteriskPathMapping(obj, diff), pkgJson.Type)
+							ctx.finalizeBuildEntry(&exportEntry)
 							if !exportEntry.isEmpty() {
 								break
 							}
