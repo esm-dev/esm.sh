@@ -1546,9 +1546,10 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 							return redirect(ctx, url, isExactVersion)
 						}
 					} else {
-						if submodule == basename {
+						switch submodule {
+						case basename:
 							submodule = ""
-						} else if submodule == "__"+basename {
+						case "__" + basename:
 							// the sub-module name is same as the package name
 							submodule = basename
 						}
@@ -1582,7 +1583,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 				if output.err != nil {
 					msg := output.err.Error()
 					if msg == "could not resolve build entry" || strings.HasSuffix(msg, " not found") || strings.Contains(msg, "is not exported from package") || strings.Contains(msg, "no such file or directory") {
-						if strings.HasSuffix(msg, "version ") && strings.HasSuffix(msg, " not found") {
+						if strings.HasPrefix(msg, "version ") && strings.HasSuffix(msg, " not found") {
 							ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", config.NpmQueryCacheTTL))
 						} else {
 							ctx.SetHeader("Cache-Control", ccImmutable)
