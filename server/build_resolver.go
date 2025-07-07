@@ -718,6 +718,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 			PkgVersion: pkgJson.Version,
 			GhPrefix:   ctx.esmPath.GhPrefix,
 			PrPrefix:   ctx.esmPath.PrPrefix,
+			TgzPrefix:  ctx.esmPath.TgzPrefix,
 		}, ctx.getBuildArgsPrefix(false), ctx.externalAll)
 		return
 	}
@@ -728,6 +729,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 		subModule := EsmPath{
 			GhPrefix:      ctx.esmPath.GhPrefix,
 			PrPrefix:      ctx.esmPath.PrPrefix,
+			TgzPrefix:     ctx.esmPath.TgzPrefix,
 			PkgName:       ctx.esmPath.PkgName,
 			PkgVersion:    ctx.esmPath.PkgVersion,
 			SubPath:       subPath,
@@ -802,6 +804,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 	if p.Name != "" {
 		dep.GhPrefix = p.Github
 		dep.PrPrefix = p.PkgPrNew
+		dep.TgzPrefix = p.Tgz
 		dep.PkgName = p.Name
 		dep.PkgVersion = p.Version
 	}
@@ -860,7 +863,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 	var exactVersion bool
 	if dep.GhPrefix {
 		exactVersion = isCommitish(dep.PkgVersion) || npm.IsExactVersion(strings.TrimPrefix(dep.PkgVersion, "v"))
-	} else if dep.PrPrefix {
+	} else if dep.PrPrefix || dep.TgzPrefix {
 		exactVersion = true
 	} else {
 		exactVersion = npm.IsExactVersion(dep.PkgVersion)

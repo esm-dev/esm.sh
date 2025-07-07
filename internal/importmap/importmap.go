@@ -374,6 +374,8 @@ func walkDependencies(deps map[string]string, callback func(specifier, pkgName, 
 			prefix = "/gh"
 		} else if pkg.PkgPrNew {
 			prefix = "/pr"
+		} else if pkg.Tgz {
+			prefix = "/tgz"
 		}
 		callback(specifier, pkgName, pkgVersion, prefix)
 	}

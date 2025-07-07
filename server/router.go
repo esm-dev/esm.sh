@@ -69,7 +69,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 	)
 
 	return func(ctx *rex.Context) any {
-		pathname := ctx.R.URL.Path
+		pathname := ctx.R.URL.EscapedPath()
 
 		// ban malicious requests
 		if strings.HasPrefix(pathname, "/.") || strings.HasSuffix(pathname, ".env") || strings.HasSuffix(pathname, ".php") {
@@ -175,11 +175,11 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 			i := len(pathname) - 1
 			j := 0
 			for {
-				if i < 0 || pathname[i] == '/' {
-					break
-				}
 				if pathname[i] == ':' {
 					j = i
+				}
+				if i < 0 || pathname[i] < '0' || pathname[i] > '9' {
+					break
 				}
 				i--
 			}
@@ -867,6 +867,8 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 			registryPrefix = "/gh"
 		} else if esm.PrPrefix {
 			registryPrefix = "/pr"
+		} else if esm.TgzPrefix {
+			registryPrefix = "/tgz"
 		}
 
 		// redirect `/@types/PKG` to it's main dts file
@@ -979,6 +981,8 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 				if asteriskPrefix {
 					if esm.GhPrefix || esm.PrPrefix {
 						pkgName = pkgName[0:3] + "*" + pkgName[3:]
+					} else if esm.TgzPrefix {
+						pkgName = pkgName[0:5] + "*" + pkgName[5:]
 					} else {
 						pkgName = "*" + pkgName
 					}
@@ -1006,6 +1010,8 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 				if asteriskPrefix {
 					if esm.GhPrefix || esm.PrPrefix {
 						pkgName = pkgName[0:3] + "*" + pkgName[3:]
+					} else if esm.TgzPrefix {
+						pkgName = pkgName[0:5] + "*" + pkgName[5:]
 					} else {
 						pkgName = "*" + pkgName
 					}
@@ -1321,6 +1327,8 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 			if asteriskPrefix {
 				if esm.GhPrefix || esm.PrPrefix {
 					pkgName = pkgName[0:3] + "*" + pkgName[3:]
+				} else if esm.TgzPrefix {
+					pkgName = pkgName[0:5] + "*" + pkgName[5:]
 				} else {
 					pkgName = "*" + pkgName
 				}
