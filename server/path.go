@@ -207,12 +207,13 @@ func parseEsmPath(npmrc *NpmRC, pathname string) (esm EsmPath, extraQuery string
 		return
 	}
 
-	exactVersion = len(esm.PkgVersion) > 0 && npm.IsExactVersion(esm.PkgVersion)
+	originalExactVersion := len(esm.PkgVersion) > 0 && npm.IsExactVersion(esm.PkgVersion)
+	exactVersion = originalExactVersion
 	
 	// Check if version is a date format (yyyy-mm-dd)
 	isDateVersion := npm.IsDateVersion(esm.PkgVersion)
 	
-	if !exactVersion {
+	if !originalExactVersion {
 		var p *npm.PackageJSON
 		if isDateVersion {
 			// For date versions, resolve directly to exact version using date-based resolution
@@ -223,7 +224,7 @@ func parseEsmPath(npmrc *NpmRC, pathname string) (esm EsmPath, extraQuery string
 		}
 		if err == nil {
 			esm.PkgVersion = p.Version
-			exactVersion = true // After resolving, we have an exact version
+			// Keep exactVersion as false for redirect logic even after resolution
 		}
 	}
 	return
