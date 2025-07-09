@@ -51,7 +51,7 @@ func (p EsmPath) Specifier() string {
 	return p.Name()
 }
 
-func praseEsmPath(npmrc *NpmRC, pathname string) (esm EsmPath, extraQuery string, exactVersion bool, hasTargetSegment bool, err error) {
+func parseEsmPath(npmrc *NpmRC, pathname string) (esm EsmPath, extraQuery string, exactVersion bool, hasTargetSegment bool, err error) {
 	// see https://pkg.pr.new
 	if strings.HasPrefix(pathname, "/pr/") || strings.HasPrefix(pathname, "/pkg.pr.new/") {
 		if strings.HasPrefix(pathname, "/pr/") {
@@ -207,12 +207,24 @@ func praseEsmPath(npmrc *NpmRC, pathname string) (esm EsmPath, extraQuery string
 		return
 	}
 
-	exactVersion = len(esm.PkgVersion) > 0 && npm.IsExactVersion(esm.PkgVersion)
-	if !exactVersion {
+	originalExactVersion := len(esm.PkgVersion) > 0 && npm.IsExactVersion(esm.PkgVersion)
+	exactVersion = originalExactVersion
+	
+	// Check if version is a date format (yyyy-mm-dd)
+	isDateVersion := npm.IsDateVersion(esm.PkgVersion)
+	
+	if !originalExactVersion {
 		var p *npm.PackageJSON
-		p, err = npmrc.getPackageInfo(pkgName, esm.PkgVersion)
+		if isDateVersion {
+			// For date versions, resolve directly to exact version using date-based resolution
+			p, err = npmrc.getPackageInfoByDate(pkgName, esm.PkgVersion)
+		} else {
+			// Normal semver resolution
+			p, err = npmrc.getPackageInfo(pkgName, esm.PkgVersion)
+		}
 		if err == nil {
 			esm.PkgVersion = p.Version
+			// Keep exactVersion as false for redirect logic even after resolution
 		}
 	}
 	return
