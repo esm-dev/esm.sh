@@ -211,9 +211,10 @@ func (ctx *BuildContext) buildPath() {
 	if ctx.dev {
 		name += ".development"
 	}
-	if ctx.bundleMode == BundleDeps {
+	switch ctx.bundleMode {
+	case BundleDeps:
 		name += ".bundle"
-	} else if ctx.bundleMode == BundleFalse {
+	case BundleFalse:
 		name += ".nobundle"
 	}
 	ctx.path = fmt.Sprintf(
@@ -1520,9 +1521,10 @@ func (ctx *BuildContext) install() (err error) {
 
 	// - install dependencies in `BundleDeps` mode
 	// - install '@babel/runtime' and '@swc/helpers' if they are present in the dependencies in `BundleDefault` mode
-	if ctx.bundleMode == BundleDeps {
+	switch ctx.bundleMode {
+	case BundleDeps:
 		ctx.npmrc.installDependencies(ctx.wd, ctx.pkgJson, false, nil)
-	} else if ctx.bundleMode == BundleDefault {
+	case BundleDefault:
 		if v, ok := ctx.pkgJson.Dependencies["@babel/runtime"]; ok {
 			ctx.npmrc.installDependencies(ctx.wd, &npm.PackageJSON{Dependencies: map[string]string{"@babel/runtime": v}}, false, nil)
 		}

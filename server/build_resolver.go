@@ -999,7 +999,7 @@ func (ctx *BuildContext) resolveDTS(entry BuildEntry) (string, error) {
 
 func (ctx *BuildContext) getImportPath(esm EsmPath, buildArgsPrefix string, externalAll bool) string {
 	if strings.HasSuffix(esm.SubPath, ".json") && ctx.existsPkgFile(esm.SubPath) {
-		return esm.Name() + "/" + esm.SubPath + "?module"
+		return "/" + esm.Name() + "/" + esm.SubPath + "?module"
 	}
 	asteriskPrefix := ""
 	if externalAll {
