@@ -283,7 +283,45 @@ func ToTypesPackageName(pkgName string) string {
 }
 
 
-// ResolveVersionByTime finds the latest version published before or at the given time.
+// IsStableVersion returns true if the version is a stable release (not experimental, beta, alpha, etc.)
+func IsStableVersion(version string) bool {
+	v := strings.ToLower(version)
+	// Check for common prerelease identifiers
+	prereleaseKeywords := []string{
+		"experimental", "beta", "alpha", "rc", "pre", "preview", "canary", "dev", "nightly",
+		"snapshot", "test", "unstable", "next", "latest", "edge", "insiders",
+	}
+	
+	for _, keyword := range prereleaseKeywords {
+		if strings.Contains(v, keyword) {
+			return false
+		}
+	}
+	
+	// Additional check for semver prerelease pattern (e.g., 1.0.0-alpha.1)
+	if strings.Contains(version, "-") {
+		parts := strings.Split(version, "-")
+		if len(parts) > 1 {
+			prereleaseId := strings.ToLower(parts[1])
+			// Check if the prerelease identifier starts with a known prerelease keyword
+			for _, keyword := range prereleaseKeywords {
+				if strings.HasPrefix(prereleaseId, keyword) {
+					return false
+				}
+			}
+			// Also check if the entire prerelease identifier is a known keyword
+			for _, keyword := range prereleaseKeywords {
+				if prereleaseId == keyword {
+					return false
+				}
+			}
+		}
+	}
+	
+	return true
+}
+
+// ResolveVersionByTime finds the latest stable version published before or at the given time.
 func ResolveVersionByTime(metadata *PackageMetadata, targetTime time.Time) (string, error) {
 	type versionTime struct {
 		version string
@@ -298,6 +336,11 @@ func ResolveVersionByTime(metadata *PackageMetadata, targetTime time.Time) (stri
 		}
 		// Only include versions that exist in the versions map
 		if _, exists := metadata.Versions[version]; !exists {
+			continue
+		}
+
+		// Skip unstable versions (experimental, beta, alpha, etc.)
+		if !IsStableVersion(version) {
 			continue
 		}
 
@@ -316,7 +359,7 @@ func ResolveVersionByTime(metadata *PackageMetadata, targetTime time.Time) (stri
 	}
 
 	if len(validVersions) == 0 {
-		return "", errors.New("no versions found for the specified date")
+		return "", errors.New("no stable versions found for the specified date")
 	}
 
 	// Sort by publish time, latest first
