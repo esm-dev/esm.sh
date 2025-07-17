@@ -42,11 +42,6 @@ func (fs *fsStorage) Stat(key string) (stat Stat, err error) {
 	return fi, nil
 }
 
-func (fs *fsStorage) List(prefix string) (keys []string, err error) {
-	dir := strings.TrimSuffix(utils.NormalizePathname(prefix)[1:], "/")
-	return findFiles(filepath.Join(fs.root, dir), dir)
-}
-
 func (fs *fsStorage) Get(key string) (content io.ReadCloser, stat Stat, err error) {
 	filename := filepath.Join(fs.root, key)
 	file, err := os.Open(filename)
@@ -63,6 +58,11 @@ func (fs *fsStorage) Get(key string) (content io.ReadCloser, stat Stat, err erro
 	return
 }
 
+func (fs *fsStorage) List(prefix string) (keys []string, err error) {
+	dir := strings.TrimSuffix(utils.NormalizePathname(prefix)[1:], "/")
+	return findFiles(filepath.Join(fs.root, dir), dir)
+}
+
 func (fs *fsStorage) Put(key string, content io.Reader) (err error) {
 	filename := filepath.Join(fs.root, key)
 	err = ensureDir(filepath.Dir(filename))
@@ -74,17 +74,17 @@ func (fs *fsStorage) Put(key string, content io.Reader) (err error) {
 	if err != nil {
 		return
 	}
-	defer file.Close()
 
 	_, err = io.Copy(file, content)
+	file.Close()
+	if err != nil {
+		os.Remove(filename) // clean up if error occurs
+	}
 	return
 }
 
-func (fs *fsStorage) Delete(keys ...string) (err error) {
-	for _, key := range keys {
-		os.Remove(filepath.Join(fs.root, key))
-	}
-	return
+func (fs *fsStorage) Delete(key string) (err error) {
+	return os.Remove(filepath.Join(fs.root, key))
 }
 
 func (fs *fsStorage) DeleteAll(prefix string) (deletedKeys []string, err error) {

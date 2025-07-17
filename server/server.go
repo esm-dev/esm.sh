@@ -64,11 +64,19 @@ func Serve() {
 	}
 
 	// initialize storage
-	buildStorage, err := storage.New(&config.Storage)
+	esmStorage, err := storage.New(&config.Storage)
 	if err != nil {
 		logger.Fatalf("failed to initialize build storage(%s): %v", config.Storage.Type, err)
 	}
 	logger.Debugf("storage initialized, type: %s, endpoint: %s", config.Storage.Type, config.Storage.Endpoint)
+
+	if config.MigrationStorage.Type != "" {
+		migrationStorage, err := storage.New(&config.MigrationStorage)
+		if err != nil {
+			logger.Fatalf("failed to initialize migration storage(%s): %v", config.MigrationStorage.Type, err)
+		}
+		esmStorage = storage.NewMigrationStorage(esmStorage, migrationStorage)
+	}
 
 	// pre-compile uno generator in background
 	go generateUnoCSS(&NpmRC{NpmRegistry: NpmRegistry{Registry: "https://registry.npmjs.org/"}}, "", "")
@@ -82,8 +90,8 @@ func Serve() {
 		rex.Optional(rex.AccessLogger(accessLogger), config.AccessLog),
 		rex.Optional(rex.Compress(), config.Compress),
 		rex.Optional(customLandingPage(&config.CustomLandingPage), config.CustomLandingPage.Origin != ""),
-		rex.Optional(esmLegacyRouter(buildStorage), config.LegacyServer != ""),
-		esmRouter(db, buildStorage, logger),
+		rex.Optional(esmLegacyRouter(esmStorage), config.LegacyServer != ""),
+		esmRouter(db, esmStorage, logger),
 	)
 
 	// start server
