@@ -33,7 +33,7 @@ type Config struct {
 	BuildConcurrency    uint16                 `json:"buildConcurrency"`
 	BuildWaitTime       uint16                 `json:"buildWaitTime"`
 	Storage             storage.StorageOptions `json:"storage"`
-	CacheRawFile        bool                   `json:"cacheRawFile"`
+	MigrationStorage    storage.StorageOptions `json:"migrationStorage"`
 	LogDir              string                 `json:"logDir"`
 	LogLevel            string                 `json:"logLevel"`
 	AccessLog           bool                   `json:"accessLog"`
@@ -46,7 +46,7 @@ type Config struct {
 	MinifyRaw           json.RawMessage        `json:"minify"`
 	SourceMapRaw        json.RawMessage        `json:"sourceMap"`
 	CompressRaw         json.RawMessage        `json:"compress"`
-	LegacyServer        string                 `json:"legacyServer"` // normally you don't need to set this
+	LegacyServer        string                 `json:"legacyServer"`
 	Minify              bool                   `json:"-"`
 	SourceMap           bool                   `json:"-"`
 	Compress            bool                   `json:"-"`
