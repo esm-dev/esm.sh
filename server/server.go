@@ -68,8 +68,6 @@ func Serve() {
 	if err != nil {
 		logger.Fatalf("failed to initialize build storage(%s): %v", config.Storage.Type, err)
 	}
-	logger.Debugf("storage initialized, type: %s, endpoint: %s", config.Storage.Type, config.Storage.Endpoint)
-
 	if config.MigrationStorage.Type != "" {
 		migrationStorage, err := storage.New(&config.MigrationStorage)
 		if err != nil {
@@ -77,6 +75,7 @@ func Serve() {
 		}
 		esmStorage = storage.NewMigrationStorage(esmStorage, migrationStorage)
 	}
+	logger.Debugf("storage initialized, type: %s, endpoint: %s", config.Storage.Type, config.Storage.Endpoint)
 
 	// pre-compile uno generator in background
 	go generateUnoCSS(&NpmRC{NpmRegistry: NpmRegistry{Registry: "https://registry.npmjs.org/"}}, "", "")
@@ -84,8 +83,8 @@ func Serve() {
 	// add middlewares
 	rex.Use(
 		rex.Header("Server", "esm.sh"),
-		cors(config.CorsAllowOrigins),
 		rex.Logger(logger),
+		cors(config.CorsAllowOrigins),
 		pprofRouter(),
 		rex.Optional(rex.AccessLogger(accessLogger), config.AccessLog),
 		rex.Optional(rex.Compress(), config.Compress),
