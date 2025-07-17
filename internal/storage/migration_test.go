@@ -27,38 +27,38 @@ func TestMigrationStorage(t *testing.T) {
 
 	migrationStorage := NewMigrationStorage(front, back)
 
-	err = back.Put("foo.txt", bytes.NewBufferString("Hello, World!"))
+	err = back.Put("test.txt", bytes.NewBufferString("Hello World!"))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	_, err = front.Stat("foo.txt")
+	_, err = front.Stat("test.txt")
 	if err != ErrNotFound {
 		t.Fatal("Expected error, but got nil")
 	}
 
-	_, _, err = front.Get("foo.txt")
+	_, _, err = front.Get("test.txt")
 	if err != ErrNotFound {
 		t.Fatal("Expected error, but got nil")
 	}
 
-	fi, err := migrationStorage.Stat("foo.txt")
+	fi, err := migrationStorage.Stat("test.txt")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if fi.Size() != 13 {
-		t.Fatalf("invalid file size(%d), shoud be 13", fi.Size())
+	if fi.Size() != 12 {
+		t.Fatalf("invalid file size(%d), shoud be 12", fi.Size())
 	}
 
-	f, fi, err := migrationStorage.Get("foo.txt")
+	f, fi, err := migrationStorage.Get("test.txt")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer f.Close()
 
-	if fi.Size() != 13 {
-		t.Fatalf("invalid file size(%d), shoud be 13", fi.Size())
+	if fi.Size() != 12 {
+		t.Fatalf("invalid file size(%d), shoud be 12", fi.Size())
 	}
 
 	data, err := io.ReadAll(f)
@@ -66,27 +66,27 @@ func TestMigrationStorage(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if string(data) != "Hello, World!" {
-		t.Fatalf("invalid file content('%s'), shoud be 'Hello, World!'", string(data))
+	if string(data) != "Hello World!" {
+		t.Fatalf("invalid file content('%s'), shoud be 'Hello World!'", string(data))
 	}
 
-	fi, err = front.Stat("foo.txt")
+	fi, err = front.Stat("test.txt")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if fi.Size() != 13 {
-		t.Fatalf("invalid file size(%d), shoud be 13", fi.Size())
+	if fi.Size() != 12 {
+		t.Fatalf("invalid file size(%d), shoud be 12", fi.Size())
 	}
 
-	f, fi, err = front.Get("foo.txt")
+	f, fi, err = front.Get("test.txt")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer f.Close()
 
-	if fi.Size() != 13 {
-		t.Fatalf("invalid file size(%d), shoud be 13", fi.Size())
+	if fi.Size() != 12 {
+		t.Fatalf("invalid file size(%d), shoud be 12", fi.Size())
 	}
 
 	data, err = io.ReadAll(f)
@@ -94,7 +94,7 @@ func TestMigrationStorage(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if string(data) != "Hello, World!" {
-		t.Fatalf("invalid file content('%s'), shoud be 'Hello, World!'", string(data))
+	if string(data) != "Hello World!" {
+		t.Fatalf("invalid file content('%s'), shoud be 'Hello World!'", string(data))
 	}
 }
