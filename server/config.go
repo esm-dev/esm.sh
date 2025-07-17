@@ -34,7 +34,6 @@ type Config struct {
 	BuildWaitTime       uint16                 `json:"buildWaitTime"`
 	Storage             storage.StorageOptions `json:"storage"`
 	MigrationStorage    storage.StorageOptions `json:"migrationStorage"`
-	CacheRawFile        bool                   `json:"cacheRawFile"`
 	LogDir              string                 `json:"logDir"`
 	LogLevel            string                 `json:"logLevel"`
 	AccessLog           bool                   `json:"accessLog"`

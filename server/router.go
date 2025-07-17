@@ -1103,70 +1103,38 @@ func esmRouter(db Database, esmStorage storage.Storage, logger *log.Logger) rex.
 					}
 					return redirect(ctx, fmt.Sprintf("%s/%s%s%s", origin, esm.Name(), utils.NormalizePathname(entry.main), query), true)
 				}
-				var stat storage.Stat
-				var content io.ReadCloser
-				var etag string
-				var cachePath string
-				var cacheHit bool
-				if config.CacheRawFile {
-					cachePath = path.Join("raw", esm.Name(), esm.SubPath)
-					content, stat, err = esmStorage.Get(cachePath)
-					if err != nil && err != storage.ErrNotFound {
-						return rex.Status(500, "storage error")
-					}
-					if err == nil {
-						etag = fmt.Sprintf(`W/"%x-%x"`, stat.ModTime().Unix(), stat.Size())
-						if ifNoneMatch := ctx.R.Header.Get("If-None-Match"); ifNoneMatch == etag {
-							defer content.Close()
-							return rex.Status(http.StatusNotModified, nil)
-						}
-						cacheHit = true
-					}
-				}
-				if !cacheHit {
-					filename := path.Join(npmrc.StoreDir(), esm.Name(), "node_modules", esm.PkgName, esm.SubPath)
-					stat, err = os.Lstat(filename)
-					if err != nil && os.IsNotExist(err) {
-						// if the file does not exist, try to install the package
-						_, err = npmrc.installPackage(esm.Package())
-						if err != nil {
-							return rex.Status(500, err.Error())
-						}
-						stat, err = os.Lstat(filename)
-					}
+				filename := path.Join(npmrc.StoreDir(), esm.Name(), "node_modules", esm.PkgName, esm.SubPath)
+				stat, err := os.Lstat(filename)
+				if err != nil && os.IsNotExist(err) {
+					// if the file does not exist, try to install the package
+					_, err = npmrc.installPackage(esm.Package())
 					if err != nil {
-						if os.IsNotExist(err) {
-							ctx.SetHeader("Cache-Control", ccImmutable)
-							return rex.Status(404, "File Not Found")
-						}
 						return rex.Status(500, err.Error())
 					}
-					if stat.(os.FileInfo).IsDir() {
+					stat, err = os.Lstat(filename)
+				}
+				if err != nil {
+					if os.IsNotExist(err) {
 						ctx.SetHeader("Cache-Control", ccImmutable)
 						return rex.Status(404, "File Not Found")
 					}
-					// limit the file size up to 50MB
-					if stat.Size() > maxAssetFileSize {
-						return rex.Status(403, "File Too Large")
-					}
-					etag = fmt.Sprintf(`W/"%x-%x"`, stat.ModTime().Unix(), stat.Size())
-					if ifNoneMatch := ctx.R.Header.Get("If-None-Match"); ifNoneMatch == etag {
-						return rex.Status(http.StatusNotModified, nil)
-					}
-					content, err = os.Open(filename)
-					if err != nil {
-						return rex.Status(500, err.Error())
-					}
-					if config.CacheRawFile {
-						go func() {
-							f, err := os.Open(filename)
-							if err != nil {
-								return
-							}
-							defer f.Close()
-							esmStorage.Put(cachePath, f)
-						}()
-					}
+					return rex.Status(500, err.Error())
+				}
+				if stat.IsDir() {
+					ctx.SetHeader("Cache-Control", ccImmutable)
+					return rex.Status(404, "File Not Found")
+				}
+				// limit the file size up to 50MB
+				if stat.Size() > maxAssetFileSize {
+					return rex.Status(403, "File Too Large")
+				}
+				etag := fmt.Sprintf(`W/"%x-%x"`, stat.ModTime().Unix(), stat.Size())
+				if ifNoneMatch := ctx.R.Header.Get("If-None-Match"); ifNoneMatch == etag {
+					return rex.Status(http.StatusNotModified, nil)
+				}
+				content, err := os.Open(filename)
+				if err != nil {
+					return rex.Status(500, err.Error())
 				}
 				if endsWith(esm.SubPath, ".js", ".mjs", ".cjs") {
 					ctx.SetHeader("Content-Type", ctJavaScript)
@@ -1181,9 +1149,6 @@ func esmRouter(db Database, esmStorage storage.Storage, logger *log.Logger) rex.
 					}
 				}
 				ctx.SetHeader("Content-Length", fmt.Sprintf("%d", stat.Size()))
-				if cacheHit {
-					ctx.SetHeader("X-Raw-File-Cache-Status", "HIT")
-				}
 				ctx.SetHeader("Etag", etag)
 				ctx.SetHeader("Last-Modified", stat.ModTime().UTC().Format(http.TimeFormat))
 				ctx.SetHeader("Cache-Control", ccImmutable)
