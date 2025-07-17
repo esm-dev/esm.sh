@@ -32,13 +32,12 @@ func (m *migrationStorage) Get(key string) (content io.ReadCloser, stat Stat, er
 	if err == ErrNotFound {
 		content, stat, err = m.back.Get(key)
 		if err == nil {
-			pr, pw := io.Pipe()
-			go func(content io.ReadCloser) {
-				defer pw.Close()
-				defer content.Close()
-				m.front.Put(key, io.TeeReader(content, pw))
-			}(content)
-			content = pr
+			defer content.Close()
+			err = m.front.Put(key, content)
+			if err != nil {
+				return
+			}
+			content, stat, err = m.front.Get(key)
 		}
 	}
 	return
