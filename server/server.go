@@ -44,18 +44,20 @@ func Serve() {
 		os.Setenv("NO_COLOR", "1")
 	}
 
-	logger, err := log.New(fmt.Sprintf("file:%s?buffer=32k&fileDateFormat=20060102", path.Join(config.LogDir, "server.log")))
+	logger, err := log.New(fmt.Sprintf("file:%s?buffer=64k&fileDateFormat=20060102&term", path.Join(config.LogDir, "server.log")))
 	if err != nil {
 		fmt.Println("failed to initialize logger:", err)
 		os.Exit(1)
 	}
+	if os.Getenv("ESMDIR") != "" {
+		logger.Term(false)
+	}
 	logger.SetLevelByName(config.LogLevel)
 
-	accessLogger, err := log.New(fmt.Sprintf("file:%s?buffer=32k&fileDateFormat=20060102", path.Join(config.LogDir, "access.log")))
+	accessLogger, err := log.New(fmt.Sprintf("file:%s?buffer=1m&fileDateFormat=20060102", path.Join(config.LogDir, "access.log")))
 	if err != nil {
 		logger.Fatalf("failed to initialize access logger: %v", err)
 	}
-	accessLogger.SetQuite(true)
 
 	// open database
 	db, err := OpenBoltDB(path.Join(config.WorkDir, "esm.db"))
