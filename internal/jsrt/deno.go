@@ -31,7 +31,7 @@ func GetDenoPath(workDir string) (denoPath string, err error) {
 		return denoPath, nil
 	}
 
-	err = installDeno(denoPath, "2.2.2")
+	err = installDeno(denoPath, "2.4.2")
 	if err != nil {
 		return "", err
 	}
