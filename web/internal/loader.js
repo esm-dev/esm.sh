@@ -22,6 +22,10 @@ for await (const line of Deno.stdin.readable.pipeThrough(new TextDecoderStream()
         output(lang, code);
         break;
       }
+      case "tailwind": {
+        output("css", await tailwind(...args));
+        break;
+      }
       case "unocss": {
         output("css", await unocss(...args));
         break;
@@ -135,6 +139,47 @@ function getPackageVersion(importMap, pkgName, defaultVersion) {
   return defaultVersion;
 }
 
+async function tailwind(_id, content, config) {
+  const compilerId = config?.filename ?? ".";
+  if (!once.tailwindCompilers) {
+    once.tailwindCompilers = new Map();
+  }
+  if (!once.tailwind){
+    once.tailwind = import("npm:@esm.sh/tailwindcss@4.1.10");
+  }
+  if (!once.oxide) {
+    once.oxide = import("npm:@esm.sh/oxide-wasm@0.1.2").then(({ init, extract }) =>init().then(() => ({ extract })));
+  }
+  let compiler = once.tailwindCompilers.get(compilerId);
+  if (!compiler || compiler.configCSS !== config?.css) {
+    compiler = (async () => {
+      const { compile } = await  once.tailwind;
+    return compile(config.css, {
+        async loadStylesheet(id, sheetBase) {
+          if (id === "tw-animate-css") {
+            const css = await fetch("https://esm.sh/tw-animate-css@1.3.4/dist/tw-animate.css").then(res => res.text());
+            return {
+              content: css,
+            };
+          }
+          if (id === "tailwindcss") {
+            const css = await fetch("https://esm.sh/tailwindcss@4.1.10/index.css").then(res => res.text());
+            return {
+              content: css,
+            };
+          }
+          console.log("[sw.mjs] unknown stylesheet id:", id, ", sheetBase:", sheetBase);
+          return null;
+        },
+      });
+    })();
+    compiler.configCSS = config?.css;
+    once.tailwindCompilers.set(compilerId, compiler);
+  }
+  const { extract } = await once.oxide;
+  return (await compiler).build(extract(content));
+}
+
 // generate unocss for the given content
 async function unocss(_id, content, config) {
   const generatorId = config?.filename ?? ".";
@@ -149,5 +194,5 @@ async function unocss(_id, content, config) {
   }
   const { update, generate } = await uno;
   await update(content);
-  return await generate();
+  return generate();
 }

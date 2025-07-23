@@ -172,16 +172,141 @@ func resolveVueVersion(npmrc *NpmRC, importMap importmap.ImportMap) (vueVersion 
 	return
 }
 
+func compileTailwindCSSLoader(npmrc *NpmRC, pkgVersion string, loaderExecPath string) (err error) {
+	wd := path.Join(npmrc.StoreDir(), "tailwindcss@"+pkgVersion)
+
+	// install @esm.sh/tailwindcss
+	pkgJson, err := npmrc.installPackage(npm.Package{Name: "@esm.sh/tailwindcss", Version: pkgVersion})
+	if err != nil {
+		return
+	}
+	npmrc.installDependencies(wd, pkgJson, false, nil)
+
+	loaderJS := `
+		import { compile } from "tailwindcss";
+    import { init, extract } from "npm:@esm.sh/oxide-wasm@0.1.2";
+
+	  const { stdin, stdout } = Deno;
+	  const write = data => stdout.write(new TextEncoder().encode(data));
+
+	  try {
+	    let content = "";
+	    for await (const text of stdin.readable.pipeThrough(new TextDecoderStream())) {
+	      content += text;
+	    }
+	    let configCSS = undefined;
+	    const n = Number(Deno.args[0]);
+	    if (n > 0) {
+	      configCSS = content.slice(0, n);
+	      content = content.slice(n);
+	    }
+			const cacheDir = Deno.args[1];
+			const tailwind = await compile(configCSS ?? "", {
+				async loadStylesheet(id, sheetBase) {
+					if (id === "tw-animate-css") {
+						const css = await fetch("https://esm.sh/tw-animate-css@1.3.4/dist/tw-animate.css").then(res => res.text());
+						return {
+							content: css,
+						};
+					}
+          if (id === "tailwindcss") {
+            const css = await fetch("https://esm.sh/tailwindcss@4.1.10/index.css").then(res => res.text());
+            return {
+              content: css,
+            };
+          }
+          console.log("[sw.mjs] unknown stylesheet id:", id, ", sheetBase:", sheetBase);
+          return null;
+        },
+			})
+			await init();
+	    const code = await tailwind.build(extract(content))
+	    await write("1\n" + code);
+	  } catch (err) {
+	    await write("0\n" + err.message);
+	  }
+	`
+	err = buildLoader(wd, loaderJS, path.Join(wd, "loader.js"))
+	if err != nil {
+		return
+	}
+
+	err = doOnce("check-deno", func() (err error) {
+		_, err = jsrt.GetDenoPath(config.WorkDir)
+		return err
+	})
+	if err != nil {
+		return
+	}
+
+	cmd := exec.Command(
+		path.Join(config.WorkDir, "bin/deno"),
+		"compile",
+		"--no-config",
+		"--no-lock",
+		"--no-check",
+		"--no-prompt",
+		"--allow-env",
+		"--allow-read="+config.WorkDir+"/cache",
+		"--allow-write="+config.WorkDir+"/cache",
+		"--allow-net=registry.npmjs.org,fonts.googleapis.com",
+		"--quiet",
+		"--output", loaderExecPath,
+		path.Join(wd, "loader.js"),
+	)
+	cmd.Env = []string{"DENO_NO_UPDATE_CHECK=1"}
+	_, err = cmd.Output()
+	if err != nil {
+		err = fmt.Errorf("failed to compile %s: %s", path.Base(loaderExecPath), err.Error())
+	}
+	return
+}
+
+func generateTailwindCSS(npmrc *NpmRC, configCSS string, content string) (out *LoaderOutput, err error) {
+	var tailwindVersion = "4.1.10"
+	loaderExecPath := path.Join(config.WorkDir, "bin", "tailwind-"+tailwindVersion)
+
+	err = doOnce(loaderExecPath, func() (err error) {
+		if !existsFile(loaderExecPath) {
+			if DEBUG {
+				fmt.Println(term.Dim("Compiling tailwind loader..."))
+			}
+			err = compileTailwindCSSLoader(npmrc, tailwindVersion, loaderExecPath)
+		}
+		return
+	})
+	if err != nil {
+		err = errors.New("failed to compile tailwind engine: " + err.Error())
+		return
+	}
+
+	c := exec.Command(loaderExecPath, strconv.Itoa(len(configCSS)), path.Join(config.WorkDir, "cache/tailwind"))
+	c.Stdin = strings.NewReader(configCSS + content)
+	output, err := c.Output()
+	if err != nil {
+		return
+	}
+	if len(output) < 2 {
+		err = errors.New("bad loader output")
+		return
+	}
+	if output[0] != '1' {
+		err = errors.New(string(output[2:]))
+		return
+	}
+	return &LoaderOutput{Lang: "css", Code: string(output[2:])}, nil
+}
+
 func generateUnoCSS(npmrc *NpmRC, configCSS string, content string) (out *LoaderOutput, err error) {
-	loaderVersion := "0.5.0"
-	loaderExecPath := path.Join(config.WorkDir, "bin", "unocss-"+loaderVersion)
+	unoVersion := "0.5.0"
+	loaderExecPath := path.Join(config.WorkDir, "bin", "unocss-"+unoVersion)
 
 	err = doOnce(loaderExecPath, func() (err error) {
 		if !existsFile(loaderExecPath) {
 			if DEBUG {
 				fmt.Println(term.Dim("Compiling unocss loader..."))
 			}
-			err = compileUnocssLoader(npmrc, loaderVersion, loaderExecPath)
+			err = compileUnocssLoader(npmrc, unoVersion, loaderExecPath)
 		}
 		return
 	})
@@ -207,11 +332,11 @@ func generateUnoCSS(npmrc *NpmRC, configCSS string, content string) (out *Loader
 	return &LoaderOutput{Lang: "css", Code: string(output[2:])}, nil
 }
 
-func compileUnocssLoader(npmrc *NpmRC, loaderVersion string, loaderExecPath string) (err error) {
-	wd := path.Join(npmrc.StoreDir(), "@esm.sh/unocss@"+loaderVersion)
+func compileUnocssLoader(npmrc *NpmRC, pkgVersion string, loaderExecPath string) (err error) {
+	wd := path.Join(npmrc.StoreDir(), "@esm.sh/unocss@"+pkgVersion)
 
 	// install @esm.sh/unocss
-	pkgJson, err := npmrc.installPackage(npm.Package{Name: "@esm.sh/unocss", Version: loaderVersion})
+	pkgJson, err := npmrc.installPackage(npm.Package{Name: "@esm.sh/unocss", Version: pkgVersion})
 	if err != nil {
 		return
 	}

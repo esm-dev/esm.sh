@@ -89,9 +89,10 @@ func transform(options *ResolvedTransformOptions) (out *TransformOutput, err err
 	}
 
 	sourceMap := esbuild.SourceMapNone
-	if options.SourceMap == "external" {
+	switch options.SourceMap {
+	case "external":
 		sourceMap = esbuild.SourceMapExternal
-	} else if options.SourceMap == "inline" {
+	case "inline":
 		sourceMap = esbuild.SourceMapInline
 	}
 
