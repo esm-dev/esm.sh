@@ -18,7 +18,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/esm-dev/esm.sh/internal/jsrt"
+	"github.com/esm-dev/esm.sh/internal/deno"
 	"github.com/ije/gox/set"
 	"github.com/ije/gox/term"
 	"github.com/ije/gox/utils"
@@ -83,7 +83,7 @@ func cjsModuleLexer(b *BuildContext, cjsEntry string) (ret cjsModuleLexerResult,
 
 	if cjsModuleLexerIgnoredPackages.Has(b.esmPath.PkgName) {
 		err = doOnce("check-deno", func() (err error) {
-			_, err = jsrt.GetDenoPath(config.WorkDir)
+			_, err = deno.GetDenoPath(config.WorkDir)
 			return err
 		})
 		if err != nil {

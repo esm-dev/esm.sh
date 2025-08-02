@@ -1,4 +1,4 @@
-package jsrt
+package deno
 
 import (
 	"archive/zip"
