@@ -638,25 +638,35 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 							if exports := pkgJson.Exports; exports.Len() > 0 {
 								for _, exportName := range exports.Keys() {
 									v, _ := exports.Get(exportName)
-									if exportName == "." || (strings.HasPrefix(exportName, "./") && !strings.ContainsRune(exportName, '*')) {
+									if exportName == "." || strings.HasPrefix(exportName, "./") {
 										match := false
-										if s, ok := v.(string); ok && stripModuleExt(s) == stripModuleExt(modulePath) {
+										if s, ok := v.(string); ok {
 											// exports: "./foo": "./foo.js"
-											match = true
+											// exports: "./foo/*": "./foo/*.js"
+											if strings.HasSuffix(stripModuleExt(s), "/*") {
+												match = strings.HasPrefix(stripModuleExt(modulePath), strings.TrimSuffix(stripModuleExt(s), "*"))
+											} else {
+												match = stripModuleExt(s) == stripModuleExt(modulePath)
+											}
 										} else if m, ok := v.(npm.JSONObject); ok {
 											// exports: "./foo": { "import": "./foo.js" }
+											// exports: "./foo/*": { "import": "./foo/*.js" }
 											// exports: "./foo": { "import": { default: "./foo.js" } }
-											// ...
+											// exports: "./foo/*": { "import": { default: "./foo/*.js" } }
 											paths := getExportConditionPaths(m)
 											for _, path := range paths {
-												if stripModuleExt(path) == stripModuleExt(modulePath) {
-													match = true
+												if strings.HasSuffix(stripModuleExt(path), "/*") {
+													match = strings.HasPrefix(stripModuleExt(modulePath), strings.TrimSuffix(stripModuleExt(path), "*"))
+												} else {
+													match = stripModuleExt(path) == stripModuleExt(modulePath)
+												}
+												if match {
 													break
 												}
 											}
 										}
 										if match {
-											asExport = path.Join(pkgJson.Name, stripModuleExt(exportName))
+											asExport = path.Join(pkgJson.Name, stripModuleExt(modulePath))
 											if asExport != entrySpecifier && asExport != entrySpecifier+"/index" {
 												externalPath, err := ctx.resolveExternalModule(asExport, args.Kind, withTypeJSON, analyzeMode)
 												if err != nil {
