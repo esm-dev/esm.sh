@@ -7,14 +7,6 @@ if [ "$host" == "--init" ]; then
   host="$2"
 fi
 
-config=""
-if [ "$init" == "yes" ]; then
-  read -p "? server configuration (JSON): " v
-  if [ "$v" != "" ]; then
-    config="$v"
-  fi
-fi
-
 if [ "$host" == "" ]; then
   read -p "? deploy to (domain or IP): " v
   if [ "$v" != "" ]; then
@@ -79,14 +71,8 @@ ssh -p $sshPort ${user}@${host} << EOF
 
   git version
   if [ "\$?" == "127" ]; then
-    apt-get update
-    apt-get install -y git
-  fi
-
-  ufw version
-  if [ "\$?" == "0" ]; then
-    ufw allow http
-    ufw allow https
+    echo "git is not installed"
+    exit 1
   fi
 
   configjson=/etc/esmd/config.json
@@ -95,6 +81,9 @@ ssh -p $sshPort ${user}@${host} << EOF
   if [ "$init" == "yes" ]; then
     addgroup esm
     adduser --ingroup esm --home=/esm --disabled-login --disabled-password --gecos "" esm
+    rm -f \$configjson
+    mkdir -p /etc/esmd
+    echo '{"workDir":"/esm"}' >> \$configjson
     rm -f \$servicerc
     echo "[Unit]" >> \$servicerc
     echo "Description=esm.sh service" >> \$servicerc
@@ -102,14 +91,7 @@ ssh -p $sshPort ${user}@${host} << EOF
     echo "StartLimitIntervalSec=0" >> \$servicerc
     echo "[Service]" >> \$servicerc
     echo "Type=simple" >> \$servicerc
-    if [ "$config" != "" ]; then
-      rm -f \$configjson
-      mkdir -p /etc/esmd
-      echo '$config' >> \$configjson
-      echo "ExecStart=/usr/local/bin/esmd --config=\$configjson" >> \$servicerc
-    else
-      echo "ExecStart=/usr/local/bin/esmd" >> \$servicerc
-    fi
+    echo "ExecStart=/usr/local/bin/esmd --config=\$configjson" >> \$servicerc
     echo "WorkingDirectory=/esm" >> \$servicerc
     echo "Group=esm" >> \$servicerc
     echo "User=esm" >> \$servicerc

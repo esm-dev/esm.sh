@@ -48,7 +48,7 @@ You can deploy the server to a single machine with the [deploy.sh](./scripts/dep
 
 Recommended hosting requirements:
 
-- Linux system with systemd installed
+- Linux system with systemd and git installed
 - 4x CPU cores or more
 - 8GB RAM or more
 - 100GB disk space or more

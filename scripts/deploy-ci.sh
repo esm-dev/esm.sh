@@ -38,14 +38,8 @@ ssh esm.sh << EOF
 
   git version
   if [ "\$?" == "127" ]; then
-    apt-get update
-    apt-get install -y git
-  fi
-
-  ufw version
-  if [ "\$?" == "0" ]; then
-    ufw allow http
-    ufw allow https
+    echo "git is not installed"
+    exit 1
   fi
 
   configjson=/etc/esmd/config.json
