@@ -510,7 +510,11 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 
 					// resolve specifier using the `browser` field of package.json
 					if !isRelPathSpecifier(specifier) && len(pkgJson.Browser) > 0 && ctx.isBrowserTarget() {
-						if name, ok := pkgJson.Browser[specifier]; ok {
+						name, ok := pkgJson.Browser[specifier]
+						if !ok && strings.HasPrefix(specifier, "node:") {
+							name, ok = pkgJson.Browser[specifier[5:]]
+						}
+						if ok {
 							if name == "" {
 								return esbuild.OnResolveResult{
 									Path:      args.Path,
@@ -1009,12 +1013,8 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 			"global.process.env.NODE_ENV": fmt.Sprintf(`"%s"`, nodeEnv),
 		}
 	} else {
-		if ctx.isBrowserTarget() {
-			switch ctx.esmPath.PkgName {
-			case "react", "react-dom", "typescript":
-				// safe to reserve `process` for these packages
-				delete(define, "process")
-			}
+		if ctx.isBrowserTarget() && safeReserveProcessPackages[ctx.esmPath.PkgName] {
+			delete(define, "process")
 		}
 		if ctx.isDenoTarget() {
 			// deno 2 has removed the `window` global object, let's replace it with `globalThis`

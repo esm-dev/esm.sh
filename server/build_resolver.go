@@ -1281,11 +1281,12 @@ func normalizeSavePath(zoneId string, pathname string) string {
 
 // normalizeImportSpecifier normalizes the given specifier.
 func normalizeImportSpecifier(specifier string) string {
-	if specifier == "." {
+	switch specifier {
+	case ".":
 		specifier = "./index"
-	} else if specifier == ".." {
+	case "..":
 		specifier = "../index"
-	} else {
+	default:
 		specifier = strings.TrimPrefix(specifier, "npm:")
 	}
 	if nodeBuiltinModules[specifier] {
