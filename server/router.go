@@ -61,7 +61,7 @@ const (
 	ctTypeScript     = "application/typescript; charset=utf-8"
 )
 
-func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) rex.Handle {
+func esmRouter(db Database, esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 	var (
 		startTime  = time.Now()
 		globalETag = fmt.Sprintf(`W/"%s"`, VERSION)
@@ -109,12 +109,12 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 				h.Write(options.ImportMap)
 				h.Write([]byte(options.JsxImportSource))
 				h.Write([]byte(options.SourceMap))
-				h.Write([]byte(fmt.Sprintf("%v", options.Minify)))
+				fmt.Fprintf(h, "%v", options.Minify)
 				hash := hex.EncodeToString(h.Sum(nil))
 
 				// if previous build exists, return it directly
 				savePath := normalizeSavePath(ctx.R.Header.Get("X-Zone-Id"), fmt.Sprintf("modules/transform/%s.mjs", hash))
-				if file, _, err := buildStorage.Get(savePath); err == nil {
+				if file, _, err := esmStorage.Get(savePath); err == nil {
 					data, err := io.ReadAll(file)
 					file.Close()
 					if err != nil {
@@ -123,7 +123,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 					output := TransformOutput{
 						Code: string(data),
 					}
-					file, _, err = buildStorage.Get(savePath + ".map")
+					file, _, err = esmStorage.Get(savePath + ".map")
 					if err == nil {
 						data, err = io.ReadAll(file)
 						file.Close()
@@ -151,9 +151,9 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 				}
 				if len(output.Map) > 0 {
 					output.Code = fmt.Sprintf("%s//# sourceMappingURL=+%s", output.Code, path.Base(savePath)+".map")
-					go buildStorage.Put(savePath+".map", strings.NewReader(output.Map))
+					go esmStorage.Put(savePath+".map", strings.NewReader(output.Map))
 				}
-				go buildStorage.Put(savePath, strings.NewReader(output.Code))
+				go esmStorage.Put(savePath, strings.NewReader(output.Code))
 				ctx.SetHeader("Cache-Control", ccMustRevalidate)
 				return output
 
@@ -409,7 +409,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 				return rex.Status(404, "Not Found")
 			}
 			savePath := normalizeSavePath(ctx.R.Header.Get("X-Zone-Id"), fmt.Sprintf("modules/transform/%s.%s", hash, ext))
-			f, fi, err := buildStorage.Get(savePath)
+			f, fi, err := esmStorage.Get(savePath)
 			if err != nil {
 				return rex.Status(500, err.Error())
 			}
@@ -561,7 +561,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 				h.Write([]byte(target))
 				h.Write([]byte(v))
 				savePath := normalizeSavePath(zoneIdHeader, path.Join("modules/x", hex.EncodeToString(h.Sum(nil))+".css"))
-				r, fi, err := buildStorage.Get(savePath)
+				r, fi, err := esmStorage.Get(savePath)
 				if err != nil && err != storage.ErrNotFound {
 					return rex.Status(500, err.Error())
 				}
@@ -685,7 +685,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 					return rex.Status(500, ret.Errors[0].Text)
 				}
 				minifiedCSS := ret.OutputFiles[0].Contents
-				go buildStorage.Put(savePath, bytes.NewReader(minifiedCSS))
+				go esmStorage.Put(savePath, bytes.NewReader(minifiedCSS))
 				ctx.SetHeader("Cache-Control", ccImmutable)
 				ctx.SetHeader("Content-Type", ctCSS)
 				return minifiedCSS
@@ -705,7 +705,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 				h.Write([]byte(target))
 				h.Write([]byte(v))
 				savePath := normalizeSavePath(zoneIdHeader, path.Join("modules/x", hex.EncodeToString(h.Sum(nil))+".mjs"))
-				content, fi, err := buildStorage.Get(savePath)
+				content, fi, err := esmStorage.Get(savePath)
 				if err != nil && err != storage.ErrNotFound {
 					return rex.Status(500, err.Error())
 				}
@@ -797,7 +797,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 					}
 					body = bytes.NewReader([]byte(out.Code))
 					fi = nil
-					go buildStorage.Put(savePath, strings.NewReader(out.Code))
+					go esmStorage.Put(savePath, strings.NewReader(out.Code))
 				}
 				if extname == ".css" && query.Has("module") {
 					css, err := io.ReadAll(body)
@@ -1103,70 +1103,38 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 					}
 					return redirect(ctx, fmt.Sprintf("%s/%s%s%s", origin, esm.Name(), utils.NormalizePathname(entry.main), query), true)
 				}
-				var stat storage.Stat
-				var content io.ReadCloser
-				var etag string
-				var cachePath string
-				var cacheHit bool
-				if config.CacheRawFile {
-					cachePath = path.Join("raw", esm.Name(), esm.SubPath)
-					content, stat, err = buildStorage.Get(cachePath)
-					if err != nil && err != storage.ErrNotFound {
-						return rex.Status(500, "storage error")
-					}
-					if err == nil {
-						etag = fmt.Sprintf(`W/"%x-%x"`, stat.ModTime().Unix(), stat.Size())
-						if ifNoneMatch := ctx.R.Header.Get("If-None-Match"); ifNoneMatch == etag {
-							defer content.Close()
-							return rex.Status(http.StatusNotModified, nil)
-						}
-						cacheHit = true
-					}
-				}
-				if !cacheHit {
-					filename := path.Join(npmrc.StoreDir(), esm.Name(), "node_modules", esm.PkgName, esm.SubPath)
-					stat, err = os.Lstat(filename)
-					if err != nil && os.IsNotExist(err) {
-						// if the file does not exist, try to install the package
-						_, err = npmrc.installPackage(esm.Package())
-						if err != nil {
-							return rex.Status(500, err.Error())
-						}
-						stat, err = os.Lstat(filename)
-					}
+				filename := path.Join(npmrc.StoreDir(), esm.Name(), "node_modules", esm.PkgName, esm.SubPath)
+				stat, err := os.Lstat(filename)
+				if err != nil && os.IsNotExist(err) {
+					// if the file does not exist, try to install the package
+					_, err = npmrc.installPackage(esm.Package())
 					if err != nil {
-						if os.IsNotExist(err) {
-							ctx.SetHeader("Cache-Control", ccImmutable)
-							return rex.Status(404, "File Not Found")
-						}
 						return rex.Status(500, err.Error())
 					}
-					if stat.(os.FileInfo).IsDir() {
+					stat, err = os.Lstat(filename)
+				}
+				if err != nil {
+					if os.IsNotExist(err) {
 						ctx.SetHeader("Cache-Control", ccImmutable)
 						return rex.Status(404, "File Not Found")
 					}
-					// limit the file size up to 50MB
-					if stat.Size() > maxAssetFileSize {
-						return rex.Status(403, "File Too Large")
-					}
-					etag = fmt.Sprintf(`W/"%x-%x"`, stat.ModTime().Unix(), stat.Size())
-					if ifNoneMatch := ctx.R.Header.Get("If-None-Match"); ifNoneMatch == etag {
-						return rex.Status(http.StatusNotModified, nil)
-					}
-					content, err = os.Open(filename)
-					if err != nil {
-						return rex.Status(500, err.Error())
-					}
-					if config.CacheRawFile {
-						go func() {
-							f, err := os.Open(filename)
-							if err != nil {
-								return
-							}
-							defer f.Close()
-							buildStorage.Put(cachePath, f)
-						}()
-					}
+					return rex.Status(500, err.Error())
+				}
+				if stat.IsDir() {
+					ctx.SetHeader("Cache-Control", ccImmutable)
+					return rex.Status(404, "File Not Found")
+				}
+				// limit the file size up to 50MB
+				if stat.Size() > maxAssetFileSize {
+					return rex.Status(403, "File Too Large")
+				}
+				etag := fmt.Sprintf(`W/"%x-%x"`, stat.ModTime().Unix(), stat.Size())
+				if ifNoneMatch := ctx.R.Header.Get("If-None-Match"); ifNoneMatch == etag {
+					return rex.Status(http.StatusNotModified, nil)
+				}
+				content, err := os.Open(filename)
+				if err != nil {
+					return rex.Status(500, err.Error())
 				}
 				if endsWith(esm.SubPath, ".js", ".mjs", ".cjs") {
 					ctx.SetHeader("Content-Type", ctJavaScript)
@@ -1181,9 +1149,6 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 					}
 				}
 				ctx.SetHeader("Content-Length", fmt.Sprintf("%d", stat.Size()))
-				if cacheHit {
-					ctx.SetHeader("X-Raw-File-Cache-Status", "HIT")
-				}
 				ctx.SetHeader("Etag", etag)
 				ctx.SetHeader("Last-Modified", stat.ModTime().UTC().Format(http.TimeFormat))
 				ctx.SetHeader("Cache-Control", ccImmutable)
@@ -1211,7 +1176,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 					savePath = path.Join("modules", pathname)
 				}
 				savePath = normalizeSavePath(npmrc.zoneId, savePath)
-				f, stat, err := buildStorage.Get(savePath)
+				f, stat, err := esmStorage.Get(savePath)
 				if err != nil {
 					if err != storage.ErrNotFound {
 						return rex.Status(500, err.Error())
@@ -1259,7 +1224,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 							xxh := xxhash.New()
 							xxh.Write([]byte(strings.Join(exports, ",")))
 							savePath = strings.TrimSuffix(savePath, ".mjs") + "_" + base64.RawURLEncoding.EncodeToString(xxh.Sum(nil)) + ".mjs"
-							f2, stat, err := buildStorage.Get(savePath)
+							f2, stat, err := esmStorage.Get(savePath)
 							if err == nil {
 								ctx.SetHeader("Content-Length", fmt.Sprintf("%d", stat.Size()))
 								return f2 // auto closed
@@ -1283,7 +1248,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 							if err != nil {
 								return rex.Status(500, err.Error())
 							}
-							go buildStorage.Put(savePath, bytes.NewReader(ret))
+							go esmStorage.Put(savePath, bytes.NewReader(ret))
 							// note: the source map is dropped
 							return ret
 						}
@@ -1444,7 +1409,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 					esm.Name(),
 					args,
 				), esm.SubPath))
-				content, stat, err = buildStorage.Get(savePath)
+				content, stat, err = esmStorage.Get(savePath)
 				return
 			}
 			content, _, err := readDts()
@@ -1456,7 +1421,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 					npmrc:       npmrc,
 					logger:      logger,
 					db:          db,
-					storage:     buildStorage,
+					storage:     esmStorage,
 					esmPath:     esm,
 					args:        buildArgs,
 					externalAll: externalAll,
@@ -1467,7 +1432,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 				case output := <-ch:
 					if output.err != nil {
 						if output.err.Error() == "types not found" {
-							ctx.SetHeader("Cache-Control", ccImmutable)
+							ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", config.NpmQueryCacheTTL))
 							return rex.Status(404, "Types Not Found")
 						}
 						return rex.Status(500, "Failed to build types: "+output.err.Error())
@@ -1564,7 +1529,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 			npmrc:       npmrc,
 			logger:      logger,
 			db:          db,
-			storage:     buildStorage,
+			storage:     esmStorage,
 			esmPath:     esm,
 			args:        buildArgs,
 			bundleMode:  bundleMode,
@@ -1583,11 +1548,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 				if output.err != nil {
 					msg := output.err.Error()
 					if msg == "could not resolve build entry" || strings.HasSuffix(msg, " not found") || strings.Contains(msg, "is not exported from package") || strings.Contains(msg, "no such file or directory") {
-						if strings.HasPrefix(msg, "version ") && strings.HasSuffix(msg, " not found") {
-							ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", config.NpmQueryCacheTTL))
-						} else {
-							ctx.SetHeader("Cache-Control", ccImmutable)
-						}
+						ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", config.NpmQueryCacheTTL))
 						return rex.Status(404, msg)
 					}
 					return rex.Status(500, msg)
@@ -1656,7 +1617,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 				path, _ := utils.SplitByLastByte(savePath, '.')
 				savePath = path + ".css"
 			}
-			f, fi, err := buildStorage.Get(savePath)
+			f, fi, err := esmStorage.Get(savePath)
 			if err != nil {
 				if err == storage.ErrNotFound {
 					// seem the build file is non-exist in the storage
@@ -1694,7 +1655,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 					xxh := xxhash.New()
 					xxh.Write([]byte(strings.Join(exports, ",")))
 					savePath = strings.TrimSuffix(savePath, ".mjs") + "_" + base64.RawURLEncoding.EncodeToString(xxh.Sum(nil)) + ".mjs"
-					f2, stat, err := buildStorage.Get(savePath)
+					f2, stat, err := esmStorage.Get(savePath)
 					if err == nil {
 						ctx.SetHeader("Content-Length", fmt.Sprintf("%d", stat.Size()))
 						return f2 // auto closed
@@ -1710,7 +1671,7 @@ func esmRouter(db Database, buildStorage storage.Storage, logger *log.Logger) re
 					if err != nil {
 						return rex.Status(500, err.Error())
 					}
-					go buildStorage.Put(savePath, bytes.NewReader(ret))
+					go esmStorage.Put(savePath, bytes.NewReader(ret))
 					// note: the source map is dropped
 					return ret
 				}

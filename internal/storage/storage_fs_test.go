@@ -18,33 +18,33 @@ func TestFSStorage(t *testing.T) {
 	}
 	defer os.RemoveAll(root)
 
-	err = fs.Put("foo.txt", bytes.NewBufferString("Hello, World!"))
+	err = fs.Put("test.txt", bytes.NewBufferString("Hello World!"))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = fs.Put("foo/bar.txt", bytes.NewBufferString("Hello, World!"))
+	err = fs.Put("hello/world.txt", bytes.NewBufferString("Hello World!"))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	fi, err := fs.Stat("foo.txt")
+	fi, err := fs.Stat("test.txt")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if fi.Size() != 13 {
-		t.Fatalf("invalid file size(%d), shoud be 13", fi.Size())
+	if fi.Size() != 12 {
+		t.Fatalf("invalid file size(%d), shoud be 12", fi.Size())
 	}
 
-	f, fi, err := fs.Get("foo.txt")
+	f, fi, err := fs.Get("test.txt")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer f.Close()
 
-	if fi.Size() != 13 {
-		t.Fatalf("invalid file size(%d), shoud be 13", fi.Size())
+	if fi.Size() != 12 {
+		t.Fatalf("invalid file size(%d), shoud be 12", fi.Size())
 	}
 
 	data, err := io.ReadAll(f)
@@ -52,8 +52,8 @@ func TestFSStorage(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if string(data) != "Hello, World!" {
-		t.Fatalf("invalid file content('%s'), shoud be 'Hello, World!'", string(data))
+	if string(data) != "Hello World!" {
+		t.Fatalf("invalid file content('%s'), shoud be 'Hello World!'", string(data))
 	}
 
 	keys, err := fs.List("")
@@ -65,7 +65,7 @@ func TestFSStorage(t *testing.T) {
 		t.Fatalf("invalid keys count(%d), shoud be 2", len(keys))
 	}
 
-	keys, err = fs.List("foo/")
+	keys, err = fs.List("hello/")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,26 +74,26 @@ func TestFSStorage(t *testing.T) {
 		t.Fatalf("invalid keys count(%d), shoud be 1", len(keys))
 	}
 
-	if keys[0] != "foo/bar.txt" {
-		t.Fatalf("invalid key('%s'), shoud be 'foo/bar.txt'", keys[0])
+	if keys[0] != "hello/world.txt" {
+		t.Fatalf("invalid key('%s'), shoud be 'hello/world.txt'", keys[0])
 	}
 
-	err = fs.Delete("foo.txt")
+	err = fs.Delete("test.txt")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	_, err = fs.Stat("foo.txt")
+	_, err = fs.Stat("test.txt")
 	if err != ErrNotFound {
 		t.Fatalf("File should be not existent")
 	}
 
-	_, _, err = fs.Get("foo.txt")
+	_, _, err = fs.Get("test.txt")
 	if err != ErrNotFound {
 		t.Fatalf("File should be not existent")
 	}
 
-	deletedKeys, err := fs.DeleteAll("foo/")
+	deletedKeys, err := fs.DeleteAll("hello/")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,8 +102,8 @@ func TestFSStorage(t *testing.T) {
 		t.Fatalf("invalid deleted keys count(%d), shoud be 1", len(deletedKeys))
 	}
 
-	if deletedKeys[0] != "foo/bar.txt" {
-		t.Fatalf("invalid deleted key('%s'), shoud be 'foo/bar.txt'", deletedKeys[0])
+	if deletedKeys[0] != "hello/world.txt" {
+		t.Fatalf("invalid deleted key('%s'), shoud be 'hello/world.txt'", deletedKeys[0])
 	}
 
 	keys, err = fs.List("")

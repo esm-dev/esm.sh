@@ -147,7 +147,7 @@ func (ctx *BuildContext) Build() (meta *BuildMeta, err error) {
 	}
 
 	// analyze splitting modules
-	if !ctx.pkgJson.SideEffectsFalse && ctx.bundleMode == BundleDefault && ctx.pkgJson.Exports.Len() > 1 {
+	if ctx.bundleMode == BundleDefault && ctx.pkgJson.Exports.Len() > 1 {
 		ctx.status = "analyze"
 		err = ctx.analyzeSplitting()
 		if err != nil {
@@ -211,9 +211,10 @@ func (ctx *BuildContext) buildPath() {
 	if ctx.dev {
 		name += ".development"
 	}
-	if ctx.bundleMode == BundleDeps {
+	switch ctx.bundleMode {
+	case BundleDeps:
 		name += ".bundle"
-	} else if ctx.bundleMode == BundleFalse {
+	case BundleFalse:
 		name += ".nobundle"
 	}
 	ctx.path = fmt.Sprintf(
@@ -509,7 +510,11 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 
 					// resolve specifier using the `browser` field of package.json
 					if !isRelPathSpecifier(specifier) && len(pkgJson.Browser) > 0 && ctx.isBrowserTarget() {
-						if name, ok := pkgJson.Browser[specifier]; ok {
+						name, ok := pkgJson.Browser[specifier]
+						if !ok && strings.HasPrefix(specifier, "node:") {
+							name, ok = pkgJson.Browser[specifier[5:]]
+						}
+						if ok {
 							if name == "" {
 								return esbuild.OnResolveResult{
 									Path:      args.Path,
@@ -1008,12 +1013,8 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 			"global.process.env.NODE_ENV": fmt.Sprintf(`"%s"`, nodeEnv),
 		}
 	} else {
-		if ctx.isBrowserTarget() {
-			switch ctx.esmPath.PkgName {
-			case "react", "react-dom", "typescript":
-				// safe to reserve `process` for these packages
-				delete(define, "process")
-			}
+		if ctx.isBrowserTarget() && safeReserveProcessPackages[ctx.esmPath.PkgName] {
+			delete(define, "process")
 		}
 		if ctx.isDenoTarget() {
 			// deno 2 has removed the `window` global object, let's replace it with `globalThis`
@@ -1520,9 +1521,10 @@ func (ctx *BuildContext) install() (err error) {
 
 	// - install dependencies in `BundleDeps` mode
 	// - install '@babel/runtime' and '@swc/helpers' if they are present in the dependencies in `BundleDefault` mode
-	if ctx.bundleMode == BundleDeps {
+	switch ctx.bundleMode {
+	case BundleDeps:
 		ctx.npmrc.installDependencies(ctx.wd, ctx.pkgJson, false, nil)
-	} else if ctx.bundleMode == BundleDefault {
+	case BundleDefault:
 		if v, ok := ctx.pkgJson.Dependencies["@babel/runtime"]; ok {
 			ctx.npmrc.installDependencies(ctx.wd, &npm.PackageJSON{Dependencies: map[string]string{"@babel/runtime": v}}, false, nil)
 		}

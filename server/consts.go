@@ -137,3 +137,10 @@ var forceNpmSpecifiers = map[string]bool{
 	"zlib-sync":         true,
 	"css-tree":          true,
 }
+
+// packages that are safe to reserve global `process` variable for browser target
+var safeReserveProcessPackages = map[string]bool{
+	"react":      true,
+	"react-dom":  true,
+	"typescript": true,
+}

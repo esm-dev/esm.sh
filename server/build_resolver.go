@@ -1000,7 +1000,7 @@ func (ctx *BuildContext) resolveDTS(entry BuildEntry) (string, error) {
 
 func (ctx *BuildContext) getImportPath(esm EsmPath, buildArgsPrefix string, externalAll bool) string {
 	if strings.HasSuffix(esm.SubPath, ".json") && ctx.existsPkgFile(esm.SubPath) {
-		return esm.Name() + "/" + esm.SubPath + "?module"
+		return "/" + esm.Name() + "/" + esm.SubPath + "?module"
 	}
 	asteriskPrefix := ""
 	if externalAll {
@@ -1282,11 +1282,12 @@ func normalizeSavePath(zoneId string, pathname string) string {
 
 // normalizeImportSpecifier normalizes the given specifier.
 func normalizeImportSpecifier(specifier string) string {
-	if specifier == "." {
+	switch specifier {
+	case ".":
 		specifier = "./index"
-	} else if specifier == ".." {
+	case "..":
 		specifier = "../index"
-	} else {
+	default:
 		specifier = strings.TrimPrefix(specifier, "npm:")
 	}
 	if nodeBuiltinModules[specifier] {

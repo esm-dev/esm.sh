@@ -54,13 +54,6 @@
     "secretAccessKey": ""
   },
 
-  // Cache package raw files in the storage, default is false.
-  // The server cleans up npm store periodically, to avoid unnecessary installation when accessing
-  // package raw files, you can enable this option to cache package raw files in the storage.
-  // Note: this option will increase the storage usage, we recommend to enable it if you are using
-  // a S3-compatible storage.
-  "cacheRawFile": false,
-
   // The custom landing page options, default is empty.
   // The server will proxy the `/` request to the `origin` server if it's provided.
   // If your custom landing page has own assets, you also need to provide those asset paths in the `assets` field.

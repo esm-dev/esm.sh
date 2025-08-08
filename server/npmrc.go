@@ -126,12 +126,10 @@ func (npmrc *NpmRC) getRegistryByPackageName(packageName string) *NpmRegistry {
 	return &npmrc.NpmRegistry
 }
 
-type versionResolver func(metadata *npm.PackageMetadata, version string) (string, error)
-
 func (npmrc *NpmRC) fetchPackageMetadata(pkgName string, version string, useVersionSpecificEndpoint bool) (*npm.PackageMetadata, *npm.PackageJSONRaw, error) {
 	reg := npmrc.getRegistryByPackageName(pkgName)
 	regUrl := reg.Registry + pkgName
-	
+
 	if useVersionSpecificEndpoint && strings.HasPrefix(regUrl, npmRegistry) {
 		regUrl += "/" + version
 	}
@@ -286,7 +284,7 @@ func (npmrc *NpmRC) getPackageInfoByDate(pkgName string, dateVersion string) (pa
 
 	reg := npmrc.getRegistryByPackageName(pkgName)
 	cacheKey := reg.Registry + pkgName + "@date=" + dateVersion
-	
+
 	return withCache(cacheKey, time.Duration(config.NpmQueryCacheTTL)*time.Second, func() (*npm.PackageJSON, string, error) {
 		metadata, _, err := npmrc.fetchPackageMetadata(pkgName, dateVersion, false)
 		if err != nil {
@@ -307,7 +305,6 @@ func (npmrc *NpmRC) getPackageInfoByDate(pkgName string, dateVersion string) (pa
 		return raw.ToNpmPackage(), exactVersionCacheKey, nil
 	})
 }
-
 
 func (npmrc *NpmRC) installPackage(pkg npm.Package) (packageJson *npm.PackageJSON, err error) {
 	installDir := path.Join(npmrc.StoreDir(), pkg.String())

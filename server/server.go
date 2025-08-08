@@ -44,18 +44,20 @@ func Serve() {
 		os.Setenv("NO_COLOR", "1")
 	}
 
-	logger, err := log.New(fmt.Sprintf("file:%s?buffer=32k&fileDateFormat=20060102", path.Join(config.LogDir, "server.log")))
+	logger, err := log.New(fmt.Sprintf("file:%s?buffer=64k&fileDateFormat=20060102&term", path.Join(config.LogDir, "server.log")))
 	if err != nil {
 		fmt.Println("failed to initialize logger:", err)
 		os.Exit(1)
 	}
+	if os.Getenv("ESMDIR") != "" {
+		logger.Term(false)
+	}
 	logger.SetLevelByName(config.LogLevel)
 
-	accessLogger, err := log.New(fmt.Sprintf("file:%s?buffer=32k&fileDateFormat=20060102", path.Join(config.LogDir, "access.log")))
+	accessLogger, err := log.New(fmt.Sprintf("file:%s?buffer=1m&fileDateFormat=20060102", path.Join(config.LogDir, "access.log")))
 	if err != nil {
 		logger.Fatalf("failed to initialize access logger: %v", err)
 	}
-	accessLogger.SetQuite(true)
 
 	// open database
 	db, err := OpenBoltDB(path.Join(config.WorkDir, "esm.db"))
@@ -64,9 +66,16 @@ func Serve() {
 	}
 
 	// initialize storage
-	buildStorage, err := storage.New(&config.Storage)
+	esmStorage, err := storage.New(&config.Storage)
 	if err != nil {
 		logger.Fatalf("failed to initialize build storage(%s): %v", config.Storage.Type, err)
+	}
+	if config.MigrationStorage.Type != "" {
+		migrationStorage, err := storage.New(&config.MigrationStorage)
+		if err != nil {
+			logger.Fatalf("failed to initialize migration storage(%s): %v", config.MigrationStorage.Type, err)
+		}
+		esmStorage = storage.NewMigrationStorage(esmStorage, migrationStorage)
 	}
 	logger.Debugf("storage initialized, type: %s, endpoint: %s", config.Storage.Type, config.Storage.Endpoint)
 
@@ -76,14 +85,14 @@ func Serve() {
 	// add middlewares
 	rex.Use(
 		rex.Header("Server", "esm.sh"),
-		cors(config.CorsAllowOrigins),
 		rex.Logger(logger),
+		cors(config.CorsAllowOrigins),
 		pprofRouter(),
 		rex.Optional(rex.AccessLogger(accessLogger), config.AccessLog),
 		rex.Optional(rex.Compress(), config.Compress),
 		rex.Optional(customLandingPage(&config.CustomLandingPage), config.CustomLandingPage.Origin != ""),
-		rex.Optional(esmLegacyRouter(buildStorage), config.LegacyServer != ""),
-		esmRouter(db, buildStorage, logger),
+		rex.Optional(esmLegacyRouter(esmStorage), config.LegacyServer != ""),
+		esmRouter(db, esmStorage, logger),
 	)
 
 	// start server

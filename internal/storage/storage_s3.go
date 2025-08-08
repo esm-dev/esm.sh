@@ -142,34 +142,6 @@ func (s3 *s3Storage) Stat(name string) (stat Stat, err error) {
 	}, nil
 }
 
-func (s3 *s3Storage) List(prefix string) (keys []string, err error) {
-	query := url.Values{}
-	query.Set("list-type", "2")
-	if prefix != "" {
-		query.Set("prefix", prefix)
-	}
-	req, _ := http.NewRequest("GET", s3.apiEndpoint+"?"+query.Encode(), nil)
-	s3.sign(req)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode >= 400 {
-		return nil, parseS3Error(resp)
-	}
-	var ret s3ListResult
-	err = xml.NewDecoder(resp.Body).Decode(&ret)
-	if err != nil {
-		return
-	}
-	keys = make([]string, len(ret.Contents))
-	for i, content := range ret.Contents {
-		keys[i] = content.Key
-	}
-	return
-}
-
 func (s3 *s3Storage) Get(name string) (content io.ReadCloser, stat Stat, err error) {
 	if name == "" {
 		return nil, nil, errors.New("name is required")
@@ -207,6 +179,34 @@ func (s3 *s3Storage) Get(name string) (content io.ReadCloser, stat Stat, err err
 	}, nil
 }
 
+func (s3 *s3Storage) List(prefix string) (keys []string, err error) {
+	query := url.Values{}
+	query.Set("list-type", "2")
+	if prefix != "" {
+		query.Set("prefix", prefix)
+	}
+	req, _ := http.NewRequest("GET", s3.apiEndpoint+"?"+query.Encode(), nil)
+	s3.sign(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return nil, parseS3Error(resp)
+	}
+	var ret s3ListResult
+	err = xml.NewDecoder(resp.Body).Decode(&ret)
+	if err != nil {
+		return
+	}
+	keys = make([]string, len(ret.Contents))
+	for i, content := range ret.Contents {
+		keys[i] = content.Key
+	}
+	return
+}
+
 func (s3 *s3Storage) Put(name string, content io.Reader) (err error) {
 	if name == "" {
 		return errors.New("name is required")
@@ -238,40 +238,16 @@ func (s3 *s3Storage) Put(name string, content io.Reader) (err error) {
 	return nil
 }
 
-func (s3 *s3Storage) Delete(keys ...string) (err error) {
-	if len(keys) == 0 {
-		return nil
-	} else if len(keys) == 1 {
-		req, _ := http.NewRequest("DELETE", s3.apiEndpoint+"/"+keys[0], nil)
-		s3.sign(req)
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			return err
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode >= 400 {
-			return errors.New("unexpected status code: " + resp.Status)
-		}
-	} else {
-		buf := new(bytes.Buffer)
-		buf.WriteString("<Delete>")
-		for _, key := range keys {
-			buf.WriteString("<Object><Key>")
-			buf.WriteString(html.EscapeString(key))
-			buf.WriteString("</Key></Object>")
-		}
-		buf.WriteString("<Quiet>true</Quiet>")
-		buf.WriteString("</Delete>")
-		req, _ := http.NewRequest("POST", s3.apiEndpoint+"?delete", buf)
-		s3.sign(req)
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			return err
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode >= 400 {
-			return parseS3Error(resp)
-		}
+func (s3 *s3Storage) Delete(key string) (err error) {
+	req, _ := http.NewRequest("DELETE", s3.apiEndpoint+"/"+key, nil)
+	s3.sign(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return errors.New("unexpected status code: " + resp.Status)
 	}
 	return nil
 }
