@@ -685,7 +685,8 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 	}()
 
 	// check `?external`
-	if ctx.externalAll || ctx.args.External.Has(toPackageName(specifier)) {
+	packageName := toPackageName(specifier)
+	if ctx.externalAll || ctx.args.External.Has(packageName) || isPackageInExternalNamespace(packageName, ctx.args.External) {
 		resolvedPath = specifier
 		return
 	}

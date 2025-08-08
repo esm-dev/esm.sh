@@ -92,3 +92,22 @@ Deno.test("external nodejs builtin modules", async () => {
   assertEquals(res3.status, 200);
   assertStringIncludes(await res3.text(), ` from "node:buffer"`);
 });
+
+Deno.test("external namespace packages", async () => {
+  // Test that using @radix-ui as external marks all @radix-ui/* packages as external
+  {
+    const res = await fetch("http://localhost:8080/@radix-ui/react-dropdown-menu@2.0.5?external=@radix-ui");
+    res.body?.cancel();
+    assertEquals(res.status, 200);
+    const modulePath = res.headers.get("x-esm-path");
+    const res2 = await fetch("http://localhost:8080" + modulePath);
+    const code = await res2.text();
+    // All @radix-ui packages should be external
+    assertStringIncludes(code, 'from"@radix-ui/react-compose-refs"');
+    assertStringIncludes(code, 'from"@radix-ui/react-context"');
+    assertStringIncludes(code, 'from"@radix-ui/react-id"');
+    assertStringIncludes(code, 'from"@radix-ui/react-menu"');
+    assertStringIncludes(code, 'from"@radix-ui/react-primitive"');
+    assertStringIncludes(code, 'from"@radix-ui/react-use-controllable-state"');
+  }
+});

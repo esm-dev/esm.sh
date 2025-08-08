@@ -569,8 +569,8 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 					}
 
 					// bundles all dependencies in `bundle` mode, apart from peerDependencies and `?external` flag
-					if ctx.bundleMode == BundleDeps && !ctx.args.External.Has(toPackageName(specifier)) && !implicitExternal.Has(specifier) {
-						pkgName := toPackageName(specifier)
+					pkgName := toPackageName(specifier)
+					if ctx.bundleMode == BundleDeps && !ctx.args.External.Has(pkgName) && !isPackageInExternalNamespace(pkgName, ctx.args.External) && !implicitExternal.Has(specifier) {
 						_, ok := pkgJson.PeerDependencies[pkgName]
 						if !ok {
 							return esbuild.OnResolveResult{}, nil
