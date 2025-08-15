@@ -27,10 +27,9 @@ RUN apk update && \
     mkdir /esm && \
     chown -R esm:esm /esm
 
-ENV ESMDIR="/esm"
-ENV ESMPORT="8080"
-
+ENV WORK_DIR="/esm"
 WORKDIR /esm
-EXPOSE 8080
+
+EXPOSE 80
 USER esm
 CMD ["esmd"]
