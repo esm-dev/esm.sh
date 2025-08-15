@@ -22,7 +22,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: 1.23.x
+          go-version: 1.25.x
 
       - name: Setup Deno
         uses: denoland/setup-deno@main
