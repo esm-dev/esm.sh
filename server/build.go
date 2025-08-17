@@ -679,7 +679,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 
 							if len(args.With) > 0 && args.With["type"] == "css" {
 								return esbuild.OnResolveResult{
-									Path:        "/" + ctx.esmPath.Name() + utils.NormalizePathname(modulePath),
+									Path:        "/" + ctx.esmPath.Name() + utils.NormalizePathname(modulePath) + "?module",
 									External:    true,
 									SideEffects: esbuild.SideEffectsFalse,
 								}, nil
