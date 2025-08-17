@@ -21,10 +21,11 @@ COPY --from=denoland/deno:bin-2.4.4 --chown=esm:esm /deno /esm/bin/deno
 COPY --from=gcr.io/distroless/cc --chown=root:root --chmod=755 /lib/*-linux-gnu/* /usr/local/lib/
 COPY --from=gcr.io/distroless/cc --chown=root:root --chmod=755 /lib/ld-linux-* /lib/
 RUN mkdir /lib64 && ln -s /usr/local/lib/ld-linux-* /lib64/
-ENV LD_LIBRARY_PATH="/usr/local/lib"
-ENV DENO_USE_CGROUPS=1
 
+ENV DENO_USE_CGROUPS=1
+ENV LD_LIBRARY_PATH="/usr/local/lib"
 ENV ESMDIR="/esm"
+
 WORKDIR /esm
 EXPOSE 80
 USER esm
