@@ -11,7 +11,7 @@ RUN go build -ldflags="-s -w -X 'github.com/esm-dev/esm.sh/server.VERSION=${SERV
 FROM alpine:latest
 
 COPY --from=builder /tmp/esm.sh/esmd /bin/esmd
-COPY --from=denoland/deno:bin-2.1.4 --chown=esm:esm /deno /esm/bin/deno
+COPY --from=denoland/deno:bin-2.4.4 --chown=esm:esm /deno /esm/bin/deno
 
 # deno desn't provider musl build yet, the hack below makes the gnu build working in alpine
 # see https://github.com/denoland/deno_docker/blob/main/alpine.dockerfile
