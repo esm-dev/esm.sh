@@ -1029,11 +1029,39 @@ func esmRouter(db Database, esmStorage storage.Storage, logger *log.Logger) rex.
 		} else {
 			// return wasm file as an es6 module when `?module` query is present (requires `top-level-await` support)
 			if pathKind == RawFile && strings.HasSuffix(esm.SubPath, ".wasm") && query.Has("module") {
-				buf := &bytes.Buffer{}
 				wasmUrl := origin + pathname
-				fmt.Fprintf(buf, "/* esm.sh - wasm module */\n")
-				fmt.Fprintf(buf, "const data = await fetch(%s).then(r => r.arrayBuffer());\nexport default new WebAssembly.Module(data);", strings.TrimSpace(string(utils.MustEncodeJSON(wasmUrl))))
+				buf := bytes.NewBufferString("/* esm.sh - wasm module */\n")
+				buf.WriteString("const data = await fetch(")
+				buf.WriteString(strings.TrimSpace(string(utils.MustEncodeJSON(wasmUrl))))
+				buf.WriteString(").then(r => r.arrayBuffer());\n")
+				buf.WriteString("export default new WebAssembly.Module(data);")
 				ctx.SetHeader("Content-Type", ctJavaScript)
+				ctx.SetHeader("Content-Length", fmt.Sprintf("%d", buf.Len()))
+				ctx.SetHeader("Cache-Control", ccImmutable)
+				return buf
+			}
+
+			// return css file as a `CSSStyleSheet` object when `?module` query is present
+			if pathKind == RawFile && strings.HasSuffix(esm.SubPath, ".css") && query.Has("module") {
+				filename := path.Join(npmrc.StoreDir(), esm.Name(), "node_modules", esm.PkgName, esm.SubPath)
+				css, err := os.ReadFile(filename)
+				if err != nil {
+					return rex.Status(500, err.Error())
+				}
+				buf := bytes.NewBufferString("/* esm.sh - css module */\n")
+				buf.WriteString("const stylesheet = new CSSStyleSheet();\n")
+				if bytes.ContainsRune(css, '`') {
+					buf.WriteString("stylesheet.replaceSync(`")
+					buf.WriteString(strings.TrimSpace(string(utils.MustEncodeJSON(string(css)))))
+					buf.WriteString(");\n")
+				} else {
+					buf.WriteString("stylesheet.replaceSync(`")
+					buf.Write(css)
+					buf.WriteString("`);\n")
+				}
+				buf.WriteString("export default stylesheet;\n")
+				ctx.SetHeader("Content-Type", ctJavaScript)
+				ctx.SetHeader("Content-Length", fmt.Sprintf("%d", buf.Len()))
 				ctx.SetHeader("Cache-Control", ccImmutable)
 				return buf
 			}
