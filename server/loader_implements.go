@@ -174,7 +174,7 @@ func resolveVueVersion(npmrc *NpmRC, importMap importmap.ImportMap) (vueVersion 
 }
 
 func generateUnoCSS(npmrc *NpmRC, configCSS string, content string) (out *LoaderOutput, err error) {
-	loaderVersion := "0.5.0"
+	loaderVersion := "0.5.1"
 	loaderExecPath := path.Join(config.WorkDir, "bin", "unocss-"+loaderVersion)
 
 	err = doOnce(loaderExecPath, func() (err error) {
