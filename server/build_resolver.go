@@ -1314,7 +1314,7 @@ func validateJSFile(filename string) (isESM bool, namedExports []string, err err
 	ast, pass := js_parser.Parse(log, logger.Source{
 		Index:          0,
 		KeyPath:        logger.Path{Text: "<stdin>"},
-		PrettyPath:     "<stdin>",
+		PrettyPaths:    logger.PrettyPaths{Rel: "<stdin>"},
 		IdentifierName: "stdin",
 		Contents:       string(data),
 	}, parserOpts)
