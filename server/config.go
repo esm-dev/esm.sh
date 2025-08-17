@@ -110,7 +110,7 @@ func normalizeConfig(config *Config) {
 		config.Port = 80
 	}
 	if config.WorkDir == "" {
-		if v := os.Getenv("WORK_DIR"); v != "" && existsDir(v) {
+		if v := os.Getenv("ESMDIR"); v != "" && existsDir(v) {
 			config.WorkDir = v
 		} else {
 			homeDir, err := os.UserHomeDir()

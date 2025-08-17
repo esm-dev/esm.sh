@@ -49,7 +49,7 @@ func Serve() {
 		fmt.Println("failed to initialize logger:", err)
 		os.Exit(1)
 	}
-	if os.Getenv("WORK_DIR") != "" {
+	if os.Getenv("ESMDIR") != "" {
 		logger.Term(false)
 	}
 	logger.SetLevelByName(config.LogLevel)

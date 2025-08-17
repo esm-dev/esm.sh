@@ -110,7 +110,7 @@ ssh -p $sshPort ${user}@${host} << EOF
     echo "AmbientCapabilities=CAP_NET_BIND_SERVICE" >> \$servicerc
     echo "Restart=always" >> \$servicerc
     echo "RestartSec=5" >> \$servicerc
-    echo "Environment=\"WORK_DIR=/esm\"" >> \$servicerc
+    echo "Environment=\"ESMDIR=/esm\"" >> \$servicerc
     echo "[Install]" >> \$servicerc
     echo "WantedBy=multi-user.target" >> \$servicerc
   else

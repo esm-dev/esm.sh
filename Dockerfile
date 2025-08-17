@@ -10,6 +10,9 @@ RUN go build -ldflags="-s -w -X 'github.com/esm-dev/esm.sh/server.VERSION=${SERV
 
 FROM alpine:latest
 
+RUN apk update && apk add --no-cache git
+RUN addgroup -g 1000 esm && adduser -u 1000 --home=/esm -G esm -D esm
+
 COPY --from=builder /tmp/esm.sh/esmd /bin/esmd
 COPY --from=denoland/deno:bin-2.4.4 --chown=esm:esm /deno /esm/bin/deno
 
@@ -19,17 +22,10 @@ COPY --from=gcr.io/distroless/cc --chown=root:root --chmod=755 /lib/*-linux-gnu/
 COPY --from=gcr.io/distroless/cc --chown=root:root --chmod=755 /lib/ld-linux-* /lib/
 RUN mkdir /lib64 && ln -s /usr/local/lib/ld-linux-* /lib64/
 ENV LD_LIBRARY_PATH="/usr/local/lib"
+ENV DENO_USE_CGROUPS=1
 
-RUN apk update && \
-    apk add --no-cache git && \
-    addgroup -g 1000 esm && \
-    adduser -u 1000 -G esm -D esm && \
-    mkdir /esm && \
-    chown -R esm:esm /esm
-
-ENV WORK_DIR="/esm"
+ENV ESMDIR="/esm"
 WORKDIR /esm
-
 EXPOSE 80
 USER esm
 CMD ["esmd"]

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"os"
 	"os/exec"
 	"path"
 	"strconv"
@@ -289,7 +290,7 @@ func compileUnocssLoader(npmrc *NpmRC, loaderVersion string, loaderExecPath stri
 		"--output", loaderExecPath,
 		path.Join(wd, "loader.js"),
 	)
-	cmd.Env = []string{"DENO_NO_UPDATE_CHECK=1"}
+	cmd.Env = append(os.Environ(), "DENO_NO_UPDATE_CHECK=1")
 	_, err = cmd.Output()
 	if err != nil {
 		err = fmt.Errorf("failed to compile %s: %s", path.Base(loaderExecPath), err.Error())
