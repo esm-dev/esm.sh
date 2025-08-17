@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/esm-dev/esm.sh/internal/jsrt"
+	"github.com/esm-dev/esm.sh/internal/deno"
 	"github.com/ije/gox/term"
 	"github.com/ije/gox/utils"
 )
@@ -54,7 +54,7 @@ func (jsw *JSWorker) Start() (err error) {
 		return
 	}
 
-	denoPath, err := jsrt.GetDenoPath(workDir)
+	denoPath, err := deno.GetDenoPath(workDir)
 	if err != nil {
 		err = errors.New("deno not found, please install deno first")
 		return

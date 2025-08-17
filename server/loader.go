@@ -7,7 +7,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/esm-dev/esm.sh/internal/jsrt"
+	"github.com/esm-dev/esm.sh/internal/deno"
 	esbuild "github.com/ije/esbuild-internal/api"
 )
 
@@ -19,7 +19,7 @@ type LoaderOutput struct {
 
 func runLoader(loaderJsPath string, filename string, code string) (out *LoaderOutput, err error) {
 	err = doOnce("check-deno", func() (err error) {
-		_, err = jsrt.GetDenoPath(config.WorkDir)
+		_, err = deno.GetDenoPath(config.WorkDir)
 		return err
 	})
 	if err != nil {
