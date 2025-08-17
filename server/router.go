@@ -573,14 +573,14 @@ func esmRouter(db Database, esmStorage storage.Storage, logger *log.Logger) rex.
 				}
 				res, err := fetchClient.Fetch(ctxUrl, nil)
 				if err != nil {
-					return rex.Status(500, "Failed to fetch unocss context page content")
+					return rex.Status(500, "unocss: Failed to fetch page content")
 				}
 				defer res.Body.Close()
 				if res.StatusCode != 200 {
 					if res.StatusCode == 404 {
-						return rex.Status(404, "Unocss context page not found")
+						return rex.Status(404, "unocss: context page not found")
 					}
-					return rex.Status(500, "Failed to fetch unocss context page content")
+					return rex.Status(500, "unocss: Failed to fetch page content: "+res.Status)
 				}
 				tokenizer := html.NewTokenizer(io.LimitReader(res.Body, 5*MB))
 				content := []string{}
