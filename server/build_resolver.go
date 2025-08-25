@@ -578,10 +578,15 @@ func (ctx *BuildContext) resolveConditionExportEntry(conditions npm.JSONObject, 
 	var conditionFound bool
 
 	if ctx.isBrowserTarget() {
-		conditionFound = applyCondition("browser")
+		conditionName := "browser"
+		// [workaround] fix astring entry in browser
+		if ctx.esmPath.PkgName == "astring" {
+			conditionName = "import"
+		}
+		conditionFound = applyCondition(conditionName)
 	} else if ctx.isDenoTarget() {
 		conditionName := "deno"
-		// [workaround] to support ssr in Deno, use `node` condition for solid-js < 1.6.0
+		// [workaround] to support solid-js/ssr in Deno, use `node` condition for < 1.6.0
 		if ctx.esmPath.PkgName == "solid-js" && semverLessThan(ctx.esmPath.PkgVersion, "1.6.0") {
 			conditionName = "node"
 		}
@@ -607,7 +612,7 @@ LOOP:
 		module := false
 		prefered := ""
 		switch conditionName {
-		case "module", "import", "es2015":
+		case "import", "module", "es2015":
 			module = true
 			prefered = "module"
 		case "require":
