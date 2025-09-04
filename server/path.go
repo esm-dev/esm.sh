@@ -3,11 +3,15 @@ package server
 import (
 	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
+	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/esm-dev/esm.sh/internal/fetch"
 	"github.com/esm-dev/esm.sh/internal/npm"
 	"github.com/ije/gox/set"
 	"github.com/ije/gox/utils"
@@ -70,7 +74,6 @@ func parseEsmPath(npmrc *NpmRC, pathname string) (esm EsmPath, extraQuery string
 			err = errors.New("invalid path")
 			return
 		}
-		exactVersion = true
 		hasTargetSegment = validateTargetSegment(strings.Split(subPath, "/"))
 		esm = EsmPath{
 			PkgName:       pkgName,
@@ -78,6 +81,17 @@ func parseEsmPath(npmrc *NpmRC, pathname string) (esm EsmPath, extraQuery string
 			SubPath:       subPath,
 			SubModuleName: stripEntryModuleExt(subPath),
 			PrPrefix:      true,
+		}
+		if isCommitish(esm.PkgVersion) {
+			exactVersion = true
+			return
+		}
+		esm.PkgVersion, err = resolvePrPackageVersion(esm)
+		if err != nil {
+			return
+		}
+		if !isCommitish(esm.PkgVersion) {
+			err = errors.New("pkg.pr.new: tag or branch not found")
 		}
 		return
 	}
@@ -151,69 +165,28 @@ func parseEsmPath(npmrc *NpmRC, pathname string) (esm EsmPath, extraQuery string
 	}
 
 	if ghPrefix {
-		if npm.IsExactVersion(strings.TrimPrefix(esm.PkgVersion, "v")) {
+		if npm.IsExactVersion(strings.TrimPrefix(esm.PkgVersion, "v")) || isCommitish(esm.PkgVersion) {
 			exactVersion = true
 			return
 		}
-		var refs []GitRef
-		refs, err = listGhRepoRefs(fmt.Sprintf("https://github.com/%s", esm.PkgName))
+
+		esm.PkgVersion, err = resolveGhPackageVersion(esm)
 		if err != nil {
 			return
 		}
-		if esm.PkgVersion == "" {
-			for _, ref := range refs {
-				if ref.Ref == "HEAD" {
-					esm.PkgVersion = ref.Sha[:7]
-					return
-				}
-			}
-		} else {
-			// try to find the exact tag or branch
-			for _, ref := range refs {
-				if ref.Ref == "refs/tags/"+esm.PkgVersion || ref.Ref == "refs/heads/"+esm.PkgVersion {
-					esm.PkgVersion = ref.Sha[:7]
-					return
-				}
-			}
-			// try to find the 'semver' tag
-			if semv, erro := semver.NewConstraint(strings.TrimPrefix(esm.PkgVersion, "semver:")); erro == nil {
-				semtags := make([]*semver.Version, len(refs))
-				i := 0
-				for _, ref := range refs {
-					if strings.HasPrefix(ref.Ref, "refs/tags/") {
-						v, e := semver.NewVersion(strings.TrimPrefix(ref.Ref, "refs/tags/"))
-						if e == nil && semv.Check(v) {
-							semtags[i] = v
-							i++
-						}
-					}
-				}
-				if i > 0 {
-					semtags = semtags[:i]
-					if i > 1 {
-						sort.Sort(semver.Collection(semtags))
-					}
-					esm.PkgVersion = semtags[i-1].String()
-					return
-				}
-			}
-		}
 
 		if !isCommitish(esm.PkgVersion) {
-			err = errors.New("git: tag or branch not found")
-			return
+			err = errors.New("github: tag or branch not found")
 		}
-
-		exactVersion = true
 		return
 	}
 
 	originalExactVersion := len(esm.PkgVersion) > 0 && npm.IsExactVersion(esm.PkgVersion)
 	exactVersion = originalExactVersion
-	
+
 	// Check if version is a date format (yyyy-mm-dd)
 	isDateVersion := npm.IsDateVersion(esm.PkgVersion)
-	
+
 	if !originalExactVersion {
 		var p *npm.PackageJSON
 		if isDateVersion {
@@ -285,4 +258,80 @@ func isPackageInExternalNamespace(pkgName string, external set.ReadOnlySet[strin
 		}
 	}
 	return false
+}
+
+func resolveGhPackageVersion(esm EsmPath) (version string, err error) {
+	return withCache("gh/"+esm.PkgName+"@"+esm.PkgVersion, time.Duration(config.NpmQueryCacheTTL)*time.Second, func() (version string, aliasKey string, err error) {
+		var refs []GitRef
+		refs, err = listGhRepoRefs(fmt.Sprintf("https://github.com/%s", esm.PkgName))
+		if err != nil {
+			return
+		}
+		if esm.PkgVersion == "" {
+			for _, ref := range refs {
+				if ref.Ref == "HEAD" {
+					version = ref.Sha[:7]
+					return
+				}
+			}
+		} else {
+			// try to find the exact tag or branch
+			for _, ref := range refs {
+				if ref.Ref == "refs/tags/"+esm.PkgVersion || ref.Ref == "refs/heads/"+esm.PkgVersion {
+					version = ref.Sha[:7]
+					return
+				}
+			}
+			// try to find the 'semver' tag
+			if semv, erro := semver.NewConstraint(strings.TrimPrefix(esm.PkgVersion, "semver:")); erro == nil {
+				semtags := make([]*semver.Version, len(refs))
+				i := 0
+				for _, ref := range refs {
+					if after, ok := strings.CutPrefix(ref.Ref, "refs/tags/"); ok {
+						v, e := semver.NewVersion(after)
+						if e == nil && semv.Check(v) {
+							semtags[i] = v
+							i++
+						}
+					}
+				}
+				if i > 0 {
+					semtags = semtags[:i]
+					if i > 1 {
+						sort.Sort(semver.Collection(semtags))
+					}
+					version = semtags[i-1].String()
+					return
+				}
+			}
+		}
+		version = esm.PkgVersion
+		return
+	})
+}
+
+func resolvePrPackageVersion(esm EsmPath) (version string, err error) {
+	return withCache("pr/"+esm.PkgName+"@"+esm.PkgVersion, time.Duration(config.NpmQueryCacheTTL)*time.Second, func() (version string, aliasKey string, err error) {
+		u, err := url.Parse(fmt.Sprintf("https://pkg.pr.new/%s@%s", esm.PkgName, esm.PkgVersion))
+		if err != nil {
+			return
+		}
+		versionRegex := regexp.MustCompile(`[^/]@([\da-f]{7,})$`)
+		client, recycle := fetch.NewClient("esmd/"+VERSION, 30, false, nil)
+		version = esm.PkgVersion
+		client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+			match := versionRegex.FindStringSubmatch(req.URL.Path)
+			if len(match) > 1 {
+				version = match[1][:7]
+			}
+			if len(via) >= 6 {
+				return errors.New("too many redirects")
+			}
+			return nil
+		}
+		defer recycle()
+
+		_, err = client.Fetch(u, nil)
+		return
+	})
 }
