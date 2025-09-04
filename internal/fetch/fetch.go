@@ -36,8 +36,8 @@ func NewClient(userAgent string, timeout int, reserveRedirect bool, allowedHosts
 				return http.ErrUseLastResponse
 			}
 		}
-		if len(via) >= 3 {
-			return errors.New("stopped after 3 redirects")
+		if len(via) >= 5 {
+			return errors.New("stopped after 5 redirects")
 		}
 		return nil
 	}
