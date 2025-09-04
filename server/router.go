@@ -1026,7 +1026,53 @@ func esmRouter(db Database, esmStorage storage.Storage, logger *log.Logger) rex.
 				ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", config.NpmQueryCacheTTL))
 				return redirect(ctx, fmt.Sprintf("%s%s/%s@%s%s%s", origin, registryPrefix, pkgName, pkgVersion, subPath, query), false)
 			}
-		} else {
+		}
+
+		// fix url that is related to `import.meta.url`
+		if hasTargetSegment && isExactVersion && pathKind == RawFile && !rawFlag {
+			extname := path.Ext(esm.SubPath)
+			dir := path.Join(npmrc.StoreDir(), esm.Name())
+			if !existsDir(dir) {
+				_, err := npmrc.installPackage(esm.Package())
+				if err != nil {
+					return rex.Status(500, err.Error())
+				}
+			}
+			pkgRoot := path.Join(dir, "node_modules", esm.PkgName)
+			files, err := findFiles(pkgRoot, "", func(fp string) bool {
+				return strings.HasSuffix(fp, extname)
+			})
+			if err != nil {
+				return rex.Status(500, err.Error())
+			}
+			var file string
+			if l := len(files); l == 1 {
+				file = files[0]
+			} else if l > 1 {
+				for _, f := range files {
+					if strings.HasSuffix(esm.SubPath, f) {
+						file = f
+						break
+					}
+				}
+				if file == "" {
+					for _, f := range files {
+						if path.Base(esm.SubPath) == path.Base(f) {
+							file = f
+							break
+						}
+					}
+				}
+			}
+			if file == "" {
+				return rex.Status(404, "File not found")
+			}
+			url := fmt.Sprintf("%s%s/%s@%s/%s", origin, registryPrefix, esm.PkgName, esm.PkgVersion, file)
+			return redirect(ctx, url, true)
+		}
+
+		// try to serve package static files if the version is exact
+		if isExactVersion {
 			// return wasm file as an es6 module when `?module` query is present (requires `top-level-await` support)
 			if pathKind == RawFile && strings.HasSuffix(esm.SubPath, ".wasm") && query.Has("module") {
 				wasmUrl := origin + pathname
@@ -1066,50 +1112,7 @@ func esmRouter(db Database, esmStorage storage.Storage, logger *log.Logger) rex.
 				return buf
 			}
 
-			// fix url that is related to `import.meta.url`
-			if hasTargetSegment && pathKind == RawFile && !rawFlag {
-				extname := path.Ext(esm.SubPath)
-				dir := path.Join(npmrc.StoreDir(), esm.Name())
-				if !existsDir(dir) {
-					_, err := npmrc.installPackage(esm.Package())
-					if err != nil {
-						return rex.Status(500, err.Error())
-					}
-				}
-				pkgRoot := path.Join(dir, "node_modules", esm.PkgName)
-				files, err := findFiles(pkgRoot, "", func(fp string) bool {
-					return strings.HasSuffix(fp, extname)
-				})
-				if err != nil {
-					return rex.Status(500, err.Error())
-				}
-				var file string
-				if l := len(files); l == 1 {
-					file = files[0]
-				} else if l > 1 {
-					for _, f := range files {
-						if strings.HasSuffix(esm.SubPath, f) {
-							file = f
-							break
-						}
-					}
-					if file == "" {
-						for _, f := range files {
-							if path.Base(esm.SubPath) == path.Base(f) {
-								file = f
-								break
-							}
-						}
-					}
-				}
-				if file == "" {
-					return rex.Status(404, "File not found")
-				}
-				url := fmt.Sprintf("%s%s/%s@%s/%s", origin, registryPrefix, esm.PkgName, esm.PkgVersion, file)
-				return redirect(ctx, url, true)
-			}
-
-			// package raw files
+			// serve package raw files
 			if pathKind == RawFile {
 				if esm.SubPath == "" {
 					b := &BuildContext{
@@ -1192,7 +1195,7 @@ func esmRouter(db Database, esmStorage storage.Storage, logger *log.Logger) rex.
 				return content // auto closed
 			}
 
-			// build/dts files
+			// serve build/dts files
 			if pathKind == EsmBuild || pathKind == EsmSourceMap || pathKind == EsmDts {
 				var savePath string
 				if asteriskPrefix {
