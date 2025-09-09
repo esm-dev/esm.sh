@@ -107,9 +107,7 @@
   // The list to only allow some packages or scopes, default allow all.
   "allowList": {
     "packages": ["@scope_name/package_name"],
-    "scopes": [{
-      "name": "@scope_name"
-    }]
+    "scopes": ["@scope_name"]
   },
 
   // The list to ban some packages or scopes, default no ban.
