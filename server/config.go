@@ -265,11 +265,32 @@ func extractPackageName(moduleName string) (packageId string, scope string, name
 	return
 }
 
+func (allowList *AllowList) IsEmpty() bool {
+	return len(allowList.Packages) == 0 && len(allowList.Scopes) == 0
+}
+
+// IsPackageAllowed Checking if the package is allowed.
+// The `packages` list is the highest priority allow rule to match,
+// so the `includes` list in the `scopes` list won't take effect if the package is allowed in `packages` list
+func (allowList *AllowList) IsPackageAllowed(moduleName string) bool {
+	if allowList.IsEmpty() {
+		return true
+	}
+
+	packageId, scope, name, _ := extractPackageName(moduleName)
+
+	if slices.Contains(allowList.Packages, packageId) || (scope != "" && slices.Contains(allowList.Packages, scope+"/"+name)) || (scope == "" && slices.Contains(allowList.Packages, name)) {
+		return true
+	}
+
+	return slices.Contains(allowList.Scopes, scope)
+}
+
 // IsPackageBanned Checking if the package is banned.
 // The `packages` list is the highest priority ban rule to match,
 // so the `excludes` list in the `scopes` list won't take effect if the package is banned in `packages` list
 func (banList *BanList) IsPackageBanned(moduleName string) bool {
-	if len(banList.Packages) == 0 && len(banList.Scopes) == 0 {
+	if banList.IsEmpty() {
 		return false
 	}
 
@@ -290,21 +311,8 @@ func (banList *BanList) IsPackageBanned(moduleName string) bool {
 	return false
 }
 
-// IsPackageAllowed Checking if the package is allowed.
-// The `packages` list is the highest priority allow rule to match,
-// so the `includes` list in the `scopes` list won't take effect if the package is allowed in `packages` list
-func (allowList *AllowList) IsPackageAllowed(moduleName string) bool {
-	if len(allowList.Packages) == 0 && len(allowList.Scopes) == 0 {
-		return true
-	}
-
-	packageId, scope, name, _ := extractPackageName(moduleName)
-
-	if slices.Contains(allowList.Packages, packageId) || (scope != "" && slices.Contains(allowList.Packages, scope+"/"+name)) || (scope == "" && slices.Contains(allowList.Packages, name)) {
-		return true
-	}
-
-	return slices.Contains(allowList.Scopes, scope)
+func (banList *BanList) IsEmpty() bool {
+	return len(banList.Packages) == 0 && len(banList.Scopes) == 0
 }
 
 func init() {
