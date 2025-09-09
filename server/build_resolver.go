@@ -314,6 +314,18 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 					}
 					*/
 					exportEntry = ctx.resolveConditionExportEntry(obj, pkgJson.Type)
+				} else if arr, ok := v.([]any); ok {
+					/**
+					exports: {
+						".": ["./cjs/index.js", "./esm/index.js"]
+					}
+					*/
+					a0 := arr[0]
+					if s, ok := a0.(string); ok {
+						exportEntry.update(s, pkgJson.Type == "module")
+					} else if obj, ok := a0.(npm.JSONObject); ok {
+						exportEntry = ctx.resolveConditionExportEntry(obj, pkgJson.Type)
+					}
 				}
 			} else {
 				/**

@@ -854,9 +854,11 @@ func esmRouter(db Database, esmStorage storage.Storage, logger *log.Logger) rex.
 			return rex.Status(status, message)
 		}
 
-		pkgAllowed := config.AllowList.IsPackageAllowed(esm.PkgName)
-		pkgBanned := config.BanList.IsPackageBanned(esm.PkgName)
-		if !pkgAllowed || pkgBanned {
+		if !config.AllowList.IsEmpty() && !config.AllowList.IsPackageAllowed(esm.Name()) {
+			return rex.Status(403, "forbidden")
+		}
+
+		if !config.BanList.IsEmpty() && config.BanList.IsPackageBanned(esm.Name()) {
 			return rex.Status(403, "forbidden")
 		}
 
