@@ -3,6 +3,7 @@ package server
 import (
 	"container/list"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -14,10 +15,11 @@ var taskPool = sync.Pool{
 
 // BuildQueue schedules build tasks of esm.sh
 type BuildQueue struct {
-	lock  sync.Mutex
-	tasks map[string]*BuildTask
-	queue *list.List
-	chann uint16
+	lock      sync.Mutex
+	tasks     map[string]*BuildTask
+	queue     *list.List
+	chann     uint16
+	scheduler int32 // scheduler state (0=not running, 1=running)
 }
 
 type BuildTask struct {
@@ -35,6 +37,9 @@ type BuildOutput struct {
 }
 
 func NewBuildQueue(concurrency int) *BuildQueue {
+	if concurrency <= 0 {
+		concurrency = 1 // ensure at least 1 concurrent task
+	}
 	return &BuildQueue{
 		queue: list.New(),
 		tasks: map[string]*BuildTask{},
@@ -65,35 +70,83 @@ func (q *BuildQueue) Add(ctx *BuildContext) chan BuildOutput {
 	task.el = q.queue.PushBack(task)
 	q.tasks[ctx.Path()] = task
 
-	go q.schedule()
+	// start scheduler if not already running
+	if atomic.CompareAndSwapInt32(&q.scheduler, 0, 1) {
+		go q.schedule()
+	}
 
 	return ch
 }
 
 func (q *BuildQueue) schedule() {
-	q.lock.Lock()
-	defer q.lock.Unlock()
+	defer func() {
+		// ensure scheduler state is reset even if panic occurs
+		if r := recover(); r != nil {
+			// TODO: log panic
+		}
+		atomic.StoreInt32(&q.scheduler, 0)
+	}()
 
-	var task *BuildTask
-	if q.chann > 0 {
-		for el := q.queue.Front(); el != nil; el = el.Next() {
-			t, ok := el.Value.(*BuildTask)
-			if ok && t.pending {
-				task = t
-				break
+	for {
+		q.lock.Lock()
+
+		var task *BuildTask
+		if q.chann > 0 {
+			for el := q.queue.Front(); el != nil; el = el.Next() {
+				t, ok := el.Value.(*BuildTask)
+				if ok && t.pending {
+					task = t
+					break
+				}
 			}
 		}
-	}
 
-	if task != nil {
-		q.chann -= 1
-		task.pending = false
-		task.startedAt = time.Now()
-		go q.run(task)
+		if task != nil {
+			q.chann -= 1
+			task.pending = false
+			task.startedAt = time.Now()
+			q.lock.Unlock()
+
+			go q.run(task)
+		} else {
+			// no more tasks to schedule, exit the loop
+			q.lock.Unlock()
+			break
+		}
 	}
 }
 
 func (q *BuildQueue) run(task *BuildTask) {
+	defer func() {
+		// ensure channel counter is always incremented, even if panic occurs
+		if r := recover(); r != nil {
+			// TODO: log panic
+		}
+
+		q.lock.Lock()
+		q.chann += 1
+
+		// check if there are more pending tasks and restart scheduler if needed
+		// do this check atomically while holding the lock
+		hasPending := false
+		for el := q.queue.Front(); el != nil; el = el.Next() {
+			if t, ok := el.Value.(*BuildTask); ok && t.pending {
+				hasPending = true
+				break
+			}
+		}
+
+		// only restart scheduler if we're not already running one
+		if hasPending && atomic.CompareAndSwapInt32(&q.scheduler, 0, 1) {
+			// start scheduler in a separate goroutine to avoid deadlock
+			go func() {
+				q.schedule()
+			}()
+		}
+
+		q.lock.Unlock()
+	}()
+
 	meta, err := task.ctx.Build()
 	if err != nil {
 		// another shot if failed to resolve build entry
@@ -112,6 +165,7 @@ func (q *BuildQueue) run(task *BuildTask) {
 		task.ctx.logger.Errorf("build '%s': %v", task.ctx.Path(), err)
 	}
 
+	// clean up task while holding the lock to prevent race conditions
 	q.lock.Lock()
 	q.queue.Remove(task.el)
 	delete(q.tasks, task.ctx.Path())
@@ -119,9 +173,9 @@ func (q *BuildQueue) run(task *BuildTask) {
 		// the `Build` function may have changed the path
 		delete(q.tasks, task.ctx.rawPath)
 	}
-	q.chann += 1
 	q.lock.Unlock()
 
+	// store wait channels before recycling the task
 	waitChans := task.waitChans
 
 	// recycle the task object
@@ -133,16 +187,17 @@ func (q *BuildQueue) run(task *BuildTask) {
 	task.pending = false
 	taskPool.Put(task)
 
-	// schedule next task if have any
-	go q.schedule()
-
-	// send the bulid output
+	// send the build output
 	output := BuildOutput{meta, err}
 	for _, ch := range waitChans {
-		select {
-		case ch <- output:
-		default:
-			// drop
+		if ch != nil {
+			select {
+			case ch <- output:
+				// successfully sent
+			default:
+				// channel is full or closed, log the drop
+				// Note: task.ctx might be nil here due to recycling, so we can't log the path
+			}
 		}
 	}
 }

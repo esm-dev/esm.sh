@@ -74,7 +74,7 @@ func isAbsPathSpecifier(specifier string) bool {
 
 // checks if the given hostname is a local address.
 func isLocalhost(hostname string) bool {
-	return hostname == "localhost" || hostname == "127.0.0.1" || (valid.IsIPv4(hostname) && strings.HasPrefix(hostname, "192.168."))
+	return hostname == "localhost" || strings.HasSuffix(hostname, ".localhost") || hostname == "127.0.0.1" || (valid.IsIPv4(hostname) && strings.HasPrefix(hostname, "192.168."))
 }
 
 // semverLessThan returns true if the version a is less than the version b.

@@ -147,7 +147,7 @@ func (ctx *BuildContext) Build() (meta *BuildMeta, err error) {
 	}
 
 	// analyze splitting modules
-	if !ctx.pkgJson.SideEffectsFalse && ctx.bundleMode == BundleDefault && ctx.pkgJson.Exports.Len() > 1 {
+	if ctx.bundleMode == BundleDefault && ctx.pkgJson.Exports.Len() > 1 {
 		ctx.status = "analyze"
 		err = ctx.analyzeSplitting()
 		if err != nil {
@@ -510,7 +510,11 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 
 					// resolve specifier using the `browser` field of package.json
 					if !isRelPathSpecifier(specifier) && len(pkgJson.Browser) > 0 && ctx.isBrowserTarget() {
-						if name, ok := pkgJson.Browser[specifier]; ok {
+						name, ok := pkgJson.Browser[specifier]
+						if !ok && strings.HasPrefix(specifier, "node:") {
+							name, ok = pkgJson.Browser[specifier[5:]]
+						}
+						if ok {
 							if name == "" {
 								return esbuild.OnResolveResult{
 									Path:      args.Path,
@@ -565,8 +569,8 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 					}
 
 					// bundles all dependencies in `bundle` mode, apart from peerDependencies and `?external` flag
-					if ctx.bundleMode == BundleDeps && !ctx.args.External.Has(toPackageName(specifier)) && !implicitExternal.Has(specifier) {
-						pkgName := toPackageName(specifier)
+					pkgName := toPackageName(specifier)
+					if ctx.bundleMode == BundleDeps && !ctx.args.External.Has(pkgName) && !isPackageInExternalNamespace(pkgName, ctx.args.External) && !implicitExternal.Has(specifier) {
 						_, ok := pkgJson.PeerDependencies[pkgName]
 						if !ok {
 							return esbuild.OnResolveResult{}, nil
@@ -685,7 +689,15 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 
 							if len(args.With) > 0 && args.With["type"] == "css" {
 								return esbuild.OnResolveResult{
-									Path:        "/" + ctx.esmPath.Name() + utils.NormalizePathname(modulePath),
+									Path:        "/" + ctx.esmPath.Name() + utils.NormalizePathname(modulePath) + "?module",
+									External:    true,
+									SideEffects: esbuild.SideEffectsFalse,
+								}, nil
+							}
+
+							if len(args.With) > 0 && args.With["type"] == "json" {
+								return esbuild.OnResolveResult{
+									Path:        "/" + ctx.esmPath.Name() + utils.NormalizePathname(modulePath) + "?module",
 									External:    true,
 									SideEffects: esbuild.SideEffectsFalse,
 								}, nil
@@ -1019,12 +1031,8 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 			"global.process.env.NODE_ENV": fmt.Sprintf(`"%s"`, nodeEnv),
 		}
 	} else {
-		if ctx.isBrowserTarget() {
-			switch ctx.esmPath.PkgName {
-			case "react", "react-dom", "typescript":
-				// safe to reserve `process` for these packages
-				delete(define, "process")
-			}
+		if ctx.isBrowserTarget() && safeReserveProcessPackages[ctx.esmPath.PkgName] {
+			delete(define, "process")
 		}
 		if ctx.isDenoTarget() {
 			// deno 2 has removed the `window` global object, let's replace it with `globalThis`

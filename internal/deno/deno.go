@@ -1,4 +1,4 @@
-package jsrt
+package deno
 
 import (
 	"archive/zip"
@@ -16,6 +16,8 @@ import (
 	"github.com/ije/gox/utils"
 )
 
+const DenoVersion = "2.4.4"
+
 func GetDenoPath(workDir string) (denoPath string, err error) {
 	if workDir == "" {
 		return "", errors.New("workDir is empty")
@@ -31,7 +33,7 @@ func GetDenoPath(workDir string) (denoPath string, err error) {
 		return denoPath, nil
 	}
 
-	err = installDeno(denoPath, "2.2.2")
+	err = installDeno(denoPath, DenoVersion)
 	if err != nil {
 		return "", err
 	}
@@ -69,7 +71,7 @@ func installDeno(installPath string, version string) (err error) {
 		}
 	}
 
-	url, err := getDenoInstallURL(version)
+	url, err := getDenoDotZipURL(version)
 	if err != nil {
 		return
 	}
@@ -129,7 +131,7 @@ func installDeno(installPath string, version string) (err error) {
 	return nil
 }
 
-func getDenoInstallURL(version string) (string, error) {
+func getDenoDotZipURL(version string) (string, error) {
 	var arch string
 	var os string
 

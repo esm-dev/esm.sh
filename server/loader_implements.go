@@ -4,13 +4,14 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"os"
 	"os/exec"
 	"path"
 	"strconv"
 	"strings"
 
+	"github.com/esm-dev/esm.sh/internal/deno"
 	"github.com/esm-dev/esm.sh/internal/importmap"
-	"github.com/esm-dev/esm.sh/internal/jsrt"
 	"github.com/esm-dev/esm.sh/internal/npm"
 	"github.com/ije/gox/term"
 )
@@ -173,7 +174,7 @@ func resolveVueVersion(npmrc *NpmRC, importMap importmap.ImportMap) (vueVersion 
 }
 
 func generateUnoCSS(npmrc *NpmRC, configCSS string, content string) (out *LoaderOutput, err error) {
-	loaderVersion := "0.5.0"
+	loaderVersion := "0.5.1"
 	loaderExecPath := path.Join(config.WorkDir, "bin", "unocss-"+loaderVersion)
 
 	err = doOnce(loaderExecPath, func() (err error) {
@@ -266,7 +267,7 @@ func compileUnocssLoader(npmrc *NpmRC, loaderVersion string, loaderExecPath stri
 	}
 
 	err = doOnce("check-deno", func() (err error) {
-		_, err = jsrt.GetDenoPath(config.WorkDir)
+		_, err = deno.GetDenoPath(config.WorkDir)
 		return err
 	})
 	if err != nil {
@@ -289,7 +290,7 @@ func compileUnocssLoader(npmrc *NpmRC, loaderVersion string, loaderExecPath stri
 		"--output", loaderExecPath,
 		path.Join(wd, "loader.js"),
 	)
-	cmd.Env = []string{"DENO_NO_UPDATE_CHECK=1"}
+	cmd.Env = append(os.Environ(), "DENO_NO_UPDATE_CHECK=1")
 	_, err = cmd.Output()
 	if err != nil {
 		err = fmt.Errorf("failed to compile %s: %s", path.Base(loaderExecPath), err.Error())
