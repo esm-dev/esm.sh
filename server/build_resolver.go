@@ -1277,7 +1277,7 @@ func normalizeEntryPath(path string) string {
 
 func normalizeSavePath(zoneId string, pathname string) string {
 	if strings.HasPrefix(pathname, "modules/transform/") || strings.HasPrefix(pathname, "modules/x/") {
-		if zoneId != "" && valid.IsDomain(zoneId) {
+		if zoneId != "" {
 			return zoneId + "/" + pathname
 		}
 		return pathname
