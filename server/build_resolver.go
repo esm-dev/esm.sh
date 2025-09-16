@@ -18,7 +18,6 @@ import (
 	"github.com/ije/esbuild-internal/js_parser"
 	"github.com/ije/esbuild-internal/logger"
 	"github.com/ije/gox/utils"
-	"github.com/ije/gox/valid"
 )
 
 var moduleExts = []string{".js", ".ts", ".mjs", ".mts", ".jsx", ".tsx", ".cjs", ".cts"}
@@ -1292,7 +1291,7 @@ func normalizeSavePath(zoneId string, pathname string) string {
 			segs[i] = seg[1:] + "/ea"
 		}
 	}
-	if zoneId != "" && valid.IsDomain(zoneId) {
+	if zoneId != "" {
 		return zoneId + "/" + strings.Join(segs, "/")
 	}
 	return strings.Join(segs, "/")
