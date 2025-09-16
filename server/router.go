@@ -112,8 +112,13 @@ func esmRouter(db Database, esmStorage storage.Storage, logger *log.Logger) rex.
 				fmt.Fprintf(h, "%v", options.Minify)
 				hash := hex.EncodeToString(h.Sum(nil))
 
+				zoneId := ctx.R.Header.Get("X-Zone-Id")
+				if zoneId != "" && !valid.IsDomain(zoneId) {
+					zoneId = ""
+				}
+				savePath := normalizeSavePath(zoneId, fmt.Sprintf("modules/transform/%s.mjs", hash))
+
 				// if previous build exists, return it directly
-				savePath := normalizeSavePath(ctx.R.Header.Get("X-Zone-Id"), fmt.Sprintf("modules/transform/%s.mjs", hash))
 				if file, _, err := esmStorage.Get(savePath); err == nil {
 					data, err := io.ReadAll(file)
 					file.Close()
@@ -408,7 +413,11 @@ func esmRouter(db Database, esmStorage storage.Storage, logger *log.Logger) rex.
 			if len(hash) != 40 || !valid.IsHexString(hash) {
 				return rex.Status(404, "Not Found")
 			}
-			savePath := normalizeSavePath(ctx.R.Header.Get("X-Zone-Id"), fmt.Sprintf("modules/transform/%s.%s", hash, ext))
+			zoneId := ctx.R.Header.Get("X-Zone-Id")
+			if zoneId != "" && !valid.IsDomain(zoneId) {
+				zoneId = ""
+			}
+			savePath := normalizeSavePath(zoneId, fmt.Sprintf("modules/transform/%s.%s", hash, ext))
 			f, fi, err := esmStorage.Get(savePath)
 			if err != nil {
 				return rex.Status(500, err.Error())
@@ -485,27 +494,23 @@ func esmRouter(db Database, esmStorage storage.Storage, logger *log.Logger) rex.
 			npmrc = DefaultNpmRC()
 		}
 
-		zoneIdHeader := ctx.R.Header.Get("X-Zone-Id")
-		if zoneIdHeader != "" {
-			if !valid.IsDomain(zoneIdHeader) {
-				zoneIdHeader = ""
-			} else {
-				var scopeName string
-				if pkgName := toPackageName(pathname[1:]); strings.HasPrefix(pkgName, "@") {
-					scopeName = pkgName[:strings.Index(pkgName, "/")]
+		zoneId := ctx.R.Header.Get("X-Zone-Id")
+		if zoneId != "" {
+			var scopeName string
+			if pkgName := toPackageName(pathname[1:]); strings.HasPrefix(pkgName, "@") {
+				scopeName = pkgName[:strings.Index(pkgName, "/")]
+			}
+			if scopeName != "" {
+				reg, ok := npmrc.ScopedRegistries[scopeName]
+				if !ok || (reg.Registry == jsrRegistry && reg.Token == "" && (reg.User == "" || reg.Password == "")) {
+					zoneId = ""
 				}
-				if scopeName != "" {
-					reg, ok := npmrc.ScopedRegistries[scopeName]
-					if !ok || (reg.Registry == jsrRegistry && reg.Token == "" && (reg.User == "" || reg.Password == "")) {
-						zoneIdHeader = ""
-					}
-				} else if npmrc.Registry == npmRegistry && npmrc.Token == "" && (npmrc.User == "" || npmrc.Password == "") {
-					zoneIdHeader = ""
-				}
+			} else if npmrc.Registry == npmRegistry && npmrc.Token == "" && (npmrc.User == "" || npmrc.Password == "") {
+				zoneId = ""
 			}
 		}
-		if zoneIdHeader != "" {
-			npmrc.zoneId = zoneIdHeader
+		if zoneId != "" && valid.IsDomain(zoneId) {
+			npmrc.zoneId = zoneId
 		}
 
 		if strings.HasPrefix(pathname, "/http://") || strings.HasPrefix(pathname, "/https://") {
@@ -560,7 +565,7 @@ func esmRouter(db Database, esmStorage storage.Storage, logger *log.Logger) rex.
 				h.Write([]byte(ctxParam))
 				h.Write([]byte(target))
 				h.Write([]byte(v))
-				savePath := normalizeSavePath(zoneIdHeader, path.Join("modules/x", hex.EncodeToString(h.Sum(nil))+".css"))
+				savePath := normalizeSavePath(npmrc.zoneId, path.Join("modules/x", hex.EncodeToString(h.Sum(nil))+".css"))
 				r, fi, err := esmStorage.Get(savePath)
 				if err != nil && err != storage.ErrNotFound {
 					return rex.Status(500, err.Error())
@@ -704,7 +709,7 @@ func esmRouter(db Database, esmStorage storage.Storage, logger *log.Logger) rex.
 				h.Write([]byte(im))
 				h.Write([]byte(target))
 				h.Write([]byte(v))
-				savePath := normalizeSavePath(zoneIdHeader, path.Join("modules/x", hex.EncodeToString(h.Sum(nil))+".mjs"))
+				savePath := normalizeSavePath(npmrc.zoneId, path.Join("modules/x", hex.EncodeToString(h.Sum(nil))+".mjs"))
 				content, fi, err := esmStorage.Get(savePath)
 				if err != nil && err != storage.ErrNotFound {
 					return rex.Status(500, err.Error())
