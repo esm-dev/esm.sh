@@ -18,6 +18,7 @@ import (
 	"github.com/ije/esbuild-internal/js_parser"
 	"github.com/ije/esbuild-internal/logger"
 	"github.com/ije/gox/utils"
+	"github.com/ije/gox/valid"
 )
 
 var moduleExts = []string{".js", ".ts", ".mjs", ".mts", ".jsx", ".tsx", ".cjs", ".cts"}
@@ -1276,7 +1277,7 @@ func normalizeEntryPath(path string) string {
 
 func normalizeSavePath(zoneId string, pathname string) string {
 	if strings.HasPrefix(pathname, "modules/transform/") || strings.HasPrefix(pathname, "modules/x/") {
-		if zoneId != "" {
+		if zoneId != "" && valid.IsDomain(zoneId) {
 			return zoneId + "/" + pathname
 		}
 		return pathname
@@ -1291,7 +1292,7 @@ func normalizeSavePath(zoneId string, pathname string) string {
 			segs[i] = seg[1:] + "/ea"
 		}
 	}
-	if zoneId != "" {
+	if zoneId != "" && valid.IsDomain(zoneId) {
 		return zoneId + "/" + strings.Join(segs, "/")
 	}
 	return strings.Join(segs, "/")

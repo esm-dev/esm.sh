@@ -485,10 +485,10 @@ func esmRouter(db Database, esmStorage storage.Storage, logger *log.Logger) rex.
 			npmrc = DefaultNpmRC()
 		}
 
-		zoneIdHeader := ctx.R.Header.Get("X-Zone-Id")
-		if zoneIdHeader != "" {
-			if !valid.IsDomain(zoneIdHeader) {
-				zoneIdHeader = ""
+		zoneId := ctx.R.Header.Get("X-Zone-Id")
+		if zoneId != "" {
+			if !valid.IsDomain(zoneId) {
+				zoneId = ""
 			} else {
 				var scopeName string
 				if pkgName := toPackageName(pathname[1:]); strings.HasPrefix(pkgName, "@") {
@@ -497,15 +497,15 @@ func esmRouter(db Database, esmStorage storage.Storage, logger *log.Logger) rex.
 				if scopeName != "" {
 					reg, ok := npmrc.ScopedRegistries[scopeName]
 					if !ok || (reg.Registry == jsrRegistry && reg.Token == "" && (reg.User == "" || reg.Password == "")) {
-						zoneIdHeader = ""
+						zoneId = ""
 					}
 				} else if npmrc.Registry == npmRegistry && npmrc.Token == "" && (npmrc.User == "" || npmrc.Password == "") {
-					zoneIdHeader = ""
+					zoneId = ""
 				}
 			}
 		}
-		if zoneIdHeader != "" {
-			npmrc.zoneId = zoneIdHeader
+		if zoneId != "" {
+			npmrc.zoneId = zoneId
 		}
 
 		if strings.HasPrefix(pathname, "/http://") || strings.HasPrefix(pathname, "/https://") {
@@ -560,7 +560,7 @@ func esmRouter(db Database, esmStorage storage.Storage, logger *log.Logger) rex.
 				h.Write([]byte(ctxParam))
 				h.Write([]byte(target))
 				h.Write([]byte(v))
-				savePath := normalizeSavePath(zoneIdHeader, path.Join("modules/x", hex.EncodeToString(h.Sum(nil))+".css"))
+				savePath := normalizeSavePath(zoneId, path.Join("modules/x", hex.EncodeToString(h.Sum(nil))+".css"))
 				r, fi, err := esmStorage.Get(savePath)
 				if err != nil && err != storage.ErrNotFound {
 					return rex.Status(500, err.Error())
@@ -704,7 +704,7 @@ func esmRouter(db Database, esmStorage storage.Storage, logger *log.Logger) rex.
 				h.Write([]byte(im))
 				h.Write([]byte(target))
 				h.Write([]byte(v))
-				savePath := normalizeSavePath(zoneIdHeader, path.Join("modules/x", hex.EncodeToString(h.Sum(nil))+".mjs"))
+				savePath := normalizeSavePath(zoneId, path.Join("modules/x", hex.EncodeToString(h.Sum(nil))+".mjs"))
 				content, fi, err := esmStorage.Get(savePath)
 				if err != nil && err != storage.ErrNotFound {
 					return rex.Status(500, err.Error())
