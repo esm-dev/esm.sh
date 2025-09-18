@@ -30,8 +30,25 @@ type fsStorage struct {
 	root string
 }
 
-func (fs *fsStorage) Stat(key string) (stat Stat, err error) {
+// safeJoinPath joins and validates that the resulting path is within fs.root
+func (fs *fsStorage) safeJoinPath(key string) (string, error) {
 	filename := filepath.Join(fs.root, key)
+	absPath, err := filepath.Abs(filename)
+	if err != nil {
+		return "", err
+	}
+	// Ensure absPath is within fs.root
+	if !strings.HasPrefix(absPath, fs.root+string(os.PathSeparator)) && absPath != fs.root {
+		return "", errors.New("invalid file path")
+	}
+	return absPath, nil
+}
+
+func (fs *fsStorage) Stat(key string) (stat Stat, err error) {
+	filename, err := fs.safeJoinPath(key)
+	if err != nil {
+		return nil, ErrNotFound
+	}
 	fi, err := os.Lstat(filename)
 	if err != nil {
 		if os.IsNotExist(err) || strings.HasSuffix(err.Error(), "not a directory") {
@@ -43,7 +60,11 @@ func (fs *fsStorage) Stat(key string) (stat Stat, err error) {
 }
 
 func (fs *fsStorage) Get(key string) (content io.ReadCloser, stat Stat, err error) {
-	filename := filepath.Join(fs.root, key)
+	filename, err := fs.safeJoinPath(key)
+	if err != nil {
+		err = ErrNotFound
+		return
+	}
 	file, err := os.Open(filename)
 	if err != nil && (os.IsNotExist(err) || strings.HasSuffix(err.Error(), "not a directory")) {
 		err = ErrNotFound
@@ -60,12 +81,23 @@ func (fs *fsStorage) Get(key string) (content io.ReadCloser, stat Stat, err erro
 
 func (fs *fsStorage) List(prefix string) (keys []string, err error) {
 	dir := strings.TrimSuffix(utils.NormalizePathname(prefix)[1:], "/")
-	return findFiles(filepath.Join(fs.root, dir), dir)
+	absDir, err := fs.safeJoinPath(dir)
+	if err != nil {
+		return nil, err
+	}
+	return findFiles(absDir, dir)
 }
 
 func (fs *fsStorage) Put(key string, content io.Reader) (err error) {
-	filename := filepath.Join(fs.root, key)
-	err = ensureDir(filepath.Dir(filename))
+	filename, err := fs.safeJoinPath(key)
+		return ErrNotFound
+	}
+	dir := filepath.Dir(filename)
+	if !strings.HasPrefix(dir, fs.root+string(os.PathSeparator)) && dir != fs.root {
+		return errors.New("invalid file path")
+	}
+	err = ensureDir(dir)
+	if err != nil {
 	if err != nil {
 		return
 	}
@@ -84,9 +116,17 @@ func (fs *fsStorage) Put(key string, content io.Reader) (err error) {
 }
 
 func (fs *fsStorage) Delete(key string) (err error) {
-	return os.Remove(filepath.Join(fs.root, key))
+	filename, err := fs.safeJoinPath(key)
+	if err != nil {
+		return ErrNotFound
+	}
+	return os.Remove(filename)
 }
 
+	absDir, err := fs.safeJoinPath(dir)
+	if err != nil {
+		return nil, ErrNotFound
+	}
 func (fs *fsStorage) DeleteAll(prefix string) (deletedKeys []string, err error) {
 	dir := strings.TrimSuffix(utils.NormalizePathname(prefix)[1:], "/")
 	if dir == "" {
@@ -96,7 +136,7 @@ func (fs *fsStorage) DeleteAll(prefix string) (deletedKeys []string, err error) 
 	if err != nil {
 		return
 	}
-	err = os.RemoveAll(filepath.Join(fs.root, dir))
+	err = os.RemoveAll(absDir)
 	if err != nil {
 		return
 	}

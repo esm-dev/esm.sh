@@ -18,7 +18,7 @@ import (
 	"strings"
 	"sync"
 	"time"
-
+	"regexp"
 	"github.com/Masterminds/semver/v3"
 	"github.com/esm-dev/esm.sh/internal/fetch"
 	"github.com/esm-dev/esm.sh/internal/jsonc"
@@ -86,6 +86,12 @@ func NewNpmRcFromJSON(jsonData []byte) (npmrc *NpmRC, err error) {
 	err = json.Unmarshal(jsonData, &rc)
 	if err != nil {
 		return nil, err
+	}
+	if rc.zoneId != "" {
+		zoneIdPattern := regexp.MustCompile(`^[a-zA-Z0-9_\-]+$`)
+		if !zoneIdPattern.MatchString(rc.zoneId) {
+			return nil, errors.New("invalid zoneId: must be alphanumeric or _ or - only")
+		}
 	}
 	if rc.Registry == "" {
 		rc.Registry = config.NpmRegistry
