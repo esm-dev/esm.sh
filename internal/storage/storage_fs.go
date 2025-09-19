@@ -11,7 +11,7 @@ import (
 )
 
 // NewFSStorage creates a new storage instance that stores files on the local filesystem.
-func NewFSStorage(options *StorageOptions) (Storage, error) {
+func NewFSStorage(options *StorageOptions) (storage Storage, err error) {
 	if options.Endpoint == "" {
 		return nil, errors.New("endpoint is required")
 	}
@@ -19,8 +19,9 @@ func NewFSStorage(options *StorageOptions) (Storage, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := ensureDir(root); err != nil {
-		return nil, err
+	err = ensureDir(root)
+	if err != nil {
+		return
 	}
 	return &fsStorage{root: root}, nil
 }
@@ -43,7 +44,7 @@ func (fs *fsStorage) safeJoinPath(key string) (string, error) {
 	return absPath, nil
 }
 
-func (fs *fsStorage) Stat(key string) (Stat, error) {
+func (fs *fsStorage) Stat(key string) (stat Stat, err error) {
 	filename, err := fs.safeJoinPath(key)
 	if err != nil {
 		return nil, ErrNotFound
@@ -58,27 +59,27 @@ func (fs *fsStorage) Stat(key string) (Stat, error) {
 	return fi, nil
 }
 
-func (fs *fsStorage) Get(key string) (io.ReadCloser, Stat, error) {
+func (fs *fsStorage) Get(key string) (content io.ReadCloser, stat Stat, err error) {
 	filename, err := fs.safeJoinPath(key)
 	if err != nil {
-		return nil, nil, ErrNotFound
+		err = ErrNotFound
+		return
 	}
 	file, err := os.Open(filename)
-	if err != nil {
-		if os.IsNotExist(err) || strings.HasSuffix(err.Error(), "not a directory") {
-			return nil, nil, ErrNotFound
-		}
-		return nil, nil, err
+	if err != nil && (os.IsNotExist(err) || strings.HasSuffix(err.Error(), "not a directory")) {
+		err = ErrNotFound
 	}
-	stat, err := file.Stat()
-	if err != nil {
-		file.Close()
-		return nil, nil, err
+	if err == nil {
+		stat, err = file.Stat()
 	}
-	return file, stat, nil
+	if err != nil {
+		return
+	}
+	content = file
+	return
 }
 
-func (fs *fsStorage) List(prefix string) ([]string, error) {
+func (fs *fsStorage) List(prefix string) (keys []string, err error) {
 	dir := strings.TrimSuffix(utils.NormalizePathname(prefix)[1:], "/")
 	absDir, err := fs.safeJoinPath(dir)
 	if err != nil {
@@ -87,34 +88,34 @@ func (fs *fsStorage) List(prefix string) ([]string, error) {
 	return findFiles(absDir, dir)
 }
 
-func (fs *fsStorage) Put(key string, content io.Reader) error {
+func (fs *fsStorage) Put(key string, content io.Reader) (err error) {
 	filename, err := fs.safeJoinPath(key)
-	if err != nil {
 		return ErrNotFound
 	}
-
 	dir := filepath.Dir(filename)
 	if !strings.HasPrefix(dir, fs.root+string(os.PathSeparator)) && dir != fs.root {
 		return errors.New("invalid file path")
 	}
-	if err := ensureDir(dir); err != nil {
-		return err
+	err = ensureDir(dir)
+	if err != nil {
+	if err != nil {
+		return
 	}
 
 	file, err := os.Create(filename)
 	if err != nil {
-		return err
+		return
 	}
-	defer file.Close()
 
-	if _, err := io.Copy(file, content); err != nil {
+	_, err = io.Copy(file, content)
+	file.Close()
+	if err != nil {
 		os.Remove(filename) // clean up if error occurs
-		return err
 	}
-	return nil
+	return
 }
 
-func (fs *fsStorage) Delete(key string) error {
+func (fs *fsStorage) Delete(key string) (err error) {
 	filename, err := fs.safeJoinPath(key)
 	if err != nil {
 		return ErrNotFound
@@ -122,35 +123,33 @@ func (fs *fsStorage) Delete(key string) error {
 	return os.Remove(filename)
 }
 
-func (fs *fsStorage) DeleteAll(prefix string) ([]string, error) {
-	dir := strings.TrimSuffix(utils.NormalizePathname(prefix)[1:], "/")
-	if dir == "" {
-		return nil, errors.New("prefix is required")
-	}
-
 	absDir, err := fs.safeJoinPath(dir)
 	if err != nil {
 		return nil, ErrNotFound
 	}
-
+func (fs *fsStorage) DeleteAll(prefix string) (deletedKeys []string, err error) {
+	dir := strings.TrimSuffix(utils.NormalizePathname(prefix)[1:], "/")
+	if dir == "" {
+		return nil, errors.New("prefix is required")
+	}
 	keys, err := fs.List(prefix)
 	if err != nil {
-		return nil, err
+		return
 	}
-
-	if err := os.RemoveAll(absDir); err != nil {
-		return nil, err
+	err = os.RemoveAll(absDir)
+	if err != nil {
+		return
 	}
 	return keys, nil
 }
 
 // ensureDir ensures the given directory exists.
-func ensureDir(dir string) error {
-	_, err := os.Lstat(dir)
+func ensureDir(dir string) (err error) {
+	_, err = os.Lstat(dir)
 	if err != nil && os.IsNotExist(err) {
-		return os.MkdirAll(dir, 0755)
+		err = os.MkdirAll(dir, 0755)
 	}
-	return nil
+	return
 }
 
 // findFiles returns a list of files in the given directory.
@@ -174,7 +173,10 @@ func findFiles(root string, parentDir string) ([]string, error) {
 			if err != nil {
 				return nil, err
 			}
-			files = append(files, subFiles...)
+			newFiles := make([]string, len(files)+len(subFiles))
+			copy(newFiles, files)
+			copy(newFiles[len(files):], subFiles)
+			files = newFiles
 		} else {
 			files = append(files, path)
 		}
