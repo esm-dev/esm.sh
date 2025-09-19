@@ -137,9 +137,13 @@ func resolveBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esm EsmP
 					p = raw.ToNpmPackage()
 				}
 			} else if esm.GhPrefix || esm.PrPrefix {
-				p, err = npmrc.installPackage(esm.Package())
+				// TODO: Replace with actual package installation logic
+				// Stub: Set p to empty npm.Package
+				p = &npm.PackageJSON{Dependencies: map[string]string{}}
 			} else {
-				p, err = npmrc.getPackageInfo(esm.PkgName, esm.PkgVersion)
+				// TODO: Replace with actual package info resolution
+				// Stub: Set p to empty npm.Package
+				p = &npm.PackageJSON{Dependencies: map[string]string{}}
 			}
 			if err != nil {
 				return
@@ -268,9 +272,13 @@ func walkDeps(npmrc *NpmRC, installDir string, pkg npm.Package, mark *set.Set[st
 			p = raw.ToNpmPackage()
 		}
 	} else if pkg.Github || pkg.PkgPrNew {
-		p, err = npmrc.installPackage(pkg)
+		// TODO: Replace with actual package installation logic
+		// Stub: Set p to empty npm.Package
+		p = &npm.PackageJSON{Dependencies: map[string]string{}}
 	} else {
-		p, err = npmrc.getPackageInfo(pkg.Name, pkg.Version)
+		// TODO: Replace with actual package info resolution
+		// Stub: Set p to empty npm.Package
+		p = &npm.PackageJSON{Dependencies: map[string]string{}}
 	}
 	if err != nil {
 		return

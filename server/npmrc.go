@@ -13,12 +13,13 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
 	"sync"
 	"time"
-
+	"regexp"
 	"github.com/Masterminds/semver/v3"
 	"github.com/esm-dev/esm.sh/internal/fetch"
 	"github.com/esm-dev/esm.sh/internal/jsonc"
@@ -87,6 +88,12 @@ func NewNpmRcFromJSON(jsonData []byte) (npmrc *NpmRC, err error) {
 	if err != nil {
 		return nil, err
 	}
+	if rc.zoneId != "" {
+		zoneIdPattern := regexp.MustCompile(`^[a-zA-Z0-9_\-]+$`)
+		if !zoneIdPattern.MatchString(rc.zoneId) {
+			return nil, errors.New("invalid zoneId: must be alphanumeric or _ or - only")
+		}
+	}
 	if rc.Registry == "" {
 		rc.Registry = config.NpmRegistry
 	} else if !strings.HasSuffix(rc.Registry, "/") {
@@ -110,9 +117,18 @@ func NewNpmRcFromJSON(jsonData []byte) (npmrc *NpmRC, err error) {
 
 func (rc *NpmRC) StoreDir() string {
 	if rc.zoneId != "" {
-		return path.Join(config.WorkDir, "npm-"+rc.zoneId)
+		// Only allow zoneId that never escapes the WorkDir
+		subdir := "npm-" + rc.zoneId
+		candidateDir := filepath.Join(config.WorkDir, subdir)
+		cleanWorkDir := filepath.Clean(config.WorkDir)
+		cleanCandidate := filepath.Clean(candidateDir)
+		// Make sure candidateDir is strictly under config.WorkDir
+		if !strings.HasPrefix(cleanCandidate, cleanWorkDir+string(os.PathSeparator)) && cleanCandidate != cleanWorkDir {
+			return filepath.Join(cleanWorkDir, "npm")
+		}
+		return cleanCandidate
 	}
-	return path.Join(config.WorkDir, "npm")
+	return filepath.Join(filepath.Clean(config.WorkDir), "npm")
 }
 
 func (npmrc *NpmRC) getRegistryByPackageName(packageName string) *NpmRegistry {

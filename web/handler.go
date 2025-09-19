@@ -896,7 +896,17 @@ func (s *Handler) ServeHmrWS(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Handler) parseImportMap(filename string) (importMapRaw []byte, importMap importmap.ImportMap, err error) {
-	file, err := os.Open(filepath.Join(s.config.AppDir, filename))
+	// Mitigate path traversal: allow only paths within AppDir
+	absAppDir, err := filepath.Abs(s.config.AppDir)
+	if err != nil {
+		return
+	}
+	absPath, err := filepath.Abs(filepath.Join(absAppDir, filename))
+	if err != nil || !strings.HasPrefix(absPath, absAppDir+string(os.PathSeparator)) {
+		err = errors.New("Invalid file name")
+		return
+	}
+	file, err := os.Open(absPath)
 	if err != nil {
 		return
 	}

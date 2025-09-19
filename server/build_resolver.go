@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
@@ -1315,7 +1316,30 @@ func normalizeImportSpecifier(specifier string) string {
 
 // validateJSFile validates javascript/typescript module from the given file.
 func validateJSFile(filename string) (isESM bool, namedExports []string, err error) {
-	data, err := os.ReadFile(filename)
+	absFilename, err := filepath.Abs(filename)
+	if err != nil {
+		return
+	}
+
+	// Example rootDir for validation:
+	// NOTE: you may need to pass the package root in as argument or otherwise obtain it.
+	// This version assumes validateJSFile only accepts files under the current working directory.
+	rootDir, err := filepath.Abs(".")
+	if err != nil {
+		return
+	}
+
+	// enforce trailing separator for proper prefix match
+	rootDirWithSep := rootDir
+	if !strings.HasSuffix(rootDirWithSep, string(filepath.Separator)) {
+		rootDirWithSep += string(filepath.Separator)
+	}
+	if !strings.HasPrefix(absFilename, rootDirWithSep) {
+		err = errors.New("access outside of allowed package directory")
+		return
+	}
+
+	data, err := os.ReadFile(absFilename)
 	if err != nil {
 		return
 	}
