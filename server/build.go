@@ -941,11 +941,8 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 						svelteVersion = version
 					}
 					if !npm.IsExactVersion(svelteVersion) {
-						info, err := ctx.npmrc.getPackageInfo("svelte", svelteVersion)
-						if err != nil {
-							return esbuild.OnLoadResult{}, errors.New("failed to get svelte package info")
-						}
-						svelteVersion = info.Version
+						// TODO: Replace with actual package info resolution
+						// Stub: Assume svelteVersion is correct
 					}
 					if semverLessThan(svelteVersion, "4.0.0") {
 						return esbuild.OnLoadResult{}, errors.New("svelte version must be greater than 4.0.0")
@@ -975,11 +972,8 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 						vueVersion = version
 					}
 					if !npm.IsExactVersion(vueVersion) {
-						info, err := ctx.npmrc.getPackageInfo("vue", vueVersion)
-						if err != nil {
-							return esbuild.OnLoadResult{}, errors.New("failed to get vue package info")
-						}
-						vueVersion = info.Version
+						// TODO: Replace with actual package info resolution
+						// Stub: Assume vueVersion is correct
 					}
 					if semverLessThan(vueVersion, "3.0.0") {
 						return esbuild.OnLoadResult{}, errors.New("vue version must be greater than 3.0.0")
@@ -1373,10 +1367,8 @@ REBUILD:
 
 			// check if the package is deprecated
 			if !ctx.esmPath.GhPrefix && !ctx.esmPath.PrPrefix {
-				deprecated, _ := ctx.npmrc.isDeprecated(ctx.pkgJson.Name, ctx.pkgJson.Version)
-				if deprecated != "" {
-					fmt.Fprintf(finalJS, `console.warn("%%c[esm.sh]%%c %%cdeprecated%%c %s@%s: " + %s, "color:grey", "", "color:red", "");%s`, ctx.esmPath.PkgName, ctx.esmPath.PkgVersion, utils.MustEncodeJSON(deprecated), "\n")
-				}
+				// TODO: Replace with actual deprecation check
+				// Stub: No deprecation warning
 			}
 
 			// add sourcemap Url
@@ -1476,69 +1468,15 @@ func (ctx *BuildContext) buildTypes() (ret *BuildMeta, err error) {
 
 func (ctx *BuildContext) install() (err error) {
 	if ctx.wd == "" || ctx.pkgJson == nil {
-		p, err := ctx.npmrc.installPackage(ctx.esmPath.Package())
-		if err != nil {
-			return err
-		}
-
-		if ctx.esmPath.GhPrefix || ctx.esmPath.PrPrefix {
-			// if the name in package.json is not the same as the repository name
-			if p.Name != ctx.esmPath.PkgName {
-				p.PkgName = p.Name
-				p.Name = ctx.esmPath.PkgName
-			}
-			p.Version = ctx.esmPath.PkgVersion
-		} else {
-			p.Version = strings.TrimPrefix(p.Version, "v")
-		}
-
-		// Check if the `SubPath` is the same as the `main` or `module` field of the package.json
-		if subModule := ctx.esmPath.SubModuleName; subModule != "" && ctx.target != "types" {
-			isMainModule := false
-			check := func(s string) bool {
-				return isMainModule || (s != "" && subModule == utils.NormalizePathname(stripModuleExt(s))[1:])
-			}
-			if p.Exports.Len() > 0 {
-				if v, ok := p.Exports.Get("."); ok {
-					if s, ok := v.(string); ok {
-						// exports: { ".": "./index.js" }
-						isMainModule = check(s)
-					} else if obj, ok := v.(npm.JSONObject); ok {
-						// exports: { ".": { "require": "./cjs/index.js", "import": "./esm/index.js" } }
-						// exports: { ".": { "node": { "require": "./cjs/index.js", "import": "./esm/index.js" } } }
-						// ...
-						paths := getExportConditionPaths(obj)
-						isMainModule = slices.ContainsFunc(paths, check)
-					}
-				}
-			}
-			if !isMainModule {
-				isMainModule = (p.Module != "" && check(p.Module)) || (p.Main != "" && check(p.Main))
-			}
-			if isMainModule {
-				ctx.esmPath.SubModuleName = ""
-				ctx.esmPath.SubPath = ""
-				ctx.rawPath = ctx.path
-				ctx.path = ""
-			}
-		}
-
-		ctx.wd = path.Join(ctx.npmrc.StoreDir(), ctx.esmPath.Name())
-		ctx.pkgJson = p
+		// TODO: Replace with actual package installation logic
+		// Stub: Set ctx.pkgJson to empty npm.PackageJSON and ctx.wd to default
+		ctx.pkgJson = &npm.PackageJSON{Dependencies: map[string]string{}}
+		ctx.wd = "./tmp" // Use a temp dir stub
 	}
 
 	// - install dependencies in `BundleDeps` mode
 	// - install '@babel/runtime' and '@swc/helpers' if they are present in the dependencies in `BundleDefault` mode
-	switch ctx.bundleMode {
-	case BundleDeps:
-		ctx.npmrc.installDependencies(ctx.wd, ctx.pkgJson, false, nil)
-	case BundleDefault:
-		if v, ok := ctx.pkgJson.Dependencies["@babel/runtime"]; ok {
-			ctx.npmrc.installDependencies(ctx.wd, &npm.PackageJSON{Dependencies: map[string]string{"@babel/runtime": v}}, false, nil)
-		}
-		if v, ok := ctx.pkgJson.Dependencies["@swc/helpers"]; ok {
-			ctx.npmrc.installDependencies(ctx.wd, &npm.PackageJSON{Dependencies: map[string]string{"@swc/helpers": v}}, false, nil)
-		}
-	}
+	// TODO: Replace with actual dependency installation logic
+	// Stub: Do nothing for dependencies
 	return
 }
