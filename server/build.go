@@ -690,19 +690,6 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 								}, nil
 							}
 
-							// if len(args.With) > 0 && args.With["type"] == "json" {
-							// 	path := "/" + ctx.esmPath.Name() + utils.NormalizePathname(modulePath)
-							// 	if args.Kind == esbuild.ResolveJSDynamicImport {
-							// 		// esbuild removes the `{ type: "json" }` when it's a dynamic import
-							// 		path += "?module"
-							// 	}
-							// 	return esbuild.OnResolveResult{
-							// 		Path:        path,
-							// 		External:    true,
-							// 		SideEffects: esbuild.SideEffectsFalse,
-							// 	}, nil
-							// }
-
 							filename = path.Join(ctx.wd, "node_modules", ctx.esmPath.PkgName, modulePath)
 
 							// split the module that includes `export * from "external"` statement
