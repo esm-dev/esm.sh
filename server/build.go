@@ -406,15 +406,15 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 						return esbuild.OnResolveResult{Path: path}, nil
 					}
 
-					// ban file: imports
-					if strings.HasPrefix(args.Path, "file:") {
+					// ban `file:` imports
+					if after, ok := strings.CutPrefix(args.Path, "file:"); ok {
 						return esbuild.OnResolveResult{
-							Path:     fmt.Sprintf("/error.js?type=unsupported-file-dependency&name=%s&importer=%s", strings.TrimPrefix(args.Path, "file:"), ctx.esmPath.Specifier()),
+							Path:     fmt.Sprintf("/error.js?type=unsupported-file-dependency&name=%s&importer=%s", after, ctx.esmPath.Specifier()),
 							External: true,
 						}, nil
 					}
 
-					// skip data: and http: imports
+					// skip `data:` and `http:` imports
 					if strings.HasPrefix(args.Path, "data:") || strings.HasPrefix(args.Path, "https:") || strings.HasPrefix(args.Path, "http:") {
 						return esbuild.OnResolveResult{
 							Path:     args.Path,
@@ -544,6 +544,11 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 						filename = path.Join(args.ResolveDir, specifier)
 					} else {
 						filename = path.Join(ctx.wd, "node_modules", specifier)
+					}
+
+					// check if the filename is within the working directory
+					if !strings.HasPrefix(filename, ctx.wd+string(os.PathSeparator)) {
+						return esbuild.OnResolveResult{}, fmt.Errorf("could not resolve module %s", specifier)
 					}
 
 					// node native modules do not work via http import
