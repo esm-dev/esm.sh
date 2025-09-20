@@ -489,7 +489,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 								if isRelPathSpecifier(specifier) {
 									specifier = ctx.esmPath.PkgName + "/" + strings.TrimPrefix(specifier, "./")
 								}
-							} else if m, ok := v.(map[string]interface{}); ok {
+							} else if m, ok := v.(map[string]any); ok {
 								targets := []string{"browser", "module", "import", "default"}
 								if ctx.isDenoTarget() {
 									targets = []string{"deno", "module", "import", "default"}
@@ -690,13 +690,18 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 								}, nil
 							}
 
-							if len(args.With) > 0 && args.With["type"] == "json" {
-								return esbuild.OnResolveResult{
-									Path:        "/" + ctx.esmPath.Name() + utils.NormalizePathname(modulePath) + "?module",
-									External:    true,
-									SideEffects: esbuild.SideEffectsFalse,
-								}, nil
-							}
+							// if len(args.With) > 0 && args.With["type"] == "json" {
+							// 	path := "/" + ctx.esmPath.Name() + utils.NormalizePathname(modulePath)
+							// 	if args.Kind == esbuild.ResolveJSDynamicImport {
+							// 		// esbuild removes the `{ type: "json" }` when it's a dynamic import
+							// 		path += "?module"
+							// 	}
+							// 	return esbuild.OnResolveResult{
+							// 		Path:        path,
+							// 		External:    true,
+							// 		SideEffects: esbuild.SideEffectsFalse,
+							// 	}, nil
+							// }
 
 							filename = path.Join(ctx.wd, "node_modules", ctx.esmPath.PkgName, modulePath)
 

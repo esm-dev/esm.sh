@@ -741,8 +741,8 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 	}
 
 	// if it's a sub-module of current package
-	if strings.HasPrefix(specifier, ctx.pkgJson.Name+"/") {
-		subPath := strings.TrimPrefix(specifier, ctx.pkgJson.Name+"/")
+	if after, ok := strings.CutPrefix(specifier, ctx.pkgJson.Name+"/"); ok {
+		subPath := after
 		subModule := EsmPath{
 			GhPrefix:      ctx.esmPath.GhPrefix,
 			PrPrefix:      ctx.esmPath.PrPrefix,
@@ -758,6 +758,10 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 				if entry.main != "" {
 					resolvedPath = "/" + subModule.Name() + entry.main[1:]
 				}
+			}
+			if kind == esbuild.ResolveJSDynamicImport {
+				// esbuild removes the `{ type: "json" }` when it's a dynamic import
+				resolvedPath += "?module"
 			}
 		} else {
 			resolvedPath = ctx.getImportPath(subModule, ctx.getBuildArgsPrefix(false), ctx.externalAll)
@@ -860,6 +864,10 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 			if entry.main != "" {
 				resolvedPath = "/" + dep.Name() + entry.main[1:]
 			}
+		}
+		if kind == esbuild.ResolveJSDynamicImport {
+			// esbuild removes the `{ type: "json" }` when it's a dynamic import
+			resolvedPath += "?module"
 		}
 		return
 	}
