@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"os"
 	"os/exec"
 	"path"
 	"strconv"
@@ -308,15 +309,15 @@ func generateTailwindCSS(npmrc *NpmRC, configCSS string, content string) (out *L
 }
 
 func generateUnoCSS(npmrc *NpmRC, configCSS string, content string) (out *LoaderOutput, err error) {
-	unoVersion := "0.5.0"
-	loaderExecPath := path.Join(config.WorkDir, "bin", "unocss-"+unoVersion)
+	loaderVersion := "0.5.1"
+	loaderExecPath := path.Join(config.WorkDir, "bin", "unocss-"+loaderVersion)
 
 	err = doOnce(loaderExecPath, func() (err error) {
 		if !existsFile(loaderExecPath) {
 			if DEBUG {
 				fmt.Println(term.Dim("Compiling unocss loader..."))
 			}
-			err = compileUnocssLoader(npmrc, unoVersion, loaderExecPath)
+			err = compileUnocssLoader(npmrc, loaderVersion, loaderExecPath)
 		}
 		return
 	})
@@ -424,7 +425,7 @@ func compileUnocssLoader(npmrc *NpmRC, pkgVersion string, loaderExecPath string)
 		"--output", loaderExecPath,
 		path.Join(wd, "loader.js"),
 	)
-	cmd.Env = []string{"DENO_NO_UPDATE_CHECK=1"}
+	cmd.Env = append(os.Environ(), "DENO_NO_UPDATE_CHECK=1")
 	_, err = cmd.Output()
 	if err != nil {
 		msg := err.Error()

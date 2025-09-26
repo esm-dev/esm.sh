@@ -1,7 +1,7 @@
 import { assertStringIncludes } from "jsr:@std/assert";
 
 import postcss from "http://localhost:8080/postcss@8.4.16";
-import autoprefixer from "http://localhost:8080/autoprefixer@10.4.12?deps=postcss@8.4.16";
+import autoprefixer from "http://localhost:8080/autoprefixer@10.4.12?deps=postcss@8.4.16,caniuse-lite@1.0.30001407";
 import tailwindCSS from "http://localhost:8080/tailwindcss@3.3.5?deps=postcss@8.4.16";
 
 Deno.test("postcss(autoprefixer)", async () => {
@@ -11,6 +11,7 @@ Deno.test("postcss(autoprefixer)", async () => {
 	`).async();
   assertStringIncludes(css, "-webkit-backdrop-filter: blur(5px);");
   assertStringIncludes(css, "-webkit-user-select: none;");
+  assertStringIncludes(css, "-moz-user-select: none;");
 });
 
 Deno.test("postcss(tailwindCSS)", async () => {

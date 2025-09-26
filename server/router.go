@@ -72,7 +72,7 @@ func esmRouter(db Database, esmStorage storage.Storage, logger *log.Logger) rex.
 		pathname := ctx.R.URL.Path
 
 		// ban malicious requests
-		if strings.HasPrefix(pathname, "/.") || strings.HasSuffix(pathname, ".env") || strings.HasSuffix(pathname, ".php") {
+		if strings.HasSuffix(pathname, ".env") || strings.HasSuffix(pathname, ".php") || strings.Contains(pathname, "/.") {
 			return rex.Status(404, "not found")
 		}
 
@@ -112,8 +112,13 @@ func esmRouter(db Database, esmStorage storage.Storage, logger *log.Logger) rex.
 				fmt.Fprintf(h, "%v", options.Minify)
 				hash := hex.EncodeToString(h.Sum(nil))
 
+				zoneId := ctx.R.Header.Get("X-Zone-Id")
+				if zoneId != "" && !valid.IsDomain(zoneId) {
+					zoneId = ""
+				}
+				savePath := normalizeSavePath(zoneId, fmt.Sprintf("modules/transform/%s.mjs", hash))
+
 				// if previous build exists, return it directly
-				savePath := normalizeSavePath(ctx.R.Header.Get("X-Zone-Id"), fmt.Sprintf("modules/transform/%s.mjs", hash))
 				if file, _, err := esmStorage.Get(savePath); err == nil {
 					data, err := io.ReadAll(file)
 					file.Close()
@@ -408,7 +413,11 @@ func esmRouter(db Database, esmStorage storage.Storage, logger *log.Logger) rex.
 			if len(hash) != 40 || !valid.IsHexString(hash) {
 				return rex.Status(404, "Not Found")
 			}
-			savePath := normalizeSavePath(ctx.R.Header.Get("X-Zone-Id"), fmt.Sprintf("modules/transform/%s.%s", hash, ext))
+			zoneId := ctx.R.Header.Get("X-Zone-Id")
+			if zoneId != "" && !valid.IsDomain(zoneId) {
+				zoneId = ""
+			}
+			savePath := normalizeSavePath(zoneId, fmt.Sprintf("modules/transform/%s.%s", hash, ext))
 			f, fi, err := esmStorage.Get(savePath)
 			if err != nil {
 				return rex.Status(500, err.Error())
@@ -485,27 +494,23 @@ func esmRouter(db Database, esmStorage storage.Storage, logger *log.Logger) rex.
 			npmrc = DefaultNpmRC()
 		}
 
-		zoneIdHeader := ctx.R.Header.Get("X-Zone-Id")
-		if zoneIdHeader != "" {
-			if !valid.IsDomain(zoneIdHeader) {
-				zoneIdHeader = ""
-			} else {
-				var scopeName string
-				if pkgName := toPackageName(pathname[1:]); strings.HasPrefix(pkgName, "@") {
-					scopeName = pkgName[:strings.Index(pkgName, "/")]
+		zoneId := ctx.R.Header.Get("X-Zone-Id")
+		if zoneId != "" {
+			var scopeName string
+			if pkgName := toPackageName(pathname[1:]); strings.HasPrefix(pkgName, "@") {
+				scopeName = pkgName[:strings.Index(pkgName, "/")]
+			}
+			if scopeName != "" {
+				reg, ok := npmrc.ScopedRegistries[scopeName]
+				if !ok || (reg.Registry == jsrRegistry && reg.Token == "" && (reg.User == "" || reg.Password == "")) {
+					zoneId = ""
 				}
-				if scopeName != "" {
-					reg, ok := npmrc.ScopedRegistries[scopeName]
-					if !ok || (reg.Registry == jsrRegistry && reg.Token == "" && (reg.User == "" || reg.Password == "")) {
-						zoneIdHeader = ""
-					}
-				} else if npmrc.Registry == npmRegistry && npmrc.Token == "" && (npmrc.User == "" || npmrc.Password == "") {
-					zoneIdHeader = ""
-				}
+			} else if npmrc.Registry == npmRegistry && npmrc.Token == "" && (npmrc.User == "" || npmrc.Password == "") {
+				zoneId = ""
 			}
 		}
-		if zoneIdHeader != "" {
-			npmrc.zoneId = zoneIdHeader
+		if zoneId != "" && valid.IsDomain(zoneId) {
+			npmrc.zoneId = zoneId
 		}
 
 		if strings.HasPrefix(pathname, "/http://") || strings.HasPrefix(pathname, "/https://") {
@@ -560,7 +565,7 @@ func esmRouter(db Database, esmStorage storage.Storage, logger *log.Logger) rex.
 				h.Write([]byte(ctxParam))
 				h.Write([]byte(target))
 				h.Write([]byte(v))
-				savePath := normalizeSavePath(zoneIdHeader, path.Join("modules/x", hex.EncodeToString(h.Sum(nil))+".css"))
+				savePath := normalizeSavePath(npmrc.zoneId, path.Join("modules/x", hex.EncodeToString(h.Sum(nil))+".css"))
 				r, fi, err := esmStorage.Get(savePath)
 				if err != nil && err != storage.ErrNotFound {
 					return rex.Status(500, err.Error())
@@ -573,14 +578,14 @@ func esmRouter(db Database, esmStorage storage.Storage, logger *log.Logger) rex.
 				}
 				res, err := fetchClient.Fetch(ctxUrl, nil)
 				if err != nil {
-					return rex.Status(500, "Failed to fetch unocss context page content")
+					return rex.Status(500, "unocss: Failed to fetch page content")
 				}
 				defer res.Body.Close()
 				if res.StatusCode != 200 {
 					if res.StatusCode == 404 {
-						return rex.Status(404, "Unocss context page not found")
+						return rex.Status(404, "unocss: context page not found")
 					}
-					return rex.Status(500, "Failed to fetch unocss context page content")
+					return rex.Status(500, "unocss: Failed to fetch page content: "+res.Status)
 				}
 				tokenizer := html.NewTokenizer(io.LimitReader(res.Body, 5*MB))
 				content := []string{}
@@ -704,7 +709,7 @@ func esmRouter(db Database, esmStorage storage.Storage, logger *log.Logger) rex.
 				h.Write([]byte(im))
 				h.Write([]byte(target))
 				h.Write([]byte(v))
-				savePath := normalizeSavePath(zoneIdHeader, path.Join("modules/x", hex.EncodeToString(h.Sum(nil))+".mjs"))
+				savePath := normalizeSavePath(npmrc.zoneId, path.Join("modules/x", hex.EncodeToString(h.Sum(nil))+".mjs"))
 				content, fi, err := esmStorage.Get(savePath)
 				if err != nil && err != storage.ErrNotFound {
 					return rex.Status(500, err.Error())
@@ -854,9 +859,11 @@ func esmRouter(db Database, esmStorage storage.Storage, logger *log.Logger) rex.
 			return rex.Status(status, message)
 		}
 
-		pkgAllowed := config.AllowList.IsPackageAllowed(esm.PkgName)
-		pkgBanned := config.BanList.IsPackageBanned(esm.PkgName)
-		if !pkgAllowed || pkgBanned {
+		if !config.AllowList.IsEmpty() && !config.AllowList.IsPackageAllowed(esm.Name()) {
+			return rex.Status(403, "forbidden")
+		}
+
+		if !config.BanList.IsEmpty() && config.BanList.IsPackageBanned(esm.Name()) {
 			return rex.Status(403, "forbidden")
 		}
 
@@ -1026,62 +1033,93 @@ func esmRouter(db Database, esmStorage storage.Storage, logger *log.Logger) rex.
 				ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", config.NpmQueryCacheTTL))
 				return redirect(ctx, fmt.Sprintf("%s%s/%s@%s%s%s", origin, registryPrefix, pkgName, pkgVersion, subPath, query), false)
 			}
-		} else {
-			// return wasm file as an es6 module when `?module` query is present (requires `top-level-await` support)
-			if pathKind == RawFile && strings.HasSuffix(esm.SubPath, ".wasm") && query.Has("module") {
-				buf := &bytes.Buffer{}
-				wasmUrl := origin + pathname
-				fmt.Fprintf(buf, "/* esm.sh - wasm module */\n")
-				fmt.Fprintf(buf, "const data = await fetch(%s).then(r => r.arrayBuffer());\nexport default new WebAssembly.Module(data);", strings.TrimSpace(string(utils.MustEncodeJSON(wasmUrl))))
-				ctx.SetHeader("Content-Type", ctJavaScript)
-				ctx.SetHeader("Cache-Control", ccImmutable)
-				return buf
-			}
+		}
 
-			// fix url that is related to `import.meta.url`
-			if hasTargetSegment && pathKind == RawFile && !rawFlag {
-				extname := path.Ext(esm.SubPath)
-				dir := path.Join(npmrc.StoreDir(), esm.Name())
-				if !existsDir(dir) {
-					_, err := npmrc.installPackage(esm.Package())
-					if err != nil {
-						return rex.Status(500, err.Error())
-					}
-				}
-				pkgRoot := path.Join(dir, "node_modules", esm.PkgName)
-				files, err := findFiles(pkgRoot, "", func(fp string) bool {
-					return strings.HasSuffix(fp, extname)
-				})
+		// fix url that is related to `import.meta.url`
+		if hasTargetSegment && isExactVersion && pathKind == RawFile && !rawFlag {
+			extname := path.Ext(esm.SubPath)
+			dir := path.Join(npmrc.StoreDir(), esm.Name())
+			if !existsDir(dir) {
+				_, err := npmrc.installPackage(esm.Package())
 				if err != nil {
 					return rex.Status(500, err.Error())
 				}
-				var file string
-				if l := len(files); l == 1 {
-					file = files[0]
-				} else if l > 1 {
+			}
+			pkgRoot := path.Join(dir, "node_modules", esm.PkgName)
+			files, err := findFiles(pkgRoot, "", func(fp string) bool {
+				return strings.HasSuffix(fp, extname)
+			})
+			if err != nil {
+				return rex.Status(500, err.Error())
+			}
+			var file string
+			if l := len(files); l == 1 {
+				file = files[0]
+			} else if l > 1 {
+				for _, f := range files {
+					if strings.HasSuffix(esm.SubPath, f) {
+						file = f
+						break
+					}
+				}
+				if file == "" {
 					for _, f := range files {
-						if strings.HasSuffix(esm.SubPath, f) {
+						if path.Base(esm.SubPath) == path.Base(f) {
 							file = f
 							break
 						}
 					}
-					if file == "" {
-						for _, f := range files {
-							if path.Base(esm.SubPath) == path.Base(f) {
-								file = f
-								break
-							}
-						}
-					}
 				}
-				if file == "" {
-					return rex.Status(404, "File not found")
-				}
-				url := fmt.Sprintf("%s%s/%s@%s/%s", origin, registryPrefix, esm.PkgName, esm.PkgVersion, file)
-				return redirect(ctx, url, true)
+			}
+			if file == "" {
+				return rex.Status(404, "File not found")
+			}
+			url := fmt.Sprintf("%s%s/%s@%s/%s", origin, registryPrefix, esm.PkgName, esm.PkgVersion, file)
+			return redirect(ctx, url, true)
+		}
+
+		// try to serve package static files if the version is exact
+		if isExactVersion {
+			// return wasm file as an es6 module when `?module` query is present (requires `top-level-await` support)
+			if pathKind == RawFile && strings.HasSuffix(esm.SubPath, ".wasm") && query.Has("module") {
+				wasmUrl := origin + pathname
+				buf := bytes.NewBufferString("/* esm.sh - wasm module */\n")
+				buf.WriteString("const data = await fetch(")
+				buf.WriteString(strings.TrimSpace(string(utils.MustEncodeJSON(wasmUrl))))
+				buf.WriteString(").then(r => r.arrayBuffer());\n")
+				buf.WriteString("export default new WebAssembly.Module(data);")
+				ctx.SetHeader("Content-Type", ctJavaScript)
+				ctx.SetHeader("Content-Length", fmt.Sprintf("%d", buf.Len()))
+				ctx.SetHeader("Cache-Control", ccImmutable)
+				return buf
 			}
 
-			// package raw files
+			// return css file as a `CSSStyleSheet` object when `?module` query is present
+			if pathKind == RawFile && strings.HasSuffix(esm.SubPath, ".css") && query.Has("module") {
+				filename := path.Join(npmrc.StoreDir(), esm.Name(), "node_modules", esm.PkgName, esm.SubPath)
+				css, err := os.ReadFile(filename)
+				if err != nil {
+					return rex.Status(500, err.Error())
+				}
+				buf := bytes.NewBufferString("/* esm.sh - css module */\n")
+				buf.WriteString("const stylesheet = new CSSStyleSheet();\n")
+				if bytes.ContainsRune(css, '`') {
+					buf.WriteString("stylesheet.replaceSync(`")
+					buf.WriteString(strings.TrimSpace(string(utils.MustEncodeJSON(string(css)))))
+					buf.WriteString(");\n")
+				} else {
+					buf.WriteString("stylesheet.replaceSync(`")
+					buf.Write(css)
+					buf.WriteString("`);\n")
+				}
+				buf.WriteString("export default stylesheet;\n")
+				ctx.SetHeader("Content-Type", ctJavaScript)
+				ctx.SetHeader("Content-Length", fmt.Sprintf("%d", buf.Len()))
+				ctx.SetHeader("Cache-Control", ccImmutable)
+				return buf
+			}
+
+			// serve package raw files
 			if pathKind == RawFile {
 				if esm.SubPath == "" {
 					b := &BuildContext{
@@ -1164,7 +1202,7 @@ func esmRouter(db Database, esmStorage storage.Storage, logger *log.Logger) rex.
 				return content // auto closed
 			}
 
-			// build/dts files
+			// serve build/dts files
 			if pathKind == EsmBuild || pathKind == EsmSourceMap || pathKind == EsmDts {
 				var savePath string
 				if asteriskPrefix {

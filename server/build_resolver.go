@@ -314,6 +314,18 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 					}
 					*/
 					exportEntry = ctx.resolveConditionExportEntry(obj, pkgJson.Type)
+				} else if arr, ok := v.([]any); ok {
+					/**
+					exports: {
+						".": ["./cjs/index.js", "./esm/index.js"]
+					}
+					*/
+					a0 := arr[0]
+					if s, ok := a0.(string); ok {
+						exportEntry.update(s, pkgJson.Type == "module")
+					} else if obj, ok := a0.(npm.JSONObject); ok {
+						exportEntry = ctx.resolveConditionExportEntry(obj, pkgJson.Type)
+					}
 				}
 			} else {
 				/**
@@ -578,10 +590,15 @@ func (ctx *BuildContext) resolveConditionExportEntry(conditions npm.JSONObject, 
 	var conditionFound bool
 
 	if ctx.isBrowserTarget() {
-		conditionFound = applyCondition("browser")
+		conditionName := "browser"
+		// [workaround] fix astring entry in browser
+		if ctx.esmPath.PkgName == "astring" {
+			conditionName = "import"
+		}
+		conditionFound = applyCondition(conditionName)
 	} else if ctx.isDenoTarget() {
 		conditionName := "deno"
-		// [workaround] to support ssr in Deno, use `node` condition for solid-js < 1.6.0
+		// [workaround] to support solid-js/ssr in Deno, use `node` condition for < 1.6.0
 		if ctx.esmPath.PkgName == "solid-js" && semverLessThan(ctx.esmPath.PkgVersion, "1.6.0") {
 			conditionName = "node"
 		}
@@ -607,7 +624,7 @@ LOOP:
 		module := false
 		prefered := ""
 		switch conditionName {
-		case "module", "import", "es2015":
+		case "import", "module", "es2015":
 			module = true
 			prefered = "module"
 		case "require":
@@ -685,7 +702,8 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 	}()
 
 	// check `?external`
-	if ctx.externalAll || ctx.args.External.Has(toPackageName(specifier)) {
+	packageName := toPackageName(specifier)
+	if ctx.externalAll || ctx.args.External.Has(packageName) || isPackageInExternalNamespace(packageName, ctx.args.External) {
 		resolvedPath = specifier
 		return
 	}
@@ -723,8 +741,8 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 	}
 
 	// if it's a sub-module of current package
-	if strings.HasPrefix(specifier, ctx.pkgJson.Name+"/") {
-		subPath := strings.TrimPrefix(specifier, ctx.pkgJson.Name+"/")
+	if after, ok := strings.CutPrefix(specifier, ctx.pkgJson.Name+"/"); ok {
+		subPath := after
 		subModule := EsmPath{
 			GhPrefix:      ctx.esmPath.GhPrefix,
 			PrPrefix:      ctx.esmPath.PrPrefix,
@@ -740,6 +758,10 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 				if entry.main != "" {
 					resolvedPath = "/" + subModule.Name() + entry.main[1:]
 				}
+			}
+			if kind == esbuild.ResolveJSDynamicImport {
+				// esbuild removes the `{ type: "json" }` when it's a dynamic import
+				resolvedPath += "?module"
 			}
 		} else {
 			resolvedPath = ctx.getImportPath(subModule, ctx.getBuildArgsPrefix(false), ctx.externalAll)
@@ -842,6 +864,10 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 			if entry.main != "" {
 				resolvedPath = "/" + dep.Name() + entry.main[1:]
 			}
+		}
+		if kind == esbuild.ResolveJSDynamicImport {
+			// esbuild removes the `{ type: "json" }` when it's a dynamic import
+			resolvedPath += "?module"
 		}
 		return
 	}
@@ -1281,11 +1307,12 @@ func normalizeSavePath(zoneId string, pathname string) string {
 
 // normalizeImportSpecifier normalizes the given specifier.
 func normalizeImportSpecifier(specifier string) string {
-	if specifier == "." {
+	switch specifier {
+	case ".":
 		specifier = "./index"
-	} else if specifier == ".." {
+	case "..":
 		specifier = "../index"
-	} else {
+	default:
 		specifier = strings.TrimPrefix(specifier, "npm:")
 	}
 	if nodeBuiltinModules[specifier] {
@@ -1312,7 +1339,7 @@ func validateJSFile(filename string) (isESM bool, namedExports []string, err err
 	ast, pass := js_parser.Parse(log, logger.Source{
 		Index:          0,
 		KeyPath:        logger.Path{Text: "<stdin>"},
-		PrettyPath:     "<stdin>",
+		PrettyPaths:    logger.PrettyPaths{Rel: "<stdin>"},
 		IdentifierName: "stdin",
 		Contents:       string(data),
 	}, parserOpts)

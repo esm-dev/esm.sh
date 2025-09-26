@@ -226,6 +226,19 @@ func resolveBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esm EsmP
 					}
 					continue
 				}
+				// Check if this is a namespace pattern (e.g., @radix-ui)
+				isNamespace := strings.HasPrefix(name, "@") && !strings.Contains(name[1:], "/")
+				if isNamespace {
+					// Add all packages from this namespace that are in deps
+					for _, dep := range deps.Values() {
+						if strings.HasPrefix(dep, name+"/") {
+							external = append(external, dep)
+						}
+					}
+					// Also keep the namespace itself in external for pattern matching
+					external = append(external, name)
+					continue
+				}
 				// if the subModule externalizes the package entry
 				if name == esm.PkgName && esm.SubPath != "" {
 					external = append(external, name)

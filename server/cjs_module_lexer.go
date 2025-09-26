@@ -104,7 +104,7 @@ func cjsModuleLexer(b *BuildContext, cjsEntry string) (ret cjsModuleLexerResult,
 			"--no-lock",
 			"--quiet",
 			js)
-		cmd.Env = []string{"DENO_NO_UPDATE_CHECK=1"}
+		cmd.Env = append(os.Environ(), "DENO_NO_UPDATE_CHECK=1")
 		data, err = cmd.CombinedOutput()
 		if err != nil {
 			msg := err.Error()

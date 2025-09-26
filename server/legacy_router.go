@@ -213,7 +213,7 @@ func legacyESM(ctx *rex.Context, buildStorage storage.Storage, buildVersionPrefi
 				return rex.Status(404, "Module Not Found")
 			}
 			ctx.SetHeader("Content-Length", strconv.FormatInt(fi.Size(), 10))
-			ctx.SetHeader("Control-Cache", ccImmutable)
+			ctx.SetHeader("Cache-Control", ccImmutable)
 			return f // auto closed
 		}
 	} else {
@@ -237,7 +237,7 @@ func legacyESM(ctx *rex.Context, buildStorage storage.Storage, buildVersionPrefi
 			var ret LegacyBuildMeta
 			if json.NewDecoder(f).Decode(&ret) == nil {
 				ctx.SetHeader("Content-Type", ctJavaScript)
-				ctx.SetHeader("Control-Cache", ccImmutable)
+				ctx.SetHeader("Cache-Control", ccImmutable)
 				if varyUA {
 					appendVaryHeader(ctx.W.Header(), "User-Agent")
 				}
@@ -293,7 +293,7 @@ func legacyESM(ctx *rex.Context, buildStorage storage.Storage, buildVersionPrefi
 			return rex.Status(500, "Storage error: "+err.Error())
 		}
 		ctx.SetHeader("Content-Type", res.Header.Get("Content-Type"))
-		ctx.SetHeader("Control-Cache", ccImmutable)
+		ctx.SetHeader("Cache-Control", ccImmutable)
 		// resolve hostname in typescript definition files if the origin is not "https://esm.sh"
 		if endsWith(pathname, ".d.ts", ".d.mts") {
 			origin := getOrigin(ctx)
@@ -328,7 +328,7 @@ func legacyESM(ctx *rex.Context, buildStorage storage.Storage, buildVersionPrefi
 			return rex.Status(500, "Storage error: "+err.Error())
 		}
 		ctx.SetHeader("Content-Type", res.Header.Get("Content-Type"))
-		ctx.SetHeader("Control-Cache", ccImmutable)
+		ctx.SetHeader("Cache-Control", ccImmutable)
 		if query != "" && !ctx.R.URL.Query().Has("target") {
 			appendVaryHeader(ctx.W.Header(), "User-Agent")
 		}

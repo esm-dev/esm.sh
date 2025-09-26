@@ -6,8 +6,8 @@
 ((document, location) => {
   const currentScript = document.currentScript as HTMLScriptElement | null;
   const $: typeof document.querySelector = (s: string) => document.querySelector(s);
-  if (location.protocol == "file:" || ["localhost", "127.0.0.1"].includes(location.hostname)) {
-    console.error("[esm.sh/x] Please start your app with `npx esm.sh serve` in development env.");
+  if (location.protocol == "file:" || /^((\w+\.)?localhost|127\.0\.0\.1)$/.test(location.hostname)) {
+    console.error("[esm.sh/x] Please start your app with `npx esm.sh serve` in development mode.");
     return;
   }
   let main = currentScript?.getAttribute("href");

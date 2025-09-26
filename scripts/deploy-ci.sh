@@ -42,12 +42,6 @@ ssh esm.sh << EOF
     apt-get install -y git
   fi
 
-  ufw version
-  if [ "\$?" == "0" ]; then
-    ufw allow http
-    ufw allow https
-  fi
-
   configjson=/etc/esmd/config.json
   servicerc=/etc/systemd/system/esmd.service
   reload=no

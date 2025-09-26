@@ -6,9 +6,10 @@ import (
 
 func TestExtractPackageName(t *testing.T) {
 	type want struct {
-		fullNameWithoutVersion  string
-		scope                   string
-		nameWithoutVersionScope string
+		packageId string
+		scope     string
+		name      string
+		version   string
 	}
 	tests := []struct {
 		name        string
@@ -18,37 +19,40 @@ func TestExtractPackageName(t *testing.T) {
 		{
 			name:        "PackageWithVersionAndNoScope",
 			packageName: "faker@1.5.0",
-			want:        want{fullNameWithoutVersion: "faker", scope: "", nameWithoutVersionScope: "faker"},
+			want:        want{packageId: "faker@1.5.0", scope: "", name: "faker", version: "1.5.0"},
 		},
 		{
 			name:        "PackageWithVersionAndScope",
 			packageName: "@github/faker@1.5.0",
-			want:        want{fullNameWithoutVersion: "@github/faker", scope: "@github", nameWithoutVersionScope: "faker"},
+			want:        want{packageId: "@github/faker@1.5.0", scope: "@github", name: "faker", version: "1.5.0"},
 		},
 		{
 			name:        "ReactLoadedFromStable",
 			packageName: "react@18.2.0/es2022/react.mjs",
-			want:        want{fullNameWithoutVersion: "react", scope: "", nameWithoutVersionScope: "react"},
+			want:        want{packageId: "react@18.2.0", scope: "", name: "react", version: "18.2.0"},
 		},
 		{
 			name:        "ScopedLoadedFromStable",
 			packageName: "@github/faker@0.0.1/es2022/faker.mjs",
-			want:        want{fullNameWithoutVersion: "@github/faker", scope: "@github", nameWithoutVersionScope: "faker"},
+			want:        want{packageId: "@github/faker@0.0.1", scope: "@github", name: "faker", version: "0.0.1"},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			fullNameWithoutVersion, scope, nameWithoutVersionScope := extractPackageName(tt.packageName)
+			fullNameWithoutVersion, scope, name, version := extractPackageName(tt.packageName)
 
-			if fullNameWithoutVersion != tt.want.fullNameWithoutVersion {
-				t.Errorf("%s not equal %s", fullNameWithoutVersion, tt.want.fullNameWithoutVersion)
+			if fullNameWithoutVersion != tt.want.packageId {
+				t.Errorf("%s not equal %s", fullNameWithoutVersion, tt.want.packageId)
 			}
 			if scope != tt.want.scope {
 				t.Errorf("%s not equal %s", scope, tt.want.scope)
 			}
-			if nameWithoutVersionScope != tt.want.nameWithoutVersionScope {
-				t.Errorf("%s not equal %s", nameWithoutVersionScope, tt.want.nameWithoutVersionScope)
+			if name != tt.want.name {
+				t.Errorf("%s not equal %s", name, tt.want.name)
+			}
+			if version != tt.want.version {
+				t.Errorf("%s not equal %s", version, tt.want.version)
 			}
 		})
 	}
@@ -75,9 +79,7 @@ func TestAllowListAndBanList_IsPackageNotAllowedOrBanned(t *testing.T) {
 		{
 			name: "AllowedScopeBannedScope",
 			allowList: AllowList{
-				Scopes: []AllowScope{{
-					Name: "@github",
-				}},
+				Scopes: []string{"@github"},
 			},
 			banList: BanList{
 				Scopes: []BanScope{{
@@ -90,9 +92,7 @@ func TestAllowListAndBanList_IsPackageNotAllowedOrBanned(t *testing.T) {
 		{
 			name: "AllowedScopeBannedPackage",
 			allowList: AllowList{
-				Scopes: []AllowScope{{
-					Name: "@github",
-				}},
+				Scopes: []string{"@github"},
 			},
 			banList: BanList{
 				Packages: []string{"@github/faker"},
@@ -178,9 +178,7 @@ func TestAllowList_IsPackageAllowed(t *testing.T) {
 		{
 			name: "AllowedByScope",
 			allowList: AllowList{
-				Scopes: []AllowScope{{
-					Name: "@github",
-				}},
+				Scopes: []string{"@github"},
 			},
 			args: args{fullName: "@github/perfect"},
 			want: true,
@@ -188,9 +186,7 @@ func TestAllowList_IsPackageAllowed(t *testing.T) {
 		{
 			name: "NotAllowedByScope",
 			allowList: AllowList{
-				Scopes: []AllowScope{{
-					Name: "@github",
-				}},
+				Scopes: []string{"@github"},
 			},
 			args: args{fullName: "@faker/perfect"},
 			want: false,
@@ -198,9 +194,7 @@ func TestAllowList_IsPackageAllowed(t *testing.T) {
 		{
 			name: "NotAllowedByScope",
 			allowList: AllowList{
-				Scopes: []AllowScope{{
-					Name: "@github",
-				}},
+				Scopes: []string{"@github"},
 			},
 			args: args{fullName: "@faker/perfect"},
 			want: false,

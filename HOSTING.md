@@ -60,18 +60,15 @@ Recommended hosting requirements:
 esm.sh provides a Docker image for fast deployment. You can pull the container image from <https://ghcr.io/esm-dev/esm.sh>.
 
 ```bash
-docker pull ghcr.io/esm-dev/esm.sh      # latest version
-docker pull ghcr.io/esm-dev/esm.sh:v136 # specific version
+docker pull ghcr.io/esm-dev/esm.sh      # latest stable version
+docker pull ghcr.io/esm-dev/esm.sh:v136 # specific stable version
+docker pull ghcr.io/esm-dev/esm.sh:dev  # latest dev version
 ```
 
 Run the container:
 
 ```bash
-docker run -p 8080:8080 \
-  -e NPM_REGISTRY=https://registry.npmjs.org/ \
-  -e NPM_TOKEN=****** \
-  -v MY_VOLUME:/esmd \
-  ghcr.io/esm-dev/esm.sh:latest
+docker run -p 80:80 ghcr.io/esm-dev/esm.sh:latest
 ```
 
 Available environment variables:
@@ -95,7 +92,7 @@ Available environment variables:
 - `STORAGE_ACCESS_KEY_ID`: The access key for S3 storage.
 - `STORAGE_SECRET_ACCESS_KEY`: The secret key for S3 storage.
 
-You can also create your own Dockerfile based on `ghcr.io/esm-dev/esm.sh`:
+You can also create your own Dockerfile with a `config.json` file:
 
 ```dockerfile
 FROM ghcr.io/esm-dev/esm.sh:latest

@@ -508,23 +508,25 @@ RETRY:
 			time.Sleep(time.Duration(retryTimes) * 100 * time.Millisecond)
 			goto RETRY
 		}
+		err = fmt.Errorf("failed to download tarball of package '%s': %v", pkgName, err)
 		return
 	}
 	defer res.Body.Close()
 
 	if res.StatusCode == 404 || res.StatusCode == 401 {
-		err = fmt.Errorf("tarball of package '%s' not found", path.Base(installDir))
+		err = fmt.Errorf("tarball of package '%s' not found", pkgName)
 		return
 	}
 
 	if res.StatusCode != 200 {
 		msg, _ := io.ReadAll(res.Body)
-		err = fmt.Errorf("could not download tarball of package '%s' (%s: %s)", path.Base(installDir), res.Status, string(msg))
+		err = fmt.Errorf("could not download tarball of package '%s' (%s: %s)", pkgName, res.Status, string(msg))
 		return
 	}
 
 	err = extractPackageTarball(installDir, pkgName, io.LimitReader(res.Body, maxPackageTarballSize))
 	if err != nil {
+		err = fmt.Errorf("failed to extract tarball of package '%s': %v", pkgName, err)
 		// clear installDir if failed to extract tarball
 		os.RemoveAll(installDir)
 	}

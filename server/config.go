@@ -9,11 +9,13 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/esm-dev/esm.sh/internal/storage"
 	"github.com/ije/gox/term"
+	"github.com/ije/gox/utils"
 )
 
 var (
@@ -68,12 +70,8 @@ type BanScope struct {
 }
 
 type AllowList struct {
-	Packages []string     `json:"packages"`
-	Scopes   []AllowScope `json:"scopes"`
-}
-
-type AllowScope struct {
-	Name string `json:"name"`
+	Packages []string `json:"packages"`
+	Scopes   []string `json:"scopes"`
 }
 
 // LoadConfig loads config from the given file. Panic if failed to load.
@@ -108,11 +106,6 @@ func DefaultConfig() *Config {
 func normalizeConfig(config *Config) {
 	if config.Port == 0 {
 		config.Port = 80
-		if v := os.Getenv("ESMPORT"); v != "" {
-			if p, e := strconv.Atoi(v); e == nil && p >= 80 && p < 65536 {
-				config.Port = uint16(p)
-			}
-		}
 	}
 	if config.WorkDir == "" {
 		if v := os.Getenv("ESMDIR"); v != "" && existsDir(v) {
@@ -253,77 +246,73 @@ func normalizeConfig(config *Config) {
 
 // extractPackageName Will take a packageName as input extract key parts and return them
 //
-// fullNameWithoutVersion  e.g. @github/faker
-// scope                   e.g. @github
-// nameWithoutVersionScope e.g. faker
-func extractPackageName(packageName string) (fullNameWithoutVersion string, scope string, nameWithoutVersionScope string) {
-	paths := strings.Split(packageName, "/")
-	if strings.HasPrefix(packageName, "@") {
+// moduleName        e.g. @github/faker[@1.0.0]/submodule
+// packageId         e.g. @github/faker[@1.0.0]
+// scope             e.g. @github
+// name              e.g. faker
+// version           e.g. [@1.0.0]
+func extractPackageName(moduleName string) (packageId string, scope string, name string, version string) {
+	paths := strings.Split(moduleName, "/")
+	if strings.HasPrefix(moduleName, "@") && len(paths) > 1 {
+		packageId = paths[0] + "/" + paths[1]
 		scope = paths[0]
-		nameWithoutVersionScope = strings.Split(paths[1], "@")[0]
-		fullNameWithoutVersion = fmt.Sprintf("%s/%s", scope, nameWithoutVersionScope)
+		name, version = utils.SplitByFirstByte(paths[1], '@')
 	} else {
 		// the package has no scope prefix
-		nameWithoutVersionScope = strings.Split(paths[0], "@")[0]
-		fullNameWithoutVersion = nameWithoutVersionScope
+		packageId = paths[0]
+		name, version = utils.SplitByFirstByte(packageId, '@')
 	}
-
-	return fullNameWithoutVersion, scope, nameWithoutVersionScope
+	return
 }
 
-// IsPackageBanned Checking if the package is banned.
-// The `packages` list is the highest priority ban rule to match,
-// so the `excludes` list in the `scopes` list won't take effect if the package is banned in `packages` list
-func (banList *BanList) IsPackageBanned(fullName string) bool {
-	fullNameWithoutVersion, scope, nameWithoutVersionScope := extractPackageName(fullName)
-
-	for _, p := range banList.Packages {
-		if fullNameWithoutVersion == p {
-			return true
-		}
-	}
-
-	for _, s := range banList.Scopes {
-		if scope == s.Name {
-			return !isPackageExcluded(nameWithoutVersionScope, s.Excludes)
-		}
-	}
-
-	return false
+func (allowList *AllowList) IsEmpty() bool {
+	return len(allowList.Packages) == 0 && len(allowList.Scopes) == 0
 }
 
 // IsPackageAllowed Checking if the package is allowed.
 // The `packages` list is the highest priority allow rule to match,
 // so the `includes` list in the `scopes` list won't take effect if the package is allowed in `packages` list
-func (allowList *AllowList) IsPackageAllowed(fullName string) bool {
-	if len(allowList.Packages) == 0 && len(allowList.Scopes) == 0 {
+func (allowList *AllowList) IsPackageAllowed(moduleName string) bool {
+	if allowList.IsEmpty() {
 		return true
 	}
 
-	fullNameWithoutVersion, scope, _ := extractPackageName(fullName)
+	packageId, scope, name, _ := extractPackageName(moduleName)
 
-	for _, p := range allowList.Packages {
-		if fullNameWithoutVersion == p {
-			return true
-		}
+	if slices.Contains(allowList.Packages, packageId) || (scope != "" && slices.Contains(allowList.Packages, scope+"/"+name)) || (scope == "" && slices.Contains(allowList.Packages, name)) {
+		return true
 	}
 
-	for _, s := range allowList.Scopes {
-		if scope == s.Name {
-			return true
+	return slices.Contains(allowList.Scopes, scope)
+}
+
+// IsPackageBanned Checking if the package is banned.
+// The `packages` list is the highest priority ban rule to match,
+// so the `excludes` list in the `scopes` list won't take effect if the package is banned in `packages` list
+func (banList *BanList) IsPackageBanned(moduleName string) bool {
+	if banList.IsEmpty() {
+		return false
+	}
+
+	packageId, scope, name, version := extractPackageName(moduleName)
+
+	if slices.Contains(banList.Packages, packageId) || (scope != "" && slices.Contains(banList.Packages, scope+"/"+name)) || (scope == "" && slices.Contains(banList.Packages, name)) {
+		return true
+	}
+
+	if scope != "" {
+		for _, s := range banList.Scopes {
+			if scope == s.Name {
+				return !slices.Contains(s.Excludes, name) && !(version != "" && slices.Contains(s.Excludes, name+"@"+version))
+			}
 		}
 	}
 
 	return false
 }
 
-func isPackageExcluded(name string, excludes []string) bool {
-	for _, exclude := range excludes {
-		if name == exclude {
-			return true
-		}
-	}
-	return false
+func (banList *BanList) IsEmpty() bool {
+	return len(banList.Packages) == 0 && len(banList.Scopes) == 0
 }
 
 func init() {

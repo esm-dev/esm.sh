@@ -147,6 +147,15 @@ You can also add the `?standalone` flag to bundle the module along with all its 
 import { Button } from "https://esm.sh/antd?standalone";
 ```
 
+You can disable the default transforming/bundling behavior by adding `?raw` query to the import URL.
+
+```js
+import { render } from "https://esm.sh/preact?raw";
+```
+
+> [!TIP]
+> The `?raw` query is useful when you want to import the raw JavaScript source code of a package, as-is, without transformation into ES modules.
+
 ### Tree Shaking
 
 By default, esm.sh exports a module with all its exported members. However, if you want to import only a specific set of
@@ -329,8 +338,9 @@ In development mode (open the page on localhost), `esm.sh/tsx` uses [@esm.sh/tsx
 
 ## Escape Hatch: Raw Source Files
 
-In rare cases, you may want to request JS source files from packages, as-is, without transformation into ES modules. To
-do so, you need to add a `?raw` query to the request URL.
+By default, esm.sh transforms (and bundles if necessary) the JavaScript source code. However, in rare cases, you may want to request JS source files from packages, as-is, without transformation into ES modules. To do so, you need to add a `?raw` query to the request URL.
+
+The `raw` mode works just like other CDN services, unpkg.com(https://unpkg.com/), jsdelivr.net(https://www.jsdelivr.net/), etc.
 
 ```html
 <script src="https://esm.sh/p5/lib/p5.min.js?raw"></script>
