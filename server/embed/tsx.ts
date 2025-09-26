@@ -6,6 +6,7 @@
 
 const d = document;
 const l = localStorage;
+const dec = new TextDecoder();
 const stringify = JSON.stringify;
 const loaders = new Set(["jsx", "ts", "tsx", "babel"]);
 const hostname = location.hostname;
@@ -13,7 +14,7 @@ const hostname = location.hostname;
 function run() {
   let tsxScripts: { el: HTMLElement; lang: string; code: string }[] = [];
   let importMap: Record<string, object> = {};
-  let tsx: Promise<{ transform: (options: Record<string, unknown>) => { code: string } }>;
+  let tsx: Promise<{ transform: (options: Record<string, unknown>) => { code: Uint8Array } }>;
 
   // lookup import map and tsx scripts
   d.querySelectorAll("script").forEach((el) => {
@@ -62,7 +63,7 @@ function run() {
       if (hostname === "localhost" || hostname === "127.0.0.1") {
         const { transform } = await (tsx ?? (tsx = initTsx()));
         const ret = transform({ filename: "script-" + idx + "." + lang, code, target, importMap, sourceMap: "inline" });
-        js = ret.code;
+        js = dec.decode(ret.code);
       } else {
         const res = await fetch(esmshUrl(`/+${hash}.mjs`));
         if (res.ok) {
@@ -93,7 +94,7 @@ function run() {
 }
 
 async function initTsx() {
-  const pkg = "/@esm.sh/tsx@1.2.0";
+  const pkg = "/@esm.sh/tsx@1.4.0";
   const [m, w] = await Promise.all([
     import(pkg + "/$TARGET/tsx.mjs"),
     fetch(esmshUrl(pkg + "/pkg/tsx_bg.wasm")),

@@ -1,6 +1,7 @@
 import { TextLineStream } from "jsr:@std/streams@1.0.9/text-line-stream";
 
 const enc = new TextEncoder();
+const dec = new TextDecoder();
 const output = (type, data) => Deno.stdout.write(enc.encode(">>>" + type + ":" + JSON.stringify(data) + "\n"));
 const once = {};
 
@@ -67,7 +68,7 @@ async function tsx(filename, importMap, sourceCode, isDev) {
     [lang, code, map] = await transformVue(filename, code, importMap, isDev);
   }
   if (!once.tsxWasm) {
-    once.tsxWasm = import("npm:@esm.sh/tsx@1.2.0").then(async (m) => {
+    once.tsxWasm = import("npm:@esm.sh/tsx@1.4.0").then(async (m) => {
       await m.init();
       return m;
     });
@@ -89,12 +90,12 @@ async function tsx(filename, importMap, sourceCode, isDev) {
       }
       : undefined,
   });
-  let js = ret.code;
+  let js = dec.decode(ret.code);
   if (ret.map) {
     if (map) {
       // todo: merge preprocess source map
     }
-    js += "\n//# sourceMappingURL=data:application/json;base64," + btoa(ret.map);
+    js += "\n//# sourceMappingURL=data:application/json;base64," + btoa(dec.decode(ret.map));
   }
   return js;
 }
