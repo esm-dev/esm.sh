@@ -1153,6 +1153,24 @@ func esmRouter(db Database, esmStorage storage.Storage, logger *log.Logger) rex.
 				}
 				if err != nil {
 					if os.IsNotExist(err) {
+						// try to resolve the file through package.json exports
+						b := &BuildContext{
+							npmrc:   npmrc,
+							esmPath: esm,
+						}
+						err = b.install()
+						if err != nil {
+							return rex.Status(500, err.Error())
+						}
+						entry := b.resolveEntry(esm)
+						if entry.main != "" && entry.main != "./"+esm.SubPath {
+							// redirect to the resolved path
+							query := ""
+							if rawQuery != "" {
+								query = "?" + rawQuery
+							}
+							return redirect(ctx, fmt.Sprintf("%s/%s%s%s", origin, esm.Name(), utils.NormalizePathname(entry.main), query), true)
+						}
 						ctx.SetHeader("Cache-Control", ccImmutable)
 						return rex.Status(404, "File Not Found")
 					}
