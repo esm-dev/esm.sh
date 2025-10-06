@@ -5,7 +5,7 @@ Deno.test("issue #1217 - CSS files should resolve through package.json exports",
   // The package.json has: "./styles.css": {"default": "./dist/styles.css"}
   // Should redirect from /styles.css to /dist/styles.css
   const res1 = await fetch(
-    "https://esm.sh/*yet-another-react-lightbox@3.21.7/styles.css",
+    "http://localhost:8080/*yet-another-react-lightbox@3.21.7/styles.css",
     { redirect: "follow" },
   );
   const css1 = await res1.text();
@@ -18,7 +18,7 @@ Deno.test("issue #1217 - CSS files should resolve through package.json exports",
   // The package.json has: "./theme.css": "./dist/twitter-theme/theme.css"
   // Should redirect from /theme.css to /dist/twitter-theme/theme.css
   const res2 = await fetch(
-    "https://esm.sh/*react-tweet@3.2.2/theme.css",
+    "http://localhost:8080/*react-tweet@3.2.2/theme.css",
     { redirect: "follow" },
   );
   const css2 = await res2.text();
