@@ -76,6 +76,27 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 		case ".json", ".jsx", ".svelte", ".vue":
 			entry.update(subPath, true)
 			return
+		case ".css":
+			// check if CSS file is defined in exports
+			if pkgJson.Exports.Len() > 0 {
+				if v, ok := pkgJson.Exports.Get("./" + subPath); ok {
+					if s, ok := v.(string); ok {
+						entry.update(s, true)
+						return
+					} else if obj, ok := v.(npm.JSONObject); ok {
+						// handle conditional exports like {"types": "...", "default": "..."}
+						if defaultPath, ok := obj.Get("default"); ok {
+							if s, ok := defaultPath.(string); ok {
+								entry.update(s, true)
+								return
+							}
+						}
+					}
+				}
+			}
+			// if not found in exports, use the subPath as-is
+			entry.update(subPath, true)
+			return
 		default:
 			// continue
 		}
