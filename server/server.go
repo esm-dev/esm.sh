@@ -80,7 +80,9 @@ func Serve() {
 	logger.Debugf("storage initialized, type: %s, endpoint: %s", config.Storage.Type, config.Storage.Endpoint)
 
 	// pre-compile uno generator in background
-	go generateUnoCSS(&NpmRC{NpmRegistry: NpmRegistry{Registry: "https://registry.npmjs.org/"}}, "", "")
+	npmrc := &NpmRC{NpmRegistry: NpmRegistry{Registry: "https://registry.npmjs.org/"}}
+	go generateTailwindCSS(npmrc, `@import "tailwindcss";`, "flex")
+	go generateUnoCSS(npmrc, `@import "@unocss/preset-wind3";`, "flex")
 
 	// add middlewares
 	rex.Use(
