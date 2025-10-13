@@ -145,35 +145,37 @@ async function tailwind(_id, content, config) {
   if (!once.tailwindCompilers) {
     once.tailwindCompilers = new Map();
   }
-  if (!once.tailwind){
-    once.tailwind = import("npm:tailwindcss@4.1.10");
+  if (!once.tailwind) {
+    once.tailwind = import("npm:tailwindcss@4.1.14");
   }
   if (!once.oxide) {
-    once.oxide = import("npm:@esm.sh/oxide-wasm@0.1.2").then(({ init, extract }) =>init().then(() => ({ extract })));
+    once.oxide = import("npm:@esm.sh/oxide-wasm@0.1.2").then(({ init, extract }) => init().then(() => ({ extract })));
   }
   let compiler = once.tailwindCompilers.get(compilerId);
   if (!compiler || compiler.configCSS !== config?.css) {
     compiler = (async () => {
-      const { compile } = await  once.tailwind;
-    return compile(config.css, {
+      const { compile } = await once.tailwind;
+      return compile(config.css, {
         async loadStylesheet(id, sheetBase) {
-          if (id === "tailwindcss") {
-            if (!once.tailwindIndexCSS) {
-              once.tailwindIndexCSS = fetch("https://esm.sh/tailwindcss@4.1.10/index.css").then(res => res.text());
+          switch (id) {
+            case "tailwindcss": {
+              if (!once.tailwindIndexCSS) {
+                once.tailwindIndexCSS = fetch("https://esm.sh/tailwindcss@4.1.14/index.css").then(res => res.text());
+              }
+              const css = await once.tailwindIndexCSS;
+              return {
+                content: css,
+              };
             }
-            const css = await once.tailwindIndexCSS;
-            return {
-              content: css,
-            };
-          }
-          if (id === "tw-animate-css") {
-            if (!once.twAnimateCSS) {
-              once.twAnimateCSS = fetch("https://esm.sh/tw-animate-css@1.3.4/dist/tw-animate.css").then(res => res.text());
+            case "tw-animate-css": {
+              if (!once.twAnimateCSS) {
+                once.twAnimateCSS = fetch("https://esm.sh/tw-animate-css@1.4.0/dist/tw-animate.css").then(res => res.text());
+              }
+              const css = await once.twAnimateCSS;
+              return {
+                content: css,
+              };
             }
-            const css = await once.twAnimateCSS;
-            return {
-              content: css,
-            };
           }
           // todo: load and cache other css from npm
           throw new Error("could not find stylesheet id: " + id + ", sheetBase: " + sheetBase);

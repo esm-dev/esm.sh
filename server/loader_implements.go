@@ -173,6 +173,76 @@ func resolveVueVersion(npmrc *NpmRC, importMap importmap.ImportMap) (vueVersion 
 	return
 }
 
+func generateTailwindCSS(npmrc *NpmRC, configCSS string, content string) (out *LoaderOutput, err error) {
+	tailwindVersion := "4.1.14"
+	loaderExecPath := path.Join(config.WorkDir, "bin", "tailwind-"+tailwindVersion)
+
+	err = doOnce(loaderExecPath, func() (err error) {
+		if !existsFile(loaderExecPath) {
+			if DEBUG {
+				fmt.Println(term.Dim("Compiling tailwind loader..."))
+			}
+			err = compileTailwindCSSLoader(npmrc, tailwindVersion, loaderExecPath)
+		}
+		return
+	})
+	if err != nil {
+		err = errors.New("failed to compile tailwind engine: " + err.Error())
+		return
+	}
+
+	c := exec.Command(loaderExecPath, strconv.Itoa(len(configCSS)), path.Join(config.WorkDir, "cache/tailwind"))
+	c.Stdin = strings.NewReader(configCSS + content)
+	output, err := c.Output()
+	if err != nil {
+		return
+	}
+	if len(output) < 2 {
+		err = errors.New("bad loader output")
+		return
+	}
+	if output[0] != '1' {
+		err = errors.New(string(output[2:]))
+		return
+	}
+	return &LoaderOutput{Lang: "css", Code: string(output[2:])}, nil
+}
+
+func generateUnoCSS(npmrc *NpmRC, configCSS string, content string) (out *LoaderOutput, err error) {
+	unocssVersion := "0.5.1"
+	loaderExecPath := path.Join(config.WorkDir, "bin", "unocss-"+unocssVersion)
+
+	err = doOnce(loaderExecPath, func() (err error) {
+		if !existsFile(loaderExecPath) {
+			if DEBUG {
+				fmt.Println(term.Dim("Compiling unocss loader..."))
+			}
+			err = compileUnocssLoader(npmrc, unocssVersion, loaderExecPath)
+		}
+		return
+	})
+	if err != nil {
+		err = errors.New("failed to compile unocss engine: " + err.Error())
+		return
+	}
+
+	c := exec.Command(loaderExecPath, strconv.Itoa(len(configCSS)), path.Join(config.WorkDir, "cache/unocss"))
+	c.Stdin = strings.NewReader(configCSS + content)
+	output, err := c.Output()
+	if err != nil {
+		return
+	}
+	if len(output) < 2 {
+		err = errors.New("bad loader output")
+		return
+	}
+	if output[0] != '1' {
+		err = errors.New(string(output[2:]))
+		return
+	}
+	return &LoaderOutput{Lang: "css", Code: string(output[2:])}, nil
+}
+
 func compileTailwindCSSLoader(npmrc *NpmRC, pkgVersion string, loaderExecPath string) (err error) {
 	wd := path.Join(npmrc.StoreDir(), "tailwindcss@"+pkgVersion)
 
@@ -271,76 +341,6 @@ func compileTailwindCSSLoader(npmrc *NpmRC, pkgVersion string, loaderExecPath st
 		err = errors.New(msg)
 	}
 	return
-}
-
-func generateTailwindCSS(npmrc *NpmRC, configCSS string, content string) (out *LoaderOutput, err error) {
-	tailwindVersion := "4.1.10"
-	loaderExecPath := path.Join(config.WorkDir, "bin", "tailwind-"+tailwindVersion)
-
-	err = doOnce(loaderExecPath, func() (err error) {
-		if !existsFile(loaderExecPath) {
-			if DEBUG {
-				fmt.Println(term.Dim("Compiling tailwind loader..."))
-			}
-			err = compileTailwindCSSLoader(npmrc, tailwindVersion, loaderExecPath)
-		}
-		return
-	})
-	if err != nil {
-		err = errors.New("failed to compile tailwind engine: " + err.Error())
-		return
-	}
-
-	c := exec.Command(loaderExecPath, strconv.Itoa(len(configCSS)), path.Join(config.WorkDir, "cache/tailwind"))
-	c.Stdin = strings.NewReader(configCSS + content)
-	output, err := c.Output()
-	if err != nil {
-		return
-	}
-	if len(output) < 2 {
-		err = errors.New("bad loader output")
-		return
-	}
-	if output[0] != '1' {
-		err = errors.New(string(output[2:]))
-		return
-	}
-	return &LoaderOutput{Lang: "css", Code: string(output[2:])}, nil
-}
-
-func generateUnoCSS(npmrc *NpmRC, configCSS string, content string) (out *LoaderOutput, err error) {
-	loaderVersion := "0.5.1"
-	loaderExecPath := path.Join(config.WorkDir, "bin", "unocss-"+loaderVersion)
-
-	err = doOnce(loaderExecPath, func() (err error) {
-		if !existsFile(loaderExecPath) {
-			if DEBUG {
-				fmt.Println(term.Dim("Compiling unocss loader..."))
-			}
-			err = compileUnocssLoader(npmrc, loaderVersion, loaderExecPath)
-		}
-		return
-	})
-	if err != nil {
-		err = errors.New("failed to compile unocss engine: " + err.Error())
-		return
-	}
-
-	c := exec.Command(loaderExecPath, strconv.Itoa(len(configCSS)), path.Join(config.WorkDir, "cache/unocss"))
-	c.Stdin = strings.NewReader(configCSS + content)
-	output, err := c.Output()
-	if err != nil {
-		return
-	}
-	if len(output) < 2 {
-		err = errors.New("bad loader output")
-		return
-	}
-	if output[0] != '1' {
-		err = errors.New(string(output[2:]))
-		return
-	}
-	return &LoaderOutput{Lang: "css", Code: string(output[2:])}, nil
 }
 
 func compileUnocssLoader(npmrc *NpmRC, pkgVersion string, loaderExecPath string) (err error) {
