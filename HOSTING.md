@@ -27,7 +27,7 @@ You can find all the server options in [config.example.jsonc](./config.example.j
 
 ## Run the Server Locally
 
-You will need [Go](https://golang.org/dl) 1.22+ to compile and run the server.
+You will need [Go](https://golang.org/dl) 1.25+ to compile and run the server.
 
 ```bash
 go run server/esmd/main.go --config=config.json
@@ -60,9 +60,9 @@ Recommended hosting requirements:
 esm.sh provides a Docker image for fast deployment. You can pull the container image from <https://ghcr.io/esm-dev/esm.sh>.
 
 ```bash
-docker pull ghcr.io/esm-dev/esm.sh      # latest stable version
-docker pull ghcr.io/esm-dev/esm.sh:v136 # specific stable version
-docker pull ghcr.io/esm-dev/esm.sh:dev  # latest dev version
+docker pull ghcr.io/esm-dev/esm.sh        # latest stable version
+docker pull ghcr.io/esm-dev/esm.sh:v136_1 # specific stable version
+docker pull ghcr.io/esm-dev/esm.sh:dev    # latest dev version
 ```
 
 Run the container:

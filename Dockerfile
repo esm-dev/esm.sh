@@ -1,6 +1,6 @@
 FROM golang:1.25-alpine AS builder
 
-ARG SERVER_VERSION="v136"
+ARG SERVER_VERSION="v136_1"
 
 RUN apk update && apk add --no-cache git
 RUN git clone --branch $SERVER_VERSION --depth 1 https://github.com/esm-dev/esm.sh /tmp/esm.sh
