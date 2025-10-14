@@ -18,8 +18,8 @@ import (
 	"github.com/ije/rex"
 )
 
-// Serve serves the esm.sh server
-func Serve() {
+// Start starts the esm.sh server
+func Start() {
 	var cfile string
 	var err error
 
