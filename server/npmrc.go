@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
 	"os"
@@ -408,14 +409,10 @@ func (npmrc *NpmRC) installPackage(pkg npm.Package) (packageJson *npm.PackageJSO
 func (npmrc *NpmRC) installDependencies(wd string, pkgJson *npm.PackageJSON, npmMode bool, mark *set.Set[string]) {
 	wg := sync.WaitGroup{}
 	dependencies := map[string]string{}
-	for name, version := range pkgJson.Dependencies {
-		dependencies[name] = version
-	}
-	// install peer dependencies as well in _npm_ mode
+	maps.Copy(dependencies, pkgJson.Dependencies)
+	// install peer dependencies if `npmMode` is true
 	if npmMode {
-		for name, version := range pkgJson.PeerDependencies {
-			dependencies[name] = version
-		}
+		maps.Copy(dependencies, pkgJson.PeerDependencies)
 	}
 	if mark == nil {
 		mark = set.New[string]()

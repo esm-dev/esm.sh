@@ -40,11 +40,12 @@ func transformSvelte(npmrc *NpmRC, svelteVersion string, filename string, code s
 func compileSvelteLoader(npmrc *NpmRC, svelteVersion string, loaderExecPath string) (err error) {
 	wd := path.Join(npmrc.StoreDir(), "svelte@"+svelteVersion)
 
-	// install svelte
-	_, err = npmrc.installPackage(npm.Package{Name: "svelte", Version: svelteVersion})
+	// install svelte and its dependencies
+	p, err := npmrc.installPackage(npm.Package{Name: "svelte", Version: svelteVersion})
 	if err != nil {
 		return
 	}
+	npmrc.installDependencies(wd, p, false, nil)
 
 	loaderJS := `
 	  import { compile } from "svelte/compiler";
