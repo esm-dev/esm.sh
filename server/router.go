@@ -439,7 +439,7 @@ func esmRouter(db Database, esmStorage storage.Storage, logger *log.Logger) rex.
 				return rex.Status(404, "Not Found")
 			}
 			name := pathname[6:]
-			js, ok := GetNodeRuntimeJS(name)
+			js, ok := getNodeRuntimeJS(name)
 			if !ok {
 				if !nodeBuiltinModules[name] {
 					return rex.Status(404, "Not Found")
