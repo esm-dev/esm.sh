@@ -362,11 +362,10 @@ Deno.test("transform", async (t) => {
         "http://localhost:8080/http://localhost:8083/with-tailwindcss/vanilla/tailwind.css?ctx="
           + btoaUrl("/with-tailwindcss/vanilla/"),
       );
-      const css = await res.text();
-      assertEquals(css, "?");
       assertEquals(res.status, 200);
       assertEquals(res.headers.get("Content-Type"), "text/css; charset=utf-8");
       assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
+      const css = await res.text();
       assertStringIncludes(css, "tailwindcss v4.1.16");
       assertStringIncludes(css, "--color-primary: #232323");
       assertStringIncludes(css, ".flex{");
