@@ -363,7 +363,7 @@ Deno.test("transform", async (t) => {
           + btoaUrl("/with-tailwindcss/vanilla/"),
       );
       const css = await res.text();
-      console.log(css);
+      assertEquals(css, "?");
       assertEquals(res.status, 200);
       assertEquals(res.headers.get("Content-Type"), "text/css; charset=utf-8");
       assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
