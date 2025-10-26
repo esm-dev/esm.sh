@@ -546,7 +546,7 @@ func esmRouter(db Database, esmStorage storage.Storage, logger *log.Logger) rex.
 			allowedHosts[modUrl.Host] = struct{}{}
 			fetchClient, recycle := fetch.NewClient(ctx.UserAgent(), 15, false, allowedHosts)
 			defer recycle()
-			if strings.HasSuffix(modUrl.Path, "/uno.css") {
+			if strings.HasSuffix(modUrl.Path, "/uno.css") || strings.HasSuffix(modUrl.Path, "/tailwind.css") {
 				ctxParam := query.Get("ctx")
 				if ctxParam == "" {
 					return rex.Status(400, "Missing `ctx` Param")
@@ -578,14 +578,14 @@ func esmRouter(db Database, esmStorage storage.Storage, logger *log.Logger) rex.
 				}
 				res, err := fetchClient.Fetch(ctxUrl, nil)
 				if err != nil {
-					return rex.Status(500, "unocss: Failed to fetch page content")
+					return rex.Status(500, "Failed to fetch page content: "+err.Error())
 				}
 				defer res.Body.Close()
 				if res.StatusCode != 200 {
 					if res.StatusCode == 404 {
-						return rex.Status(404, "unocss: context page not found")
+						return rex.Status(404, "Page not found")
 					}
-					return rex.Status(500, "unocss: Failed to fetch page content: "+res.Status)
+					return rex.Status(500, "Failed to fetch page content: "+res.Status)
 				}
 				tokenizer := html.NewTokenizer(io.LimitReader(res.Body, 5*MB))
 				content := []string{}
@@ -649,18 +649,18 @@ func esmRouter(db Database, esmStorage storage.Storage, logger *log.Logger) rex.
 				}
 				res, err = fetchClient.Fetch(modUrl, nil)
 				if err != nil {
-					return rex.Status(500, "Failed to fetch uno.css")
+					return rex.Status(500, "Failed to fetch "+modUrl.String()+": "+err.Error())
 				}
 				defer res.Body.Close()
 				if res.StatusCode != 200 {
 					if res.StatusCode == 404 {
-						return rex.Status(404, "uno.css not found")
+						return rex.Status(404, "Not found: "+modUrl.String())
 					}
-					return rex.Status(500, "Failed to fetch uno.css: "+res.Status)
+					return rex.Status(500, "Failed to fetch "+modUrl.String()+": "+res.Status)
 				}
 				configCSS, err := io.ReadAll(io.LimitReader(res.Body, MB))
 				if err != nil {
-					return rex.Status(500, "Failed to fetch uno.css")
+					return rex.Status(500, "Failed to fetch "+modUrl.String()+": "+err.Error())
 				}
 				for src := range jsEntries {
 					url := ctxUrl.ResolveReference(&url.URL{Path: src})
@@ -671,13 +671,19 @@ func esmRouter(db Database, esmStorage storage.Storage, logger *log.Logger) rex.
 						}
 					}
 				}
-				out, err := generateUnoCSS(npmrc, string(configCSS), strings.Join(content, "\n"))
+				baseName := path.Base(modUrl.Path)
+				var out *LoaderOutput
+				if baseName == "uno.css" {
+					out, err = generateUnoCSS(npmrc, string(configCSS), strings.Join(content, "\n"))
+				} else {
+					out, err = generateTailwindCSS(npmrc, string(configCSS), strings.Join(content, "\n"))
+				}
 				if err != nil {
-					return rex.Status(500, "Failed to generate uno.css: "+err.Error())
+					return rex.Status(500, "Failed to generate "+baseName+": "+err.Error())
 				}
 				ret := esbuild.Build(esbuild.BuildOptions{
 					Stdin: &esbuild.StdinOptions{
-						Sourcefile: "uno.css",
+						Sourcefile: baseName,
 						Contents:   out.Code,
 						Loader:     esbuild.LoaderCSS,
 					},
@@ -812,7 +818,7 @@ func esmRouter(db Database, esmStorage storage.Storage, logger *log.Logger) rex.
 					if err != nil {
 						return rex.Status(500, "Failed to read css")
 					}
-					body = strings.NewReader(fmt.Sprintf("var style = document.createElement('style');\nstyle.textContent = %s;\ndocument.head.appendChild(style);\nexport default null;", utils.MustEncodeJSON(string(css))))
+					body = strings.NewReader(fmt.Sprintf("var style=document.createElement('style');\nstyle.textContent=%s;\ndocument.head.appendChild(style);\nexport default null;", utils.MustEncodeJSON(string(css))))
 					fi = nil
 				}
 				ctx.SetHeader("Cache-Control", ccImmutable)
