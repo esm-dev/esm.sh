@@ -16,7 +16,7 @@ import (
 	"github.com/ije/gox/utils"
 )
 
-const DenoVersion = "2.4.4"
+const DenoVersion = "2.5.4"
 
 func GetDenoPath(workDir string) (denoPath string, err error) {
 	if workDir == "" {
@@ -55,8 +55,8 @@ func installDeno(installPath string, version string) (err error) {
 			if len(version) == 3 {
 				major, _ := strconv.Atoi(version[0])
 				minor, _ := strconv.Atoi(version[1])
-				// check if the installed deno version is greater than or equal to 1.45
-				if major > 1 || (major == 1 && minor >= 45) {
+				// check if the installed deno version is greater than or equal to 2.4
+				if major > 2 || (major == 2 && minor >= 4) {
 					if runtime.GOOS == "windows" {
 						_, err = utils.CopyFile(systemDenoPath, installPath)
 					} else {

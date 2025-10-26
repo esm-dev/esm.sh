@@ -356,6 +356,27 @@ Deno.test("transform", async (t) => {
     }
   });
 
+  await t.step("generate tailwindcss", async () => {
+    {
+      const res = await fetch(
+        "http://localhost:8080/http://localhost:8083/with-tailwindcss/vanilla/tailwind.css?ctx="
+          + btoaUrl("/with-tailwindcss/vanilla/"),
+      );
+      assertEquals(res.status, 200);
+      assertEquals(res.headers.get("Content-Type"), "text/css; charset=utf-8");
+      assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
+      const css = await res.text();
+      assertStringIncludes(css, "tailwindcss v4.1.16");
+      assertStringIncludes(css, "--color-primary: #232323");
+      assertStringIncludes(css, ".flex{");
+      assertStringIncludes(css, ".text-5xl{");
+      assertStringIncludes(css, ".text-gray-400{");
+      assertStringIncludes(css, ".font-medium{");
+      assertStringIncludes(css, ".font-normal{");
+      assertStringIncludes(css, ".font-semibold{");
+    }
+  });
+
   ac.abort();
 });
 

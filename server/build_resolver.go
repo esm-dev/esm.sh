@@ -533,11 +533,12 @@ func (ctx *BuildContext) finalizeBuildEntry(entry *BuildEntry) {
 		if endsWith(entry.types, ".js", ".mjs", ".cjs") {
 			bearName := stripModuleExt(entry.types)
 			if ctx.existsPkgFile(bearName + ".d.mts") {
-				entry.types += ".d.mts"
+				entry.types = bearName + ".d.mts"
+				fmt.Println(entry.types)
 			} else if ctx.existsPkgFile(bearName + ".d.ts") {
-				entry.types += ".d.ts"
+				entry.types = bearName + ".d.ts"
 			} else if ctx.existsPkgFile(bearName + ".d.cts") {
-				entry.types += ".d.cts"
+				entry.types = bearName + ".d.cts"
 			} else {
 				entry.types = ""
 			}
@@ -924,7 +925,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 	if strings.ContainsRune(dep.PkgVersion, '|') || strings.ContainsRune(dep.PkgVersion, ' ') {
 		// fetch the latest version of the package based on the semver range
 		var p *npm.PackageJSON
-		_, p, err = ctx.lookupDep(pkgName+"@"+pkgVersion, false)
+		_, p, err = ctx.resolveDependency(pkgName+"@"+pkgVersion, false)
 		if err != nil {
 			return
 		}
@@ -1113,7 +1114,7 @@ func (ctx *BuildContext) existsPkgFile(fp ...string) bool {
 	return existsFile(path.Join(args...))
 }
 
-func (ctx *BuildContext) lookupDep(specifier string, isDts bool) (esm EsmPath, packageJson *npm.PackageJSON, err error) {
+func (ctx *BuildContext) resolveDependency(specifier string, isDts bool) (esm EsmPath, packageJson *npm.PackageJSON, err error) {
 	pkgName, version, subpath, _ := splitEsmPath(specifier)
 lookup:
 	if v, ok := ctx.args.Deps[pkgName]; ok {

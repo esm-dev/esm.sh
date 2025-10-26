@@ -1,6 +1,7 @@
 import { TextLineStream } from "jsr:@std/streams@1.0.9/text-line-stream";
 
 const enc = new TextEncoder();
+const dec = new TextDecoder();
 const output = (type, data) => Deno.stdout.write(enc.encode(">>>" + type + ":" + JSON.stringify(data) + "\n"));
 const once = {};
 
@@ -20,6 +21,10 @@ for await (const line of Deno.stdin.readable.pipeThrough(new TextDecoderStream()
       case "vue": {
         const [lang, code] = await transformVue(...args);
         output(lang, code);
+        break;
+      }
+      case "tailwind": {
+        output("css", await tailwind(...args));
         break;
       }
       case "unocss": {
@@ -63,7 +68,7 @@ async function tsx(filename, importMap, sourceCode, isDev) {
     [lang, code, map] = await transformVue(filename, code, importMap, isDev);
   }
   if (!once.tsxWasm) {
-    once.tsxWasm = import("npm:@esm.sh/tsx@1.2.0").then(async (m) => {
+    once.tsxWasm = import("npm:@esm.sh/tsx@1.4.0").then(async (m) => {
       await m.init();
       return m;
     });
@@ -85,12 +90,12 @@ async function tsx(filename, importMap, sourceCode, isDev) {
       }
       : undefined,
   });
-  let js = ret.code;
+  let js = dec.decode(ret.code);
   if (ret.map) {
     if (map) {
       // todo: merge preprocess source map
     }
-    js += "\n//# sourceMappingURL=data:application/json;base64," + btoa(ret.map);
+    js += "\n//# sourceMappingURL=data:application/json;base64," + btoa(dec.decode(ret.map));
   }
   return js;
 }
@@ -135,6 +140,56 @@ function getPackageVersion(importMap, pkgName, defaultVersion) {
   return defaultVersion;
 }
 
+async function tailwind(_id, content, config) {
+  const compilerId = config?.filename ?? ".";
+  if (!once.tailwindCompilers) {
+    once.tailwindCompilers = new Map();
+  }
+  if (!once.tailwind) {
+    once.tailwind = import("npm:tailwindcss@4.1.16");
+  }
+  if (!once.oxide) {
+    once.oxide = import("npm:@esm.sh/oxide-wasm@0.1.3").then(({ init, extract }) => init().then(() => ({ extract })));
+  }
+  let compiler = once.tailwindCompilers.get(compilerId);
+  if (!compiler || compiler.configCSS !== config?.css) {
+    compiler = (async () => {
+      const { compile } = await once.tailwind;
+      return compile(config.css, {
+        async loadStylesheet(id, sheetBase) {
+          switch (id) {
+            case "tailwindcss": {
+              if (!once.tailwindIndexCSS) {
+                once.tailwindIndexCSS = fetch("https://esm.sh/tailwindcss@4.1.16/index.css").then(res => res.text());
+              }
+              const css = await once.tailwindIndexCSS;
+              return {
+                content: css,
+              };
+            }
+            case "tw-animate-css": {
+              if (!once.twAnimateCSS) {
+                once.twAnimateCSS = fetch("https://esm.sh/tw-animate-css@1.4.0/dist/tw-animate.css").then(res => res.text());
+              }
+              const css = await once.twAnimateCSS;
+              return {
+                content: css,
+              };
+            }
+          }
+          // todo: load and cache other css from npm
+          throw new Error("could not find stylesheet id: " + id + ", sheetBase: " + sheetBase);
+          return null;
+        },
+      });
+    })();
+    compiler.configCSS = config?.css;
+    once.tailwindCompilers.set(compilerId, compiler);
+  }
+  const { extract } = await once.oxide;
+  return (await compiler).build(extract(content));
+}
+
 // generate unocss for the given content
 async function unocss(_id, content, config) {
   const generatorId = config?.filename ?? ".";
@@ -143,11 +198,11 @@ async function unocss(_id, content, config) {
   }
   let uno = once.unoGenerators.get(generatorId);
   if (!uno || uno.configCSS !== config?.css) {
-    uno = import("npm:@esm.sh/unocss@0.5.1").then(({ init }) => init({ configCSS: config?.css }));
+    uno = import("npm:@esm.sh/unocss@0.5.4").then(({ init }) => init({ configCSS: config?.css }));
     uno.configCSS = config?.css;
     once.unoGenerators.set(generatorId, uno);
   }
   const { update, generate } = await uno;
   await update(content);
-  return await generate();
+  return generate();
 }
