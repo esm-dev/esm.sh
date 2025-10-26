@@ -16,7 +16,7 @@ import (
 	"github.com/ije/gox/utils"
 )
 
-const DenoVersion = "2.4.4"
+const DenoVersion = "2.5.4"
 
 func GetDenoPath(workDir string) (denoPath string, err error) {
 	if workDir == "" {
