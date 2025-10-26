@@ -210,7 +210,7 @@ func generateTailwindCSS(npmrc *NpmRC, configCSS string, content string) (out *L
 }
 
 func generateUnoCSS(npmrc *NpmRC, configCSS string, content string) (out *LoaderOutput, err error) {
-	unocssVersion := "0.5.1"
+	unocssVersion := "0.5.4"
 	loaderExecPath := path.Join(config.WorkDir, "bin", "unocss-"+unocssVersion)
 
 	err = doOnce(loaderExecPath, func() (err error) {
