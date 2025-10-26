@@ -366,7 +366,7 @@ Deno.test("transform", async (t) => {
       assertEquals(res.headers.get("Content-Type"), "text/css; charset=utf-8");
       assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
       const css = await res.text();
-      assertStringIncludes(css, "tailwindcss v4.1.14");
+      assertStringIncludes(css, "tailwindcss v4.1.16");
       assertStringIncludes(css, "--color-primary: #232323");
       assertStringIncludes(css, ".flex{");
       assertStringIncludes(css, ".text-5xl{");

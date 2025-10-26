@@ -175,7 +175,7 @@ func resolveVueVersion(npmrc *NpmRC, importMap importmap.ImportMap) (vueVersion 
 }
 
 func generateTailwindCSS(npmrc *NpmRC, configCSS string, content string) (out *LoaderOutput, err error) {
-	tailwindVersion := "4.1.14"
+	tailwindVersion := "4.1.16"
 	loaderExecPath := path.Join(config.WorkDir, "bin", "tailwind-"+tailwindVersion)
 
 	err = doOnce(loaderExecPath, func() (err error) {

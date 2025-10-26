@@ -146,7 +146,7 @@ async function tailwind(_id, content, config) {
     once.tailwindCompilers = new Map();
   }
   if (!once.tailwind) {
-    once.tailwind = import("npm:tailwindcss@4.1.14");
+    once.tailwind = import("npm:tailwindcss@4.1.16");
   }
   if (!once.oxide) {
     once.oxide = import("npm:@esm.sh/oxide-wasm@0.1.2").then(({ init, extract }) => init().then(() => ({ extract })));
@@ -160,7 +160,7 @@ async function tailwind(_id, content, config) {
           switch (id) {
             case "tailwindcss": {
               if (!once.tailwindIndexCSS) {
-                once.tailwindIndexCSS = fetch("https://esm.sh/tailwindcss@4.1.14/index.css").then(res => res.text());
+                once.tailwindIndexCSS = fetch("https://esm.sh/tailwindcss@4.1.16/index.css").then(res => res.text());
               }
               const css = await once.tailwindIndexCSS;
               return {
