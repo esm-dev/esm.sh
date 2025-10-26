@@ -18,25 +18,25 @@ import (
 var (
 	// https://github.com/unjs/unenv
 	unenvPkg = npm.Package{
-		Name:    "unenv-nightly",
-		Version: "2.0.0-20241218-183400-5d6aec3",
+		Name:    "unenv",
+		Version: "2.0.0-rc.22",
 	}
 	unenvNodeRuntimeMap = map[string][]byte{
 		"sys.mjs": []byte(`export*from "/node/util.mjs";export{default}from "/node/util.mjs";`),
 	}
 )
 
-// GetNodeRuntimeJS returns the unenv node runtime by the given name.
-func GetNodeRuntimeJS(name string) (js []byte, ok bool) {
-	doOnce("load-unenv-node-runtime", func() (err error) {
-		return loadUnenvNodeRuntime()
+// getNodeRuntimeJS returns the unenv node runtime by the given name.
+func getNodeRuntimeJS(name string) (js []byte, ok bool) {
+	doOnce("load-node-runtime", func() (err error) {
+		return loadNodeRuntime()
 	})
 	js, ok = unenvNodeRuntimeMap[name]
 	return
 }
 
-// loadUnenvNodeRuntime loads the unenv node runtime from the embed filesystem.
-func loadUnenvNodeRuntime() (err error) {
+// loadNodeRuntime loads the unenv node runtime from the embed filesystem.
+func loadNodeRuntime() (err error) {
 	data, err := embedFS.ReadFile("embed/node-runtime.tgz")
 	if err == nil {
 		tarball, err := gzip.NewReader(bytes.NewReader(data))
@@ -84,7 +84,7 @@ func buildUnenvNodeRuntime() (err error) {
 	for name := range nodeBuiltinModules {
 		// currently the module "sys" is just a alias of "util", no need to build it
 		if name != "sys" {
-			filename := path.Join(wd, "node_modules", unenvPkg.Name+"/runtime/node/"+name+"/index.mjs")
+			filename := path.Join(wd, "node_modules", unenvPkg.Name+"/dist/runtime/node/"+name+".mjs")
 			if existsFile(filename) {
 				endpoints = append(endpoints, esbuild.EntryPoint{
 					InputPath:  filename,
@@ -93,6 +93,7 @@ func buildUnenvNodeRuntime() (err error) {
 			}
 		}
 	}
+
 	ret := esbuild.Build(esbuild.BuildOptions{
 		AbsWorkingDir:       wd,
 		EntryPointsAdvanced: endpoints,
@@ -112,7 +113,7 @@ func buildUnenvNodeRuntime() (err error) {
 				Name: "resolve-node-builtin-modules",
 				Setup: func(build esbuild.PluginBuild) {
 					// https://github.com/unjs/unenv/issues/365
-					build.OnResolve(esbuild.OnResolveOptions{Filter: `^unenv/runtime/node/stream/index$`}, func(args esbuild.OnResolveArgs) (esbuild.OnResolveResult, error) {
+					build.OnResolve(esbuild.OnResolveOptions{Filter: `^unenv/dist/runtime/node/stream$`}, func(args esbuild.OnResolveArgs) (esbuild.OnResolveResult, error) {
 						return esbuild.OnResolveResult{Path: "/node/stream.mjs", External: true}, nil
 					})
 					build.OnResolve(esbuild.OnResolveOptions{Filter: `^node:`}, func(args esbuild.OnResolveArgs) (esbuild.OnResolveResult, error) {

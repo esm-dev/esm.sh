@@ -83,6 +83,7 @@ func Start() {
 	npmrc := &NpmRC{NpmRegistry: NpmRegistry{Registry: "https://registry.npmjs.org/"}}
 	go generateTailwindCSS(npmrc, `@import "tailwindcss";`, "flex")
 	go generateUnoCSS(npmrc, `@import "@unocss/preset-wind3";`, "flex")
+	go getNodeRuntimeJS("fs")
 
 	// add middlewares
 	rex.Use(
