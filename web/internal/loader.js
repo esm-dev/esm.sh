@@ -149,7 +149,7 @@ async function tailwind(_id, content, config) {
     once.tailwind = import("npm:tailwindcss@4.1.16");
   }
   if (!once.oxide) {
-    once.oxide = import("npm:@esm.sh/oxide-wasm@0.1.2").then(({ init, extract }) => init().then(() => ({ extract })));
+    once.oxide = import("npm:@esm.sh/oxide-wasm@0.1.3").then(({ init, extract }) => init().then(() => ({ extract })));
   }
   let compiler = once.tailwindCompilers.get(compilerId);
   if (!compiler || compiler.configCSS !== config?.css) {

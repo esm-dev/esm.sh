@@ -253,7 +253,7 @@ func compileTailwindCSSLoader(npmrc *NpmRC, pkgVersion string, loaderExecPath st
 		return
 	}
 	npmrc.installDependencies(wd, pkgJson, false, nil)
-	npmrc.installDependencies(wd, &npm.PackageJSON{Dependencies: map[string]string{"@esm.sh/oxide-wasm": "0.1.2"}}, false, nil)
+	npmrc.installDependencies(wd, &npm.PackageJSON{Dependencies: map[string]string{"@esm.sh/oxide-wasm": "0.1.3"}}, false, nil)
 
 	_, err = utils.CopyFile(path.Join(wd, "node_modules/tailwindcss/index.css"), path.Join(wd, "tailwindcss_index.css"))
 	if err != nil {
