@@ -82,31 +82,25 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 			specifier = strings.TrimSuffix(specifier, ".d")
 			if !endsWith(specifier, ".d.ts", ".d.mts", ".d.cts") {
 				var p npm.PackageJSONRaw
-				var hasTypes bool
+				var isSubmodule bool
 				if utils.ParseJSONFile(path.Join(dtsDir, specifier, "package.json"), &p) == nil {
 					dir := path.Join("/", path.Dir(dts))
 					if types := p.Types.MainString(); types != "" {
 						specifier, _ = relPath(dir, "/"+path.Join(dir, specifier, types))
-						hasTypes = true
+						isSubmodule = true
 					} else if typings := p.Typings.MainString(); typings != "" {
 						specifier, _ = relPath(dir, "/"+path.Join(dir, specifier, typings))
-						hasTypes = true
+						isSubmodule = true
 					}
 				}
-				if !hasTypes {
+				if !isSubmodule {
 					if existsFile(path.Join(dtsDir, specifier+".d.mts")) {
 						specifier = specifier + ".d.mts"
 					} else if existsFile(path.Join(dtsDir, specifier+".d.ts")) {
 						specifier = specifier + ".d.ts"
 					} else if existsFile(path.Join(dtsDir, specifier+".d.cts")) {
 						specifier = specifier + ".d.cts"
-					} else if existsFile(path.Join(dtsDir, specifier, "index.d.mts")) {
-						specifier = strings.TrimSuffix(specifier, "/") + "/index.d.mts"
-					} else if existsFile(path.Join(dtsDir, specifier, "index.d.ts")) {
-						specifier = strings.TrimSuffix(specifier, "/") + "/index.d.ts"
-					} else if existsFile(path.Join(dtsDir, specifier, "index.d.cts")) {
-						specifier = strings.TrimSuffix(specifier, "/") + "/index.d.cts"
-					} else if endsWith(specifier, ".js", ".mjs", ".cjs") {
+					} else if endsWith(specifier, ".js", ".mjs", ".cjs", ".ts", ".mts", ".cts") {
 						specifier = stripModuleExt(specifier)
 						if existsFile(path.Join(dtsDir, specifier+".d.mts")) {
 							specifier = specifier + ".d.mts"
@@ -115,6 +109,12 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 						} else if existsFile(path.Join(dtsDir, specifier+".d.cts")) {
 							specifier = specifier + ".d.cts"
 						}
+					} else if existsFile(path.Join(dtsDir, specifier, "index.d.mts")) {
+						specifier = strings.TrimSuffix(specifier, "/") + "/index.d.mts"
+					} else if existsFile(path.Join(dtsDir, specifier, "index.d.ts")) {
+						specifier = strings.TrimSuffix(specifier, "/") + "/index.d.ts"
+					} else if existsFile(path.Join(dtsDir, specifier, "index.d.cts")) {
+						specifier = strings.TrimSuffix(specifier, "/") + "/index.d.cts"
 					}
 				}
 			}
@@ -200,7 +200,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 			depPkgName = typesPkgName
 		}
 
-		_, p, err := ctx.lookupDep(depPkgName, true)
+		_, p, err := ctx.resolveDependency(depPkgName, true)
 		if err != nil {
 			if kind == TsDeclareModule && strings.HasSuffix(err.Error(), " not found") {
 				return specifier, nil

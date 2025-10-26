@@ -302,7 +302,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 
 	// cjs reexport
 	if cjsReexport != "" {
-		dep, _, e := ctx.lookupDep(cjsReexport, false)
+		dep, _, e := ctx.resolveDependency(cjsReexport, false)
 		if e != nil {
 			err = e
 			return
@@ -1305,7 +1305,7 @@ REBUILD:
 						}
 					}
 					if !isRelPathSpecifier(specifier) && !isNodeBuiltinSpecifier(specifier) && !strings.HasPrefix(specifier, "npm:") && !isJsonModuleSpecifier(specifier) {
-						dep, pkgJson, err := ctx.lookupDep(specifier, false)
+						dep, pkgJson, err := ctx.resolveDependency(specifier, false)
 						if err == nil {
 							if pkgJson.Type == "module" || pkgJson.Module != "" {
 								isEsModule[i] = true
