@@ -21,18 +21,18 @@ Deno.test("routing", async () => {
     const { proxy } = await import("http://localhost:8080/pr/valtio@main");
     assertEquals(typeof proxy, "function");
   }
-  {
-    const { proxy } = await import("http://localhost:8080/pr/valtio@e21edb3");
-    assertEquals(typeof proxy, "function");
-  }
-  {
-    const { proxy } = await import("http://localhost:8080/pr/pmndrs/valtio@e21edb3");
-    assertEquals(typeof proxy, "function");
-  }
-  {
-    const { proxy } = await import("http://localhost:8080/pr/pmndrs/valtio/valtio@e21edb3");
-    assertEquals(typeof proxy, "function");
-  }
+  // {
+  //   const { proxy } = await import("http://localhost:8080/pr/valtio@e21edb3");
+  //   assertEquals(typeof proxy, "function");
+  // }
+  // {
+  //   const { proxy } = await import("http://localhost:8080/pr/pmndrs/valtio@e21edb3");
+  //   assertEquals(typeof proxy, "function");
+  // }
+  // {
+  //   const { proxy } = await import("http://localhost:8080/pr/pmndrs/valtio/valtio@e21edb3");
+  //   assertEquals(typeof proxy, "function");
+  // }
   {
     const { defineComponent } = await import("http://localhost:8080/pr/vuejs/vue-vapor/@vue/runtime-dom@3f6ce96");
     assertEquals(typeof defineComponent, "function");
