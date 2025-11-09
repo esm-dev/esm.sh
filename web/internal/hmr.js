@@ -1,7 +1,7 @@
 const registry = new Map();
 const watchers = new Map();
 const messageQueue = [];
-const keepAliveTimeout = 30000;
+const keepAliveTimeout = 30_000; // 30s
 const reload = () => location.reload();
 
 /** @type { WebSocket | null } */
