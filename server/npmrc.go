@@ -49,7 +49,6 @@ type NpmRegistry struct {
 type NpmRC struct {
 	NpmRegistry
 	ScopedRegistries map[string]NpmRegistry `json:"scopedRegistries"`
-	zoneId           string
 }
 
 func DefaultNpmRC() *NpmRC {
@@ -110,9 +109,6 @@ func NewNpmRcFromJSON(jsonData []byte) (npmrc *NpmRC, err error) {
 }
 
 func (rc *NpmRC) StoreDir() string {
-	if rc.zoneId != "" {
-		return path.Join(config.WorkDir, "npm-"+rc.zoneId)
-	}
 	return path.Join(config.WorkDir, "npm")
 }
 

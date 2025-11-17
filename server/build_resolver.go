@@ -1080,7 +1080,7 @@ func (ctx *BuildContext) getImportPath(esm EsmPath, buildArgsPrefix string, exte
 }
 
 func (ctx *BuildContext) getSavepath() string {
-	return normalizeSavePath(ctx.npmrc.zoneId, path.Join("modules", ctx.Path()))
+	return normalizeSavePath(path.Join("modules", ctx.Path()))
 }
 
 func (ctx *BuildContext) getBuildArgsPrefix(isDts bool) string {
@@ -1304,27 +1304,21 @@ func normalizeEntryPath(path string) string {
 	return "." + utils.NormalizePathname(path)
 }
 
-func normalizeSavePath(zoneId string, pathname string) string {
+func normalizeSavePath(pathname string) string {
 	if strings.HasPrefix(pathname, "modules/transform/") || strings.HasPrefix(pathname, "modules/x/") {
-		if zoneId != "" {
-			return zoneId + "/" + pathname
-		}
 		return pathname
 	}
-	segs := strings.Split(pathname, "/")
-	for i, seg := range segs {
+	segments := strings.Split(pathname, "/")
+	for i, seg := range segments {
 		if strings.HasPrefix(seg, "X-") && len(seg) > 42 {
 			h := sha1.New()
 			h.Write([]byte(seg))
-			segs[i] = "x-" + hex.EncodeToString(h.Sum(nil))
+			segments[i] = "x-" + hex.EncodeToString(h.Sum(nil))
 		} else if strings.HasPrefix(seg, "*") {
-			segs[i] = seg[1:] + "/ea"
+			segments[i] = seg[1:] + "/ea"
 		}
 	}
-	if zoneId != "" {
-		return zoneId + "/" + strings.Join(segs, "/")
-	}
-	return strings.Join(segs, "/")
+	return strings.Join(segments, "/")
 }
 
 // normalizeImportSpecifier normalizes the given specifier.

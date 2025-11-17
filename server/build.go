@@ -94,7 +94,7 @@ func (ctx *BuildContext) Path() string {
 }
 
 func (ctx *BuildContext) Exists() (meta *BuildMeta, ok bool, err error) {
-	key := ctx.npmrc.zoneId + ":" + ctx.Path()
+	key := ctx.Path()
 	meta, err = withLRUCache(key, func() (*BuildMeta, error) {
 		metadata, err := ctx.db.Get(key)
 		if err != nil {
@@ -163,7 +163,7 @@ func (ctx *BuildContext) Build() (meta *BuildMeta, err error) {
 	}
 
 	// save the build result to the storage
-	key := ctx.npmrc.zoneId + ":" + ctx.Path()
+	key := ctx.Path()
 	err = ctx.db.Put(key, encodeBuildMeta(meta))
 	if err != nil {
 		ctx.logger.Errorf("db.put(%s): %v", key, err)
