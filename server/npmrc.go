@@ -546,7 +546,7 @@ func extractPackageTarball(installDir string, pkgName string, tarball io.Reader)
 		}
 		// strip tarball root dir
 		_, name := utils.SplitByFirstByte(h.Name, '/')
-		filename := path.Join(pkgDir, name)
+		filename := path.Join(pkgDir, path.Clean(name))
 		if h.Typeflag != tar.TypeReg {
 			continue
 		}
