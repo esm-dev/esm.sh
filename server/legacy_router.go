@@ -178,7 +178,7 @@ func legacyESM(ctx *rex.Context, buildStorage storage.Storage, buildVersionPrefi
 		}
 		isStatic = hasTargetSegment
 	}
-	savePath := "legacy/" + normalizeSavePath("", ctx.R.URL.Path[1:])
+	savePath := "legacy/" + normalizeSavePath(ctx.R.URL.Path[1:])
 	if (buildVersionPrefix != "" && isStatic) || endsWith(pathname, ".d.ts", ".d.mts") {
 		f, fi, e := buildStorage.Get(savePath)
 		if e != nil && e != storage.ErrNotFound {
