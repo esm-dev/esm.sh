@@ -8,7 +8,7 @@
 
 # esm.sh
 
-A _nobuild_ content delivery network(CDN) for modern web development.
+A _no-build_ JavaScript CDN for modern web development.
 
 ## How to Use
 
