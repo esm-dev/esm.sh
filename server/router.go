@@ -1069,17 +1069,15 @@ func esmRouter(db Database, esmStorage storage.Storage, logger *log.Logger) rex.
 				if err != nil {
 					return rex.Status(500, err.Error())
 				}
+				css, err = minify(string(css), esbuild.LoaderCSS, esbuild.ES2022)
+				if err != nil {
+					return rex.Status(500, err.Error())
+				}
 				buf := bytes.NewBufferString("/* esm.sh - css module */\n")
 				buf.WriteString("const stylesheet = new CSSStyleSheet();\n")
-				if bytes.ContainsRune(css, '`') {
-					buf.WriteString("stylesheet.replaceSync(`")
-					buf.WriteString(strings.TrimSpace(string(utils.MustEncodeJSON(string(css)))))
-					buf.WriteString(");\n")
-				} else {
-					buf.WriteString("stylesheet.replaceSync(`")
-					buf.Write(css)
-					buf.WriteString("`);\n")
-				}
+				buf.WriteString("stylesheet.replaceSync(")
+				buf.WriteString(strings.TrimSuffix(string(utils.MustEncodeJSON(strings.TrimSuffix(string(css), "\n"))), "\n"))
+				buf.WriteString(");\n")
 				buf.WriteString("export default stylesheet;\n")
 				ctx.SetHeader("Content-Type", ctJavaScript)
 				ctx.SetHeader("Content-Length", fmt.Sprintf("%d", buf.Len()))

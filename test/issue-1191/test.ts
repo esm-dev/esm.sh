@@ -1,4 +1,4 @@
-import { assert, assertEquals } from "jsr:@std/assert";
+import { assert, assertEquals, assertStringIncludes } from "jsr:@std/assert";
 
 // related issue: https://github.com/esm-dev/esm.sh/issues/1191
 Deno.test(
@@ -9,7 +9,7 @@ Deno.test(
     assert(res.ok);
     assertEquals(res.headers.get("content-type"), "application/javascript; charset=utf-8");
     assertEquals(res.headers.get("cache-control"), "public, max-age=31536000, immutable");
-    assert(text.includes(`import("/aleman@1.0.7/style.css?module")`));
+    assertStringIncludes(text, `import("/aleman@1.0.7/style.css?module")`);
   },
 );
 
@@ -21,8 +21,8 @@ Deno.test(
     assert(res.ok);
     assertEquals(res.headers.get("content-type"), "application/javascript; charset=utf-8");
     assertEquals(res.headers.get("cache-control"), "public, max-age=31536000, immutable");
-    assert(text.includes("const stylesheet = new CSSStyleSheet();"));
-    assert(text.includes("stylesheet.replaceSync(`"));
-    assert(text.includes("`);\nexport default stylesheet;"));
+    assertStringIncludes(text, "const stylesheet = new CSSStyleSheet();");
+    assertStringIncludes(text, "stylesheet.replaceSync(");
+    assertStringIncludes(text, ");\nexport default stylesheet;");
   },
 );
