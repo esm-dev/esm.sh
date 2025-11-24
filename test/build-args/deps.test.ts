@@ -1,4 +1,4 @@
-import { assertStringIncludes } from "jsr:@std/assert";
+import { assert, assertStringIncludes } from "jsr:@std/assert";
 
 Deno.test("?deps", async () => {
   {
@@ -22,4 +22,21 @@ Deno.test("?deps", async () => {
     assertStringIncludes(code, 'from"/@mui/system@^5.16.7/createTheme?deps=react@18.2.0&target=es2022"');
     assertStringIncludes(code, 'from"/@mui/utils@^5.16.6/useTimeout?deps=react@18.2.0&target=es2022"');
   }
+});
+
+Deno.test("?deps in TypeScript types", async () => {
+  const res = await fetch("http://localhost:8080/@mui/material@5.16.7?deps=react@18.2.0,react-dom@18.2.0&target=es2022");
+  res.body?.cancel();
+  const dtsUrl = res.headers.get("x-typescript-types");
+  assert(dtsUrl, "X-TypeScript-Types header should be present");
+  assertStringIncludes(dtsUrl, "/X-", "DTS URL should include X-<hash> encoded build args");
+
+  const dtsRes = await fetch(dtsUrl);
+  const dtsCode = await dtsRes.text();
+  assertStringIncludes(dtsCode, "@mui/utils", "DTS should import from @mui/utils");
+  assertStringIncludes(
+    dtsCode,
+    "@mui/utils@5.17.1/X-",
+    "Child @mui/utils dependency should include X-<hash> with react deps encoded",
+  );
 });
