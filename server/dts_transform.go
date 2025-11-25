@@ -214,7 +214,12 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 			SubPath:       subPath,
 			SubModuleName: subPath,
 		}
-		args := BuildArgs{}
+		args := BuildArgs{
+			Alias:      ctx.args.Alias,
+			Deps:       ctx.args.Deps,
+			External:   ctx.args.External,
+			Conditions: ctx.args.Conditions,
+		}
 		b := &BuildContext{
 			npmrc:   ctx.npmrc,
 			logger:  ctx.logger,
@@ -223,6 +228,10 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 			target:  "types",
 		}
 		err = b.install()
+		if err != nil {
+			return "", err
+		}
+		err = resolveBuildArgs(ctx.npmrc, b.wd, &b.args, dtsModule)
 		if err != nil {
 			return "", err
 		}
