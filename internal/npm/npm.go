@@ -1,7 +1,7 @@
 package npm
 
 import (
-	"errors" 
+	"errors"
 	"net/url"
 	"regexp"
 	"sort"
@@ -227,7 +227,7 @@ func ConvertDateVersionToTime(version string) (time.Time, error) {
 
 	dateRegex := regexp.MustCompile(`^(\d{4})-(\d{1,2})-(\d{1,2})$`)
 	matches := dateRegex.FindStringSubmatch(version)
-	
+
 	year := matches[1]
 	month := matches[2]
 	day := matches[3]
@@ -274,14 +274,13 @@ func NormalizePackageVersion(version string) string {
 }
 
 // ToTypesPackageName converts a package name to a types package name.
-// If the package name is scoped, it returns "@types/@scope__name".
+// If the package name is scoped, it returns "@types/[scope_name]__[package_name]".
 func ToTypesPackageName(pkgName string) string {
 	if strings.HasPrefix(pkgName, "@") {
 		pkgName = strings.Replace(pkgName[1:], "/", "__", 1)
 	}
 	return "@types/" + pkgName
 }
-
 
 // IsStableVersion returns true if the version is a stable release (not experimental, beta, alpha, etc.)
 func IsStableVersion(version string) bool {
@@ -291,13 +290,13 @@ func IsStableVersion(version string) bool {
 		"experimental", "beta", "alpha", "rc", "pre", "preview", "canary", "dev", "nightly",
 		"snapshot", "test", "unstable", "next", "latest", "edge", "insiders",
 	}
-	
+
 	for _, keyword := range prereleaseKeywords {
 		if strings.Contains(v, keyword) {
 			return false
 		}
 	}
-	
+
 	// Additional check for semver prerelease pattern (e.g., 1.0.0-alpha.1)
 	if strings.Contains(version, "-") {
 		parts := strings.Split(version, "-")
@@ -317,7 +316,7 @@ func IsStableVersion(version string) bool {
 			}
 		}
 	}
-	
+
 	return true
 }
 
@@ -369,4 +368,3 @@ func ResolveVersionByTime(metadata *PackageMetadata, targetTime time.Time) (stri
 
 	return validVersions[0].version, nil
 }
-
