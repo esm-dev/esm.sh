@@ -85,11 +85,13 @@ ssh -p $sshPort ${user}@${host} << EOF
 
   configjson=/etc/esmd/config.json
   servicerc=/etc/systemd/system/esmd.service
+  cronrc=/etc/cron.monthly/esmd
 
   if [ "$init" == "yes" ]; then
     addgroup esm
     adduser --ingroup esm --home=/esm --disabled-login --disabled-password --gecos "" esm
     rm -f \$servicerc
+    rm -f \$cronrc
     echo "[Unit]" >> \$servicerc
     echo "Description=esm.sh service" >> \$servicerc
     echo "After=network.target" >> \$servicerc
@@ -113,6 +115,11 @@ ssh -p $sshPort ${user}@${host} << EOF
     echo "Environment=\"ESMDIR=/esm\"" >> \$servicerc
     echo "[Install]" >> \$servicerc
     echo "WantedBy=multi-user.target" >> \$servicerc
+    echo "#!/bin/bash" >> \$cronrc
+    echo "# purge npm cache" >> \$cronrc
+    echo "mv /esm/npm /tmp/_npm" >> \$cronrc
+    echo "rm -rf /tmp/_npm" >> \$cronrc
+    chmod +x \$cronrc
   else
     systemctl stop esmd.service
     echo "Stopped esmd.service."
@@ -123,6 +130,7 @@ ssh -p $sshPort ${user}@${host} << EOF
   if [ "$init" == "yes" ]; then
     systemctl daemon-reload
     systemctl enable esmd.service
+    systemctl restart cron.service
   fi
 
   systemctl start esmd.service
