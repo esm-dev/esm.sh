@@ -25,6 +25,14 @@ func OpenBoltDB(filename string) (Database, error) {
 	return &boltDB{boltd}, nil
 }
 
+func (db *boltDB) Stat() (stat Stat, err error) {
+	err = db.bolt.View(func(tx *bolt.Tx) error {
+		stat.Records = int64(tx.Bucket([]byte(defaultBucket)).Stats().KeyN)
+		return nil
+	})
+	return stat, nil
+}
+
 func (db *boltDB) Get(key string) (value []byte, err error) {
 	err = db.bolt.View(func(tx *bolt.Tx) error {
 		value = tx.Bucket([]byte(defaultBucket)).Get([]byte(key))
