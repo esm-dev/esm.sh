@@ -293,21 +293,11 @@ func esmRouter(db Database, esmStorage storage.Storage, logger *log.Logger) rex.
 				diskStatus = "error"
 			}
 
-			var dbStat Stat
-			var dbStatus string
-			dbStat, err = db.Stat()
-			if err != nil {
-				dbStatus = "error"
-			} else {
-				dbStatus = fmt.Sprintf("%d records", dbStat.Records)
-			}
-
 			ctx.SetHeader("Cache-Control", ccMustRevalidate)
 			return map[string]any{
 				"buildQueue": q[:i],
 				"version":    VERSION,
 				"uptime":     time.Since(startTime).String(),
-				"db":         dbStatus,
 				"disk":       diskStatus,
 			}
 
