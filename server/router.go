@@ -279,18 +279,27 @@ func esmRouter(db Database, esmStorage storage.Storage, logger *log.Logger) rex.
 				}
 			}
 
-			disk := "ok"
+			diskStatus := "ok"
 			var stat syscall.Statfs_t
 			err := syscall.Statfs(config.WorkDir, &stat)
 			if err == nil {
 				avail := stat.Bavail * uint64(stat.Bsize)
 				if avail < 100*MB {
-					disk = "full"
+					diskStatus = "full"
 				} else if avail < 1024*MB {
-					disk = "low"
+					diskStatus = "low"
 				}
 			} else {
-				disk = "error"
+				diskStatus = "error"
+			}
+
+			var dbStat Stat
+			var dbStatus string
+			dbStat, err = db.Stat()
+			if err != nil {
+				dbStatus = "error"
+			} else {
+				dbStatus = fmt.Sprintf("%d records", dbStat.Records)
 			}
 
 			ctx.SetHeader("Cache-Control", ccMustRevalidate)
@@ -298,7 +307,8 @@ func esmRouter(db Database, esmStorage storage.Storage, logger *log.Logger) rex.
 				"buildQueue": q[:i],
 				"version":    VERSION,
 				"uptime":     time.Since(startTime).String(),
-				"disk":       disk,
+				"db":         dbStatus,
+				"disk":       diskStatus,
 			}
 
 		case "/error.js":
