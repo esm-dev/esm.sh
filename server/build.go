@@ -1149,9 +1149,9 @@ REBUILD:
 
 	for _, file := range res.OutputFiles {
 		if strings.HasSuffix(file.Path, ".js") {
-			jsContent := file.Contents
 			header, recycle := newBuffer()
 			defer recycle()
+
 			header.WriteString("/* esm.sh - ")
 			if ctx.esmPath.GhPrefix {
 				header.WriteString("github:")
@@ -1170,6 +1170,8 @@ REBUILD:
 				header.WriteString(ctx.esmPath.SubModuleName)
 			}
 			header.WriteString(" */\n")
+
+			jsContent := file.Contents
 
 			// remove shebang
 			if bytes.HasPrefix(jsContent, []byte("#!/")) {
@@ -1383,6 +1385,17 @@ REBUILD:
 				finalJS.WriteString(".map")
 			}
 
+			var stat storage.Stat
+			stat, err = ctx.storage.Stat(ctx.getSavepath())
+			if err == nil && stat.Size() > 0 {
+				ctx.logger.Infof("build(%s): file already exists in the storage, skip it", ctx.Path())
+				continue
+			}
+			if err != storage.ErrNotFound {
+				ctx.logger.Errorf("storage.stat(%s): %v", ctx.getSavepath(), err)
+				err = errors.New("storage: " + err.Error())
+				return
+			}
 			err = ctx.storage.Put(ctx.getSavepath(), finalJS)
 			if err != nil {
 				ctx.logger.Errorf("storage.put(%s): %v", ctx.getSavepath(), err)
@@ -1404,7 +1417,7 @@ REBUILD:
 			}
 			meta.CSSInJS = true
 		} else if config.SourceMap && strings.HasSuffix(file.Path, ".js.map") {
-			var sourceMap map[string]interface{}
+			var sourceMap map[string]any
 			if json.Unmarshal(file.Contents, &sourceMap) == nil {
 				if mapping, ok := sourceMap["mappings"].(string); ok {
 					fixedMapping := make([]byte, ctx.smOffset+len(mapping))
