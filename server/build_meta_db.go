@@ -44,10 +44,9 @@ func (db *MetaDB) Get(key string) (value []byte, err error) {
 	}
 	defer r.Close()
 	value, err = io.ReadAll(r)
-	if err != nil {
-		return
+	if err == nil {
+		db.cache.Add(key, value)
 	}
-	db.cache.Add(key, value)
 	return
 }
 
