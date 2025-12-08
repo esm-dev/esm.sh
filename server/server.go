@@ -59,12 +59,6 @@ func Start() {
 		logger.Fatalf("failed to initialize access logger: %v", err)
 	}
 
-	// open database
-	db, err := OpenBoltDB(path.Join(config.WorkDir, "esm.db"))
-	if err != nil {
-		logger.Fatalf("init db: %v", err)
-	}
-
 	// initialize storage
 	esmStorage, err := storage.New(&config.Storage)
 	if err != nil {
@@ -95,7 +89,7 @@ func Start() {
 		rex.Optional(rex.Compress(), config.Compress),
 		rex.Optional(customLandingPage(&config.CustomLandingPage), config.CustomLandingPage.Origin != ""),
 		rex.Optional(esmLegacyRouter(esmStorage), config.LegacyServer != ""),
-		esmRouter(db, esmStorage, logger),
+		esmRouter(esmStorage, logger),
 	)
 
 	// start server
@@ -120,7 +114,6 @@ func Start() {
 	}
 
 	// release resources
-	db.Close()
 	logger.FlushBuffer()
 	accessLogger.FlushBuffer()
 }

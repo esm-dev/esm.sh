@@ -61,13 +61,26 @@ const (
 	ctTypeScript     = "application/typescript; charset=utf-8"
 )
 
-func esmRouter(db Database, esmStorage storage.Storage, logger *log.Logger) rex.Handle {
+func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 	var (
 		startTime  = time.Now()
 		globalETag = fmt.Sprintf(`W/"%s"`, VERSION)
 		buildQueue = NewBuildQueue(int(config.BuildConcurrency))
 		npmrc      = DefaultNpmRC()
+		metaDB     = NewMetaDB(esmStorage)
 	)
+
+	// todo: remove old db code after migration is complete
+	{
+		oldDbFile := path.Join(config.WorkDir, "esm.db")
+		if existsFile(oldDbFile) {
+			var err error
+			metaDB.oldDB, err = OpenBoltDB(oldDbFile)
+			if err != nil {
+				logger.Errorf("failed to open old db: %v", err)
+			}
+		}
+	}
 
 	return func(ctx *rex.Context) any {
 		pathname := ctx.R.URL.Path
@@ -1442,7 +1455,7 @@ func esmRouter(db Database, esmStorage storage.Storage, logger *log.Logger) rex.
 				buildCtx := &BuildContext{
 					npmrc:       npmrc,
 					logger:      logger,
-					db:          db,
+					metaDB:      metaDB,
 					storage:     esmStorage,
 					esmPath:     esm,
 					args:        buildArgs,
@@ -1550,7 +1563,7 @@ func esmRouter(db Database, esmStorage storage.Storage, logger *log.Logger) rex.
 		build := &BuildContext{
 			npmrc:       npmrc,
 			logger:      logger,
-			db:          db,
+			metaDB:      metaDB,
 			storage:     esmStorage,
 			esmPath:     esm,
 			args:        buildArgs,
@@ -1646,7 +1659,7 @@ func esmRouter(db Database, esmStorage storage.Storage, logger *log.Logger) rex.
 					// let's remove the build meta from the database and clear the cache
 					// then re-build the module
 					key := build.Path()
-					db.Delete(key)
+					metaDB.Delete(key)
 					cacheLRU.Remove(key)
 					return rex.Status(500, "Storage error, please try again")
 				}
