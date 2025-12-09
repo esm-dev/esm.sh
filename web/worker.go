@@ -54,9 +54,9 @@ func (jsw *JSWorker) Start() (err error) {
 		return
 	}
 
-	denoPath, err := deno.CheckDeno(workDir)
+	denoPath := deno.GetDenoPath(workDir)
+	err = deno.CheckDeno(denoPath)
 	if err != nil {
-		err = errors.New("deno not found, please install deno first")
 		return
 	}
 
