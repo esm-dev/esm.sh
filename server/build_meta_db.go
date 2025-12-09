@@ -33,11 +33,16 @@ func (db *MetaDB) Get(key string) (value []byte, err error) {
 	r, _, err := db.storage.Get(getMetaStoreKey(key))
 	if err != nil {
 		if err == storage.ErrNotFound && db.oldDB != nil {
-			value, err = db.oldDB.Get(key)
+			value, err := db.oldDB.Get(key)
 			if err == nil {
-				db.Put(key, value)
-				db.cache.Add(key, value)
-				return
+				go doOnce("copy-meta:"+key, func() error {
+					err := db.Put(key, value)
+					if err == nil {
+						db.cache.Add(key, value)
+					}
+					return err
+				})
+				return value, nil
 			}
 		}
 		return

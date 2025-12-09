@@ -18,55 +18,41 @@ import (
 
 const version = "2.5.6"
 
-func GetDenoPath(workDir string) (denoPath string, err error) {
-	denoPath = filepath.Join(workDir, "bin/deno")
+func GetDenoPath(workDir string) string {
+	denoPath := filepath.Join(workDir, "bin/deno")
 	if runtime.GOOS == "windows" {
 		denoPath += ".exe"
 	}
+	return denoPath
+}
 
+func CheckDeno(denoPath string) (err error) {
 	fi, err := os.Lstat(denoPath)
 	if err == nil {
 		if fi.IsDir() {
-			return "", errors.New("path is a dir")
+			return errors.New("path is a dir")
 		}
-		return denoPath, nil
+		return validateDenoPath(denoPath)
 	}
 
-	err = installDeno(denoPath, version)
-	if err != nil {
-		return "", err
-	}
-
-	return denoPath, nil
+	return installDeno(denoPath, version)
 }
 
 func installDeno(installPath string, version string) (err error) {
 	// ensure install dir
 	os.MkdirAll(filepath.Dir(installPath), 0755)
 
-	// check local installed deno
+	// check system installed deno
 	systemDenoPath, err := exec.LookPath("deno")
 	if err == nil {
-		cmd := exec.Command(systemDenoPath, "eval", "console.log(Deno.version.deno)")
-		output, err := cmd.Output()
+		err = validateDenoPath(systemDenoPath)
 		if err == nil {
-			version := strings.Split(strings.TrimSpace(string(output)), ".")
-			if len(version) == 3 {
-				major, _ := strconv.Atoi(version[0])
-				minor, _ := strconv.Atoi(version[1])
-				// check if the installed deno version is greater than or equal to 2.4
-				if major > 2 || (major == 2 && minor >= 4) {
-					if runtime.GOOS == "windows" {
-						_, err = utils.CopyFile(systemDenoPath, installPath)
-					} else {
-						err = os.Symlink(systemDenoPath, installPath)
-					}
-					if err != nil {
-						return err
-					}
-					return nil
-				}
+			if runtime.GOOS == "windows" {
+				_, err = utils.CopyFile(systemDenoPath, installPath)
+			} else {
+				err = os.Symlink(systemDenoPath, installPath)
 			}
+			return
 		}
 	}
 
@@ -155,4 +141,22 @@ func getDenoDownloadURL(version string) (string, error) {
 	}
 
 	return fmt.Sprintf("https://github.com/denoland/deno/releases/download/v%s/deno-%s-%s.zip", version, arch, os), nil
+}
+
+func validateDenoPath(denoPath string) error {
+	cmd := exec.Command(denoPath, "eval", "console.log(Deno.version.deno)")
+	output, err := cmd.Output()
+	if err != nil {
+		return err
+	}
+	version := strings.Split(strings.TrimSpace(string(output)), ".")
+	if len(version) == 3 {
+		major, _ := strconv.Atoi(version[0])
+		minor, _ := strconv.Atoi(version[1])
+		// check if the installed deno version is greater than or equal to 2.4
+		if major > 2 || (major == 2 && minor >= 4) {
+			return nil
+		}
+	}
+	return errors.New("invalid deno version")
 }

@@ -307,16 +307,16 @@ func compileTailwindCSSLoader(npmrc *NpmRC, pkgVersion string, loaderExecPath st
 		return
 	}
 
+	denoPath := deno.GetDenoPath(config.WorkDir)
 	err = doOnce("check-deno", func() (err error) {
-		_, err = deno.GetDenoPath(config.WorkDir)
-		return err
+		return deno.CheckDeno(denoPath)
 	})
 	if err != nil {
 		return
 	}
 
 	cmd := exec.Command(
-		path.Join(config.WorkDir, "bin/deno"),
+		denoPath,
 		"compile",
 		"--no-config",
 		"--no-lock",
@@ -402,16 +402,16 @@ func compileUnocssLoader(npmrc *NpmRC, pkgVersion string, loaderExecPath string)
 		return
 	}
 
+	denoPath := deno.GetDenoPath(config.WorkDir)
 	err = doOnce("check-deno", func() (err error) {
-		_, err = deno.GetDenoPath(config.WorkDir)
-		return err
+		return deno.CheckDeno(denoPath)
 	})
 	if err != nil {
 		return
 	}
 
 	cmd := exec.Command(
-		path.Join(config.WorkDir, "bin/deno"),
+		denoPath,
 		"compile",
 		"--no-config",
 		"--no-lock",
