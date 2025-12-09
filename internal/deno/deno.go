@@ -16,24 +16,23 @@ import (
 	"github.com/ije/gox/utils"
 )
 
-const DenoVersion = "2.5.4"
+const version = "2.5.6"
 
 func GetDenoPath(workDir string) (denoPath string, err error) {
-	if workDir == "" {
-		return "", errors.New("workDir is empty")
-	}
-
 	denoPath = filepath.Join(workDir, "bin/deno")
 	if runtime.GOOS == "windows" {
 		denoPath += ".exe"
 	}
 
 	fi, err := os.Lstat(denoPath)
-	if err == nil && !fi.IsDir() {
+	if err == nil {
+		if fi.IsDir() {
+			return "", errors.New("path is a dir")
+		}
 		return denoPath, nil
 	}
 
-	err = installDeno(denoPath, DenoVersion)
+	err = installDeno(denoPath, version)
 	if err != nil {
 		return "", err
 	}
@@ -71,7 +70,7 @@ func installDeno(installPath string, version string) (err error) {
 		}
 	}
 
-	url, err := getDenoDotZipURL(version)
+	url, err := getDenoDownloadURL(version)
 	if err != nil {
 		return
 	}
@@ -131,7 +130,7 @@ func installDeno(installPath string, version string) (err error) {
 	return nil
 }
 
-func getDenoDotZipURL(version string) (string, error) {
+func getDenoDownloadURL(version string) (string, error) {
 	var arch string
 	var os string
 
