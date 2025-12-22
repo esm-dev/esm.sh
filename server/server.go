@@ -67,7 +67,7 @@ func Start() {
 	logger.Debugf("storage initialized, type: %s, endpoint: %s", config.Storage.Type, config.Storage.Endpoint)
 
 	// initialize legacy storage
-	legacyStorage, err := storage.NewFSStorage(path.Join(config.WorkDir, "/cache/legacy"))
+	legacyStorage, err := storage.NewFSStorage(path.Join(config.WorkDir, "/cache"))
 	if err != nil {
 		logger.Fatalf("failed to initialize legacy storage: %v", err)
 	}
