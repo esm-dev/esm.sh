@@ -18,7 +18,7 @@ import (
 
 const version = "2.5.6"
 
-func GetDenoPath(workDir string) string {
+func ResolveDenoPath(workDir string) string {
 	denoPath := filepath.Join(workDir, "bin/deno")
 	if runtime.GOOS == "windows" {
 		denoPath += ".exe"

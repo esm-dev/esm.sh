@@ -10,6 +10,10 @@ import (
 	"github.com/ije/gox/utils"
 )
 
+type fsStorage struct {
+	root string
+}
+
 // NewFSStorage creates a new storage instance that stores files on the local filesystem.
 func NewFSStorage(options *StorageOptions) (storage Storage, err error) {
 	if options.Endpoint == "" {
@@ -24,10 +28,6 @@ func NewFSStorage(options *StorageOptions) (storage Storage, err error) {
 		return
 	}
 	return &fsStorage{root: root}, nil
-}
-
-type fsStorage struct {
-	root string
 }
 
 func (fs *fsStorage) Stat(key string) (stat Stat, err error) {
@@ -48,19 +48,12 @@ func (fs *fsStorage) Get(key string) (content io.ReadCloser, stat Stat, err erro
 	if err != nil && (os.IsNotExist(err) || strings.HasSuffix(err.Error(), "not a directory")) {
 		err = ErrNotFound
 	}
-	if err == nil {
-		stat, err = file.Stat()
-	}
 	if err != nil {
 		return
 	}
 	content = file
+	stat, err = os.Stat(filename)
 	return
-}
-
-func (fs *fsStorage) List(prefix string) (keys []string, err error) {
-	dir := strings.TrimSuffix(utils.NormalizePathname(prefix)[1:], "/")
-	return findFiles(filepath.Join(fs.root, dir), dir)
 }
 
 func (fs *fsStorage) Put(key string, content io.Reader) (err error) {
@@ -85,6 +78,11 @@ func (fs *fsStorage) Put(key string, content io.Reader) (err error) {
 
 func (fs *fsStorage) Delete(key string) (err error) {
 	return os.Remove(filepath.Join(fs.root, key))
+}
+
+func (fs *fsStorage) List(prefix string) (keys []string, err error) {
+	dir := strings.TrimSuffix(utils.NormalizePathname(prefix)[1:], "/")
+	return findFiles(filepath.Join(fs.root, dir), dir)
 }
 
 func (fs *fsStorage) DeleteAll(prefix string) (deletedKeys []string, err error) {

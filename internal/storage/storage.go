@@ -16,14 +16,15 @@ type StorageOptions struct {
 	Region          string `json:"region"`
 	AccessKeyID     string `json:"accessKeyID"`
 	SecretAccessKey string `json:"secretAccessKey"`
+	CacheDir        string `json:"cacheDir"`
 }
 
 type Storage interface {
 	Stat(key string) (stat Stat, err error)
 	Get(key string) (content io.ReadCloser, stat Stat, err error)
-	List(prefix string) (keys []string, err error)
 	Put(key string, r io.Reader) error
 	Delete(key string) error
+	List(prefix string) (keys []string, err error)
 	DeleteAll(prefix string) (deletedKeys []string, err error)
 }
 

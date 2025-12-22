@@ -307,7 +307,7 @@ func compileTailwindCSSLoader(npmrc *NpmRC, pkgVersion string, loaderExecPath st
 		return
 	}
 
-	denoPath := deno.GetDenoPath(config.WorkDir)
+	denoPath := deno.ResolveDenoPath(config.WorkDir)
 	err = doOnce("check-deno", func() (err error) {
 		return deno.CheckDeno(denoPath)
 	})
@@ -402,7 +402,7 @@ func compileUnocssLoader(npmrc *NpmRC, pkgVersion string, loaderExecPath string)
 		return
 	}
 
-	denoPath := deno.GetDenoPath(config.WorkDir)
+	denoPath := deno.ResolveDenoPath(config.WorkDir)
 	err = doOnce("check-deno", func() (err error) {
 		return deno.CheckDeno(denoPath)
 	})

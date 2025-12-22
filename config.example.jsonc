@@ -46,12 +46,14 @@
     "type": "fs",
     // storage endpoint, default is "~/.esmd/storage".
     "endpoint": "~/.esmd/storage",
-    // storage region for s3.
+    // s3 storage region.
     "region": "",
-    // storage access key id for s3.
+    // s3 storage access key id.
     "accessKeyID": "",
-    // storage secret access key for s3.
-    "secretAccessKey": ""
+    // s3 storage secret access key.
+    "secretAccessKey": "",
+    // cache files on local file system for s3 storage, default is disabled.
+    "cacheDir": ""
   },
 
   // The custom landing page options, default is empty.

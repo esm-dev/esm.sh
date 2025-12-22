@@ -13,7 +13,19 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/ije/gox/sync"
 )
+
+// A S3-compatible storage.
+type s3Storage struct {
+	apiEndpoint     string
+	region          string
+	accessKeyID     string
+	secretAccessKey string
+	fsCache         *fsStorage
+	fsCacheLock     sync.KeyedMutex
+}
 
 // NewS3Storage creates a new S3-compatible storage.
 func NewS3Storage(options *StorageOptions) (Storage, error) {
@@ -33,20 +45,20 @@ func NewS3Storage(options *StorageOptions) (Storage, error) {
 	if options.SecretAccessKey == "" {
 		return nil, errors.New("missing secretAccessKey")
 	}
-	return &s3Storage{
+	storage := &s3Storage{
 		apiEndpoint:     strings.TrimSuffix(u.String(), "/"),
 		region:          options.Region,
 		accessKeyID:     options.AccessKeyID,
 		secretAccessKey: options.SecretAccessKey,
-	}, nil
-}
-
-// A S3-compatible storage.
-type s3Storage struct {
-	apiEndpoint     string
-	region          string
-	accessKeyID     string
-	secretAccessKey string
+	}
+	if options.CacheDir != "" {
+		fs, err := NewFSStorage(&StorageOptions{Type: "fs", Endpoint: options.CacheDir})
+		if err != nil {
+			return nil, err
+		}
+		storage.fsCache = fs.(*fsStorage)
+	}
+	return storage, nil
 }
 
 type s3ListResult struct {
@@ -85,22 +97,6 @@ type s3Error struct {
 	Message string
 }
 
-func parseS3Error(resp *http.Response) error {
-	var s3Error s3Error
-	if xml.NewDecoder(resp.Body).Decode(&s3Error) != nil || s3Error.Code == "" {
-		if resp.StatusCode == 429 {
-			s3Error.Code = "TooManyRequests"
-		} else {
-			s3Error.Code = "UnexpectedStatusCode"
-		}
-		s3Error.Message = http.StatusText(resp.StatusCode)
-	}
-	if s3Error.Code == "NoSuchKey" {
-		return ErrNotFound
-	}
-	return s3Error
-}
-
 func (e s3Error) Error() string {
 	if e.Message != "" {
 		return e.Code + ": " + e.Message
@@ -109,6 +105,16 @@ func (e s3Error) Error() string {
 }
 
 func (s3 *s3Storage) Stat(name string) (stat Stat, err error) {
+	if name == "" {
+		return nil, errors.New("name is required")
+	}
+	if s3.fsCache != nil && !strings.HasSuffix(name, ".mjs.map") {
+		stat, err = s3.fsCache.Stat(name)
+		if err == nil {
+			return
+		}
+		// ignore error
+	}
 	req, _ := http.NewRequest("HEAD", s3.apiEndpoint+"/"+name, nil)
 	s3.sign(req)
 	resp, err := http.DefaultClient.Do(req)
@@ -125,26 +131,42 @@ func (s3 *s3Storage) Stat(name string) (stat Stat, err error) {
 		return
 	}
 	contentLengthHeader := resp.Header.Get("Content-Length")
-	lastModifiedHeader := resp.Header.Get("Last-Modified")
 	if contentLengthHeader == "" {
 		err = errors.New("missing content size header")
 		return
 	}
+	size, err := strconv.ParseInt(contentLengthHeader, 10, 64)
+	if err != nil {
+		err = errors.New("invalid content size header")
+		return
+	}
+	lastModifiedHeader := resp.Header.Get("Last-Modified")
 	if lastModifiedHeader == "" {
 		err = errors.New("missing last modified header")
 		return
 	}
-	size, _ := strconv.ParseInt(contentLengthHeader, 10, 64)
-	lastModified, _ := time.Parse(time.RFC1123, lastModifiedHeader)
-	return &s3ObjectMeta{
+	lastModified, err := time.Parse(time.RFC1123, lastModifiedHeader)
+	if err != nil {
+		err = errors.New("invalid last modified header")
+		return
+	}
+	stat = &s3ObjectMeta{
 		contentLength: size,
 		lastModified:  lastModified,
-	}, nil
+	}
+	return
 }
 
 func (s3 *s3Storage) Get(name string) (content io.ReadCloser, stat Stat, err error) {
 	if name == "" {
 		return nil, nil, errors.New("name is required")
+	}
+	if s3.fsCache != nil && !strings.HasSuffix(name, ".mjs.map") {
+		content, stat, err = s3.fsCache.Get(name)
+		if err == nil {
+			return
+		}
+		// ignore error
 	}
 	req, _ := http.NewRequest("GET", s3.apiEndpoint+"/"+name, nil)
 	s3.sign(req)
@@ -162,21 +184,115 @@ func (s3 *s3Storage) Get(name string) (content io.ReadCloser, stat Stat, err err
 		return nil, nil, parseS3Error(resp)
 	}
 	contentLengthHeader := resp.Header.Get("Content-Length")
-	lastModifiedHeader := resp.Header.Get("Last-Modified")
 	if contentLengthHeader == "" {
 		err = errors.New("missing content size header")
 		return
 	}
+	size, err := strconv.ParseInt(contentLengthHeader, 10, 64)
+	if err != nil {
+		err = errors.New("invalid content size header")
+		return
+	}
+	lastModifiedHeader := resp.Header.Get("Last-Modified")
 	if lastModifiedHeader == "" {
 		err = errors.New("missing last modified header")
 		return
 	}
-	size, _ := strconv.ParseInt(contentLengthHeader, 10, 64)
-	lastModified, _ := time.Parse(time.RFC1123, lastModifiedHeader)
-	return resp.Body, &s3ObjectMeta{
+	lastModified, err := time.Parse(time.RFC1123, lastModifiedHeader)
+	if err != nil {
+		err = errors.New("invalid last modified header")
+		return
+	}
+	stat = &s3ObjectMeta{
 		contentLength: size,
 		lastModified:  lastModified,
-	}, nil
+	}
+	if s3.fsCache != nil && !strings.HasSuffix(name, ".mjs.map") {
+		pr, pw := io.Pipe()
+		go func() {
+			unlock := s3.fsCacheLock.Lock(name)
+			defer unlock()
+			_, err := s3.fsCache.Stat(name)
+			if err == nil {
+				_, err = io.Copy(pw, resp.Body)
+				pw.CloseWithError(err)
+				return
+			}
+			err = s3.fsCache.Put(name, io.TeeReader(resp.Body, pw))
+			pw.CloseWithError(err)
+			resp.Body.Close()
+		}()
+		content = pr
+	} else {
+		content = resp.Body
+	}
+	return
+}
+
+func (s3 *s3Storage) Put(name string, content io.Reader) (err error) {
+	if name == "" {
+		return errors.New("name is required")
+	}
+	var contentLength int64
+	if buf, ok := content.(*bytes.Buffer); ok {
+		contentLength = int64(buf.Len())
+	} else if seeker, ok := content.(io.Seeker); ok {
+		var size int64
+		size, err = seeker.Seek(0, io.SeekEnd)
+		if err != nil {
+			return
+		}
+		_, err = seeker.Seek(0, io.SeekStart)
+		if err != nil {
+			return
+		}
+		contentLength = size
+	} else {
+		err = errors.New("put: missing content length")
+		return
+	}
+	if s3.fsCache != nil && !strings.HasSuffix(name, ".mjs.map") {
+		pr, pw := io.Pipe()
+		go func(content io.Reader) {
+			unlock := s3.fsCacheLock.Lock(name)
+			defer unlock()
+			err := s3.fsCache.Put(name, io.TeeReader(content, pw))
+			pw.CloseWithError(err)
+		}(content)
+		content = pr
+	}
+	req, _ := http.NewRequest("PUT", s3.apiEndpoint+"/"+name, content)
+	s3.sign(req)
+	req.ContentLength = contentLength
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return parseS3Error(resp)
+	}
+	return nil
+}
+
+func (s3 *s3Storage) Delete(name string) (err error) {
+	if name == "" {
+		return errors.New("key is required")
+	}
+	if s3.fsCache != nil && !strings.HasSuffix(name, ".mjs.map") {
+		go s3.fsCache.Delete(name)
+	}
+	req, _ := http.NewRequest("DELETE", s3.apiEndpoint+"/"+name, nil)
+	s3.sign(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return errors.New("unexpected status code: " + resp.Status)
+	}
+	return nil
 }
 
 func (s3 *s3Storage) List(prefix string) (keys []string, err error) {
@@ -207,54 +323,12 @@ func (s3 *s3Storage) List(prefix string) (keys []string, err error) {
 	return
 }
 
-func (s3 *s3Storage) Put(name string, content io.Reader) (err error) {
-	if name == "" {
-		return errors.New("name is required")
-	}
-	req, _ := http.NewRequest("PUT", s3.apiEndpoint+"/"+name, content)
-	s3.sign(req)
-	if buf, ok := content.(*bytes.Buffer); ok {
-		req.ContentLength = int64(buf.Len())
-	} else if seeker, ok := content.(io.Seeker); ok {
-		var size int64
-		size, err = seeker.Seek(0, io.SeekEnd)
-		if err != nil {
-			return
-		}
-		_, err = seeker.Seek(0, io.SeekStart)
-		if err != nil {
-			return
-		}
-		req.ContentLength = size
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode >= 400 {
-		return parseS3Error(resp)
-	}
-	return nil
-}
-
-func (s3 *s3Storage) Delete(key string) (err error) {
-	req, _ := http.NewRequest("DELETE", s3.apiEndpoint+"/"+key, nil)
-	s3.sign(req)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode >= 400 {
-		return errors.New("unexpected status code: " + resp.Status)
-	}
-	return nil
-}
-
 func (s3 *s3Storage) DeleteAll(prefix string) (deletedKeys []string, err error) {
 	if prefix == "" {
 		return nil, errors.New("prefix is required")
+	}
+	if s3.fsCache != nil {
+		go s3.fsCache.DeleteAll(prefix)
 	}
 	keysToDelete, err := s3.List(prefix)
 	if err != nil {
@@ -325,4 +399,20 @@ func (s3 *s3Storage) sign(req *http.Request) {
 	signingKey := hmacSum(hmacSum(hmacSum(hmacSum([]byte("AWS4"+s3.secretAccessKey), date), s3.region), "s3"), "aws4_request")
 	signature := hmacSum(signingKey, stringToSign)
 	req.Header.Set("Authorization", strings.Join([]string{"AWS4-HMAC-SHA256 Credential=" + s3.accessKeyID + "/" + scope, "SignedHeaders=" + strings.Join(signedHeaders, ";"), "Signature=" + toHex(signature)}, ", "))
+}
+
+func parseS3Error(resp *http.Response) error {
+	var s3Error s3Error
+	if xml.NewDecoder(resp.Body).Decode(&s3Error) != nil || s3Error.Code == "" {
+		if resp.StatusCode == 429 {
+			s3Error.Code = "TooManyRequests"
+		} else {
+			s3Error.Code = "UnexpectedStatusCode"
+		}
+		s3Error.Message = http.StatusText(resp.StatusCode)
+	}
+	if s3Error.Code == "NoSuchKey" {
+		return ErrNotFound
+	}
+	return s3Error
 }
