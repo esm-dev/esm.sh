@@ -59,43 +59,30 @@ func Start() {
 		logger.Fatalf("failed to initialize access logger: %v", err)
 	}
 
-	// open database
-	db, err := OpenBoltDB(path.Join(config.WorkDir, "esm.db"))
-	if err != nil {
-		logger.Fatalf("init db: %v", err)
-	}
-
 	// initialize storage
 	esmStorage, err := storage.New(&config.Storage)
 	if err != nil {
-		logger.Fatalf("failed to initialize build storage(%s): %v", config.Storage.Type, err)
-	}
-	if config.MigrationStorage.Type != "" {
-		migrationStorage, err := storage.New(&config.MigrationStorage)
-		if err != nil {
-			logger.Fatalf("failed to initialize migration storage(%s): %v", config.MigrationStorage.Type, err)
-		}
-		esmStorage = storage.NewMigrationStorage(esmStorage, migrationStorage)
+		logger.Fatalf("failed to initialize storage(%s): %v", config.Storage.Type, err)
 	}
 	logger.Debugf("storage initialized, type: %s, endpoint: %s", config.Storage.Type, config.Storage.Endpoint)
 
 	// pre-compile uno generator in background
 	npmrc := &NpmRC{NpmRegistry: NpmRegistry{Registry: "https://registry.npmjs.org/"}}
 	go generateTailwindCSS(npmrc, `@import "tailwindcss";`, "flex")
-	go generateUnoCSS(npmrc, `@import "@unocss/preset-wind3";`, "flex")
+	go generateUnoCSS(npmrc, `@import "@unocss/preset-wind4";`, "flex")
 	go getNodeRuntimeJS("fs")
 
 	// add middlewares
 	rex.Use(
+		pprofRouter(),
+		cors(config.CorsAllowOrigins),
 		rex.Header("Server", "esm.sh"),
 		rex.Logger(logger),
-		cors(config.CorsAllowOrigins),
-		pprofRouter(),
 		rex.Optional(rex.AccessLogger(accessLogger), config.AccessLog),
 		rex.Optional(rex.Compress(), config.Compress),
 		rex.Optional(customLandingPage(&config.CustomLandingPage), config.CustomLandingPage.Origin != ""),
 		rex.Optional(esmLegacyRouter(esmStorage), config.LegacyServer != ""),
-		esmRouter(db, esmStorage, logger),
+		esmRouter(esmStorage, logger),
 	)
 
 	// start server
@@ -120,7 +107,6 @@ func Start() {
 	}
 
 	// release resources
-	db.Close()
 	logger.FlushBuffer()
 	accessLogger.FlushBuffer()
 }

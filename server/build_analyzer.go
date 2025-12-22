@@ -133,7 +133,7 @@ func (ctx *BuildContext) analyzeSplitting() (err error) {
 			b := &BuildContext{
 				npmrc:       ctx.npmrc,
 				logger:      ctx.logger,
-				db:          ctx.db,
+				metaDB:      ctx.metaDB,
 				storage:     ctx.storage,
 				esmPath:     esmPath,
 				args:        ctx.args,

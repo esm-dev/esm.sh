@@ -82,21 +82,21 @@ func cjsModuleLexer(b *BuildContext, cjsEntry string) (ret cjsModuleLexerResult,
 	}()
 
 	if cjsModuleLexerIgnoredPackages.Has(b.esmPath.PkgName) {
+		denoPath := deno.ResolveDenoPath(config.WorkDir)
 		err = doOnce("check-deno", func() (err error) {
-			_, err = deno.GetDenoPath(config.WorkDir)
-			return err
+			return deno.CheckDeno(denoPath)
 		})
 		if err != nil {
 			return
 		}
 		js := path.Join(b.wd, "reveal_"+strings.ReplaceAll(cjsEntry[2:], "/", "_"))
-		err = os.WriteFile(js, []byte(fmt.Sprintf(`console.log(JSON.stringify(Object.keys((await import("npm:%s")).default)))`, path.Join(b.esmPath.Name(), cjsEntry))), 0644)
+		err = os.WriteFile(js, fmt.Appendf(nil, `console.log(JSON.stringify(Object.keys((await import("npm:%s")).default)))`, path.Join(b.esmPath.Name(), cjsEntry)), 0644)
 		if err != nil {
 			return
 		}
 		var data []byte
 		cmd := exec.Command(
-			path.Join(config.WorkDir, "bin/deno"),
+			denoPath,
 			"run",
 			"--allow-env",
 			"--no-prompt",

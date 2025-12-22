@@ -4,7 +4,6 @@ import (
 	"errors"
 	"os"
 	"os/exec"
-	"path"
 	"strings"
 
 	"github.com/esm-dev/esm.sh/internal/deno"
@@ -18,16 +17,16 @@ type LoaderOutput struct {
 }
 
 func runLoader(loaderJsPath string, filename string, code string) (out *LoaderOutput, err error) {
+	denoPath := deno.ResolveDenoPath(config.WorkDir)
 	err = doOnce("check-deno", func() (err error) {
-		_, err = deno.GetDenoPath(config.WorkDir)
-		return err
+		return deno.CheckDeno(denoPath)
 	})
 	if err != nil {
 		return
 	}
 
 	cmd := exec.Command(
-		path.Join(config.WorkDir, "bin/deno"),
+		denoPath,
 		"run",
 		"--no-config",
 		"--no-lock",

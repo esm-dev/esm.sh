@@ -2,9 +2,14 @@ package server
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"io"
 	"strings"
 
+	"github.com/esm-dev/esm.sh/internal/storage"
+	lru "github.com/hashicorp/golang-lru/v2"
 	"github.com/ije/gox/utils"
 )
 
@@ -101,4 +106,70 @@ func decodeBuildMeta(data []byte) (*BuildMeta, error) {
 		}
 	}
 	return meta, nil
+}
+
+type BuildMetaDB struct {
+	cache   *lru.Cache[string, []byte]
+	storage storage.Storage
+	oldDB   Database
+}
+
+func NewBuildMetaDB(backStorage storage.Storage) *BuildMetaDB {
+	cache, err := lru.New[string, []byte](lruCacheCapacity)
+	if err != nil {
+		panic(err)
+	}
+	return &BuildMetaDB{cache: cache, storage: backStorage}
+}
+
+func (db *BuildMetaDB) Get(key string) (value []byte, err error) {
+	var cached bool
+	value, cached = db.cache.Get(key)
+	if cached {
+		return
+	}
+	r, _, err := db.storage.Get(getMetaStoreKey(key))
+	if err != nil {
+		if err == storage.ErrNotFound && db.oldDB != nil {
+			value, err := db.oldDB.Get(key)
+			if err == nil {
+				go doOnce("copy-meta:"+key, func() error {
+					err := db.Put(key, value)
+					if err == nil {
+						db.cache.Add(key, value)
+					}
+					return err
+				})
+				return value, nil
+			}
+		}
+		return
+	}
+	defer r.Close()
+	value, err = io.ReadAll(r)
+	if err == nil {
+		db.cache.Add(key, value)
+	}
+	return
+}
+
+func (storage *BuildMetaDB) Put(key string, value []byte) (err error) {
+	err = storage.storage.Put(getMetaStoreKey(key), bytes.NewReader(value))
+	if err == nil {
+		storage.cache.Add(key, value)
+	}
+	return
+}
+
+func (storage *BuildMetaDB) Delete(key string) (err error) {
+	err = storage.storage.Delete(getMetaStoreKey(key))
+	if err == nil {
+		storage.cache.Remove(key)
+	}
+	return
+}
+
+func getMetaStoreKey(key string) string {
+	data := sha256.Sum256([]byte(key))
+	return "meta/" + hex.EncodeToString(data[:])
 }

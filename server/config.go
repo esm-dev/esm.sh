@@ -35,7 +35,6 @@ type Config struct {
 	BuildConcurrency    uint16                 `json:"buildConcurrency"`
 	BuildWaitTime       uint16                 `json:"buildWaitTime"`
 	Storage             storage.StorageOptions `json:"storage"`
-	MigrationStorage    storage.StorageOptions `json:"migrationStorage"`
 	LogDir              string                 `json:"logDir"`
 	LogLevel            string                 `json:"logLevel"`
 	AccessLog           bool                   `json:"accessLog"`

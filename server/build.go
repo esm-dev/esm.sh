@@ -34,7 +34,7 @@ const (
 type BuildContext struct {
 	npmrc       *NpmRC
 	logger      *log.Logger
-	db          Database
+	metaDB      *BuildMetaDB
 	storage     storage.Storage
 	esmPath     EsmPath
 	args        BuildArgs
@@ -96,18 +96,14 @@ func (ctx *BuildContext) Path() string {
 func (ctx *BuildContext) Exists() (meta *BuildMeta, ok bool, err error) {
 	key := ctx.Path()
 	meta, err = withLRUCache(key, func() (*BuildMeta, error) {
-		metadata, err := ctx.db.Get(key)
+		metadata, err := ctx.metaDB.Get(key)
 		if err != nil {
-			ctx.logger.Errorf("db.get(%s): %v", key, err)
 			return nil, err
-		}
-		if metadata == nil {
-			return nil, storage.ErrNotFound
 		}
 		meta, err := decodeBuildMeta(metadata)
 		if err != nil {
 			// delete the invalid metadata
-			ctx.db.Delete(key)
+			ctx.metaDB.Delete(key)
 			return nil, storage.ErrNotFound
 		}
 		return meta, nil
@@ -164,7 +160,7 @@ func (ctx *BuildContext) Build() (meta *BuildMeta, err error) {
 
 	// save the build result to the storage
 	key := ctx.Path()
-	err = ctx.db.Put(key, encodeBuildMeta(meta))
+	err = ctx.metaDB.Put(key, encodeBuildMeta(meta))
 	if err != nil {
 		ctx.logger.Errorf("db.put(%s): %v", key, err)
 		err = errors.New("db: " + err.Error())
@@ -310,7 +306,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 		b := &BuildContext{
 			npmrc:       ctx.npmrc,
 			logger:      ctx.logger,
-			db:          ctx.db,
+			metaDB:      ctx.metaDB,
 			storage:     ctx.storage,
 			esmPath:     dep,
 			args:        ctx.args,
@@ -1315,7 +1311,7 @@ REBUILD:
 								b := &BuildContext{
 									npmrc:       ctx.npmrc,
 									logger:      ctx.logger,
-									db:          ctx.db,
+									metaDB:      ctx.metaDB,
 									storage:     ctx.storage,
 									esmPath:     dep,
 									args:        ctx.args,
