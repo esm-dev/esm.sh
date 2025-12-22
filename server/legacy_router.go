@@ -21,7 +21,7 @@ import (
 	"github.com/ije/rex"
 )
 
-func esmLegacyRouter(buildStorage storage.Storage) rex.Handle {
+func esmLegacyRouter(fs storage.Storage) rex.Handle {
 	return func(ctx *rex.Context) any {
 		method := ctx.R.Method
 		pathname := ctx.R.URL.Path
@@ -48,7 +48,7 @@ func esmLegacyRouter(buildStorage storage.Storage) rex.Handle {
 
 		// `/react-dom@18.3.1&pin=v135`
 		if strings.Contains(pathname, "&pin=v") {
-			return legacyESM(ctx, buildStorage, "")
+			return legacyESM(ctx, fs, "")
 		}
 
 		// `/react-dom@18.3.1?pin=v135`
@@ -60,14 +60,14 @@ func esmLegacyRouter(buildStorage storage.Storage) rex.Handle {
 				if bv <= 0 || bv > 135 {
 					return rex.Status(400, "Invalid `pin` query")
 				}
-				return legacyESM(ctx, buildStorage, "")
+				return legacyESM(ctx, fs, "")
 			}
 		}
 
 		// `/stable/react@18.3.1?dev`
 		// `/stable/react@18.3.1/es2022/react.mjs`
 		if strings.HasPrefix(pathname, "/stable/") {
-			return legacyESM(ctx, buildStorage, "stable")
+			return legacyESM(ctx, fs, "stable")
 		}
 
 		// `/v135/react-dom@18.3.1?dev`
@@ -88,7 +88,7 @@ func esmLegacyRouter(buildStorage storage.Storage) rex.Handle {
 					pathname = "/build"
 					goto START
 				}
-				return legacyESM(ctx, buildStorage, "v"+legacyBuildVersion)
+				return legacyESM(ctx, fs, "v"+legacyBuildVersion)
 			}
 		}
 
@@ -107,7 +107,7 @@ type LegacyBuildMeta struct {
 	Code  string `json:"code"`
 }
 
-func legacyESM(ctx *rex.Context, buildStorage storage.Storage, buildVersionPrefix string) any {
+func legacyESM(ctx *rex.Context, fs storage.Storage, buildVersionPrefix string) any {
 	pathname := ctx.R.URL.Path
 	if buildVersionPrefix != "" {
 		pathname = pathname[len(buildVersionPrefix)+1:]
@@ -180,7 +180,7 @@ func legacyESM(ctx *rex.Context, buildStorage storage.Storage, buildVersionPrefi
 	}
 	savePath := "legacy/" + normalizeSavePath(ctx.R.URL.Path[1:])
 	if (buildVersionPrefix != "" && isStatic) || endsWith(pathname, ".d.ts", ".d.mts") {
-		f, fi, e := buildStorage.Get(savePath)
+		f, fi, e := fs.Get(savePath)
 		if e != nil && e != storage.ErrNotFound {
 			return rex.Status(500, "Storage error: "+e.Error())
 		}
@@ -228,7 +228,7 @@ func legacyESM(ctx *rex.Context, buildStorage storage.Storage, buildVersionPrefi
 			savePath += "." + base64.RawURLEncoding.EncodeToString(h.Sum(nil))
 		}
 		savePath += ".meta"
-		f, _, e := buildStorage.Get(savePath)
+		f, _, e := fs.Get(savePath)
 		if e != nil && e != storage.ErrNotFound {
 			return rex.Status(500, "Storage error: "+e.Error())
 		}
@@ -288,7 +288,7 @@ func legacyESM(ctx *rex.Context, buildStorage storage.Storage, buildVersionPrefi
 		if err != nil {
 			return rex.Status(500, "Failed to fetch data from the legacy esm.sh server")
 		}
-		err = buildStorage.Put(savePath, bytes.NewReader(data))
+		err = fs.Put(savePath, bytes.NewReader(data))
 		if err != nil {
 			return rex.Status(500, "Storage error: "+err.Error())
 		}
@@ -323,7 +323,7 @@ func legacyESM(ctx *rex.Context, buildStorage storage.Storage, buildVersionPrefi
 			Dts:   dts,
 			Code:  string(code),
 		}
-		err = buildStorage.Put(savePath, bytes.NewReader(utils.MustEncodeJSON(ret)))
+		err = fs.Put(savePath, bytes.NewReader(utils.MustEncodeJSON(ret)))
 		if err != nil {
 			return rex.Status(500, "Storage error: "+err.Error())
 		}

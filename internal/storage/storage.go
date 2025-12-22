@@ -36,7 +36,7 @@ type Stat interface {
 func New(options *StorageOptions) (storage Storage, err error) {
 	switch options.Type {
 	case "fs":
-		return NewFSStorage(options)
+		return NewFSStorage(options.Endpoint)
 	case "s3":
 		return NewS3Storage(options)
 	default:
