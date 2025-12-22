@@ -52,7 +52,7 @@ func NewS3Storage(options *StorageOptions) (Storage, error) {
 		secretAccessKey: options.SecretAccessKey,
 	}
 	if options.CacheDir != "" {
-		fs, err := NewFSStorage(&StorageOptions{Type: "fs", Endpoint: options.CacheDir})
+		fs, err := NewFSStorage(options.CacheDir)
 		if err != nil {
 			return nil, err
 		}

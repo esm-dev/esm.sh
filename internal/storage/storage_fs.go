@@ -15,11 +15,11 @@ type fsStorage struct {
 }
 
 // NewFSStorage creates a new storage instance that stores files on the local filesystem.
-func NewFSStorage(options *StorageOptions) (storage Storage, err error) {
-	if options.Endpoint == "" {
-		return nil, errors.New("endpoint is required")
+func NewFSStorage(root string) (storage Storage, err error) {
+	if root == "" {
+		return nil, errors.New("root is required")
 	}
-	root, err := filepath.Abs(options.Endpoint)
+	root, err = filepath.Abs(root)
 	if err != nil {
 		return nil, err
 	}
