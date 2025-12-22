@@ -67,7 +67,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 		globalETag = fmt.Sprintf(`W/"%s"`, VERSION)
 		buildQueue = NewBuildQueue(int(config.BuildConcurrency))
 		npmrc      = DefaultNpmRC()
-		metaDB     = NewMetaDB(esmStorage)
+		metaDB     = NewBuildMetaDB(esmStorage)
 	)
 
 	// todo: remove old db code after migration is complete

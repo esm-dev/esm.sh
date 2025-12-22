@@ -34,7 +34,7 @@ const (
 type BuildContext struct {
 	npmrc       *NpmRC
 	logger      *log.Logger
-	metaDB      *MetaDB
+	metaDB      *BuildMetaDB
 	storage     storage.Storage
 	esmPath     EsmPath
 	args        BuildArgs
