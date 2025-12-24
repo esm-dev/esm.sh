@@ -24,7 +24,7 @@ import (
 	"github.com/ije/gox/utils"
 )
 
-var cjsModuleLexerVersion = "1.0.6"
+var cjsModuleLexerVersion = "1.0.7"
 var cjsModuleLexerIgnoredPackages = set.New(
 	"@babel/types",
 	"cheerio",
@@ -53,18 +53,10 @@ func cjsModuleLexer(b *BuildContext, cjsEntry string) (ret cjsModuleLexerResult,
 	h.Write([]byte(cjsModuleLexerVersion))
 	h.Write([]byte(cjsEntry))
 	h.Write([]byte(b.getNodeEnv()))
-	cacheFileName := path.Join(b.wd, ".cache", "cml-"+base64.RawURLEncoding.EncodeToString(h.Sum(nil))+".json")
+	cacheFileName := path.Join(b.wd, ".cjs-module-lexer", base64.RawURLEncoding.EncodeToString(h.Sum(nil))+".json")
 
 	// check the cache first
 	if existsFile(cacheFileName) && utils.ParseJSONFile(cacheFileName, &ret) == nil {
-		return
-	}
-
-	err = doOnce("install-cjs-module-lexer", func() (err error) {
-		err = installCjsModuleLexer()
-		return
-	})
-	if err != nil {
 		return
 	}
 
@@ -128,7 +120,15 @@ func cjsModuleLexer(b *BuildContext, cjsEntry string) (ret cjsModuleLexerResult,
 		return
 	}
 
-	worthToRetry := true
+	err = doOnce("install-cjs-module-lexer", func() (err error) {
+		err = installCjsModuleLexer()
+		return
+	})
+	if err != nil {
+		return
+	}
+
+	retried := false
 RETRY:
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -138,7 +138,7 @@ RETRY:
 	defer recycle1()
 	defer recycle2()
 
-	cmd := exec.CommandContext(ctx, path.Join(config.WorkDir, "bin/cjs-module-lexer"), path.Join(b.esmPath.PkgName, cjsEntry))
+	cmd := exec.CommandContext(ctx, path.Join(config.WorkDir, fmt.Sprintf("bin/cjs-module-lexer-%s", cjsModuleLexerVersion)), path.Join(b.esmPath.PkgName, cjsEntry))
 	cmd.Dir = b.wd
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
@@ -150,8 +150,8 @@ RETRY:
 			msg := stderr.String()
 			if strings.HasPrefix(msg, "thread 'main' panicked at") {
 				formattedMessage := strings.Split(msg, "\n")[1]
-				if strings.HasPrefix(formattedMessage, "failed to resolve reexport: NotFound(") && worthToRetry {
-					worthToRetry = false
+				if strings.HasPrefix(formattedMessage, "failed to resolve reexport: NotFound(") && !retried {
+					retried = true
 					// install dependencies and retry
 					b.npmrc.installDependencies(b.wd, b.pkgJson, true, nil)
 					goto RETRY
@@ -160,6 +160,8 @@ RETRY:
 			} else {
 				err = fmt.Errorf("cjsModuleLexer: %s", msg)
 			}
+		} else {
+			err = fmt.Errorf("cjsModuleLexer: %v", err)
 		}
 		return
 	}
@@ -178,25 +180,28 @@ RETRY:
 			ret.Exports = append(ret.Exports, line)
 		}
 	}
-
 	return
 }
 
 func installCjsModuleLexer() (err error) {
-	binDir := path.Join(config.WorkDir, "bin")
+	installDir := path.Join(config.WorkDir, "bin")
+	installPath := path.Join(installDir, fmt.Sprintf("cjs-module-lexer-%s", cjsModuleLexerVersion))
 
 	// use dev version of cjs-module-lexer if exists
 	// clone https://github.com/esm-dev/cjs-module-lexer to the same directory of esm.sh and run `cargo build --release -p native`
-	if bin := "../cjs-module-lexer/target/release/native"; existsFile(bin) {
-		ensureDir(binDir)
-		_, err = utils.CopyFile(bin, path.Join(binDir, "cjs-module-lexer"))
-		if err == nil {
-			cjsModuleLexerVersion = "dev"
+	if DEBUG {
+		localBuild := "../cjs-module-lexer/target/release/native"
+		if existsFile(localBuild) {
+			ensureDir(installDir)
+			_, err = utils.CopyFile(localBuild, installPath)
+			if err == nil {
+				cjsModuleLexerVersion = "dev"
+			}
+			return
 		}
-		return
 	}
 
-	if existsFile(path.Join(binDir, "cjs-module-lexer")) {
+	if existsFile(installPath) {
 		return
 	}
 
@@ -225,8 +230,8 @@ func installCjsModuleLexer() (err error) {
 	}
 	defer gr.Close()
 
-	ensureDir(binDir)
-	f, err := os.OpenFile(path.Join(binDir, "cjs-module-lexer"), os.O_CREATE|os.O_WRONLY, 0755)
+	ensureDir(installDir)
+	f, err := os.OpenFile(installPath, os.O_CREATE|os.O_WRONLY, 0755)
 	if err != nil {
 		return fmt.Errorf("failed to create cjs-module-lexer: %v", err)
 	}
