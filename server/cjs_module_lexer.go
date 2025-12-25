@@ -24,7 +24,7 @@ import (
 	"github.com/ije/gox/utils"
 )
 
-var cjsModuleLexerVersion = "1.0.7"
+var cjsModuleLexerVersion = "1.0.8"
 var cjsModuleLexerIgnoredPackages = set.New(
 	"@babel/types",
 	"cheerio",
@@ -131,7 +131,7 @@ func cjsModuleLexer(b *BuildContext, cjsEntry string) (ret cjsModuleLexerResult,
 	retried := false
 RETRY:
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	stdout, recycle1 := newBuffer()
 	stderr, recycle2 := newBuffer()
 	defer cancel()
