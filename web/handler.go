@@ -133,7 +133,7 @@ func (s *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 			header := w.Header()
 			header.Set("Content-Type", "text/html; charset=utf-8")
-			header.Set("Cache-Control", "max-age=0, must-revalidate")
+			header.Set("Cache-Control", "public, max-age=0, must-revalidate")
 			header.Set("Etag", etag)
 			s.ServeHtml(w, r, pathname)
 		case ".js", ".mjs", ".jsx", ".ts", ".mts", ".tsx", ".vue", ".svelte":
@@ -204,7 +204,7 @@ func (s *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					header := w.Header()
 					header.Set("Content-Type", "application/javascript; charset=utf-8")
 					if !query.Has("t") {
-						header.Set("Cache-Control", "max-age=0, must-revalidate")
+						header.Set("Cache-Control", "public, max-age=0, must-revalidate")
 						header.Set("Etag", etag)
 					}
 					w.Write(js)
@@ -231,7 +231,7 @@ func (s *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			header := w.Header()
 			header.Set("Content-Type", contentType)
 			if !query.Has("t") {
-				header.Set("Cache-Control", "max-age=0, must-revalidate")
+				header.Set("Cache-Control", "public, max-age=0, must-revalidate")
 				header.Set("Etag", etag)
 			}
 			io.Copy(w, file)
@@ -478,7 +478,7 @@ func (s *Handler) ServeModule(w http.ResponseWriter, r *http.Request, filename s
 				header := w.Header()
 				header.Set("Content-Type", "application/javascript; charset=utf-8")
 				if !query.Has("t") {
-					header.Set("Cache-Control", "max-age=0, must-revalidate")
+					header.Set("Cache-Control", "public, max-age=0, must-revalidate")
 					header.Set("Etag", etag)
 				}
 				w.Write(js.([]byte))
@@ -510,7 +510,7 @@ func (s *Handler) ServeModule(w http.ResponseWriter, r *http.Request, filename s
 	header := w.Header()
 	header.Set("Content-Type", "application/javascript; charset=utf-8")
 	if !query.Has("t") {
-		header.Set("Cache-Control", "max-age=0, must-revalidate")
+		header.Set("Cache-Control", "public, max-age=0, must-revalidate")
 		header.Set("Etag", etag)
 	}
 	w.Write([]byte(js))
@@ -540,7 +540,7 @@ func (s *Handler) ServeRPCModule(w http.ResponseWriter, r *http.Request, filenam
 			if e.(string) == etag {
 				header := w.Header()
 				header.Set("Content-Type", "application/javascript; charset=utf-8")
-				header.Set("Cache-Control", "max-age=0, must-revalidate")
+				header.Set("Cache-Control", "public, max-age=0, must-revalidate")
 				header.Set("Etag", etag)
 				w.Write(js.([]byte))
 				return
@@ -560,7 +560,7 @@ func (s *Handler) ServeRPCModule(w http.ResponseWriter, r *http.Request, filenam
 
 	header := w.Header()
 	header.Set("Content-Type", "application/javascript; charset=utf-8")
-	header.Set("Cache-Control", "max-age=0, must-revalidate")
+	header.Set("Cache-Control", "public, max-age=0, must-revalidate")
 	header.Set("Etag", etag)
 	w.Write([]byte(js))
 }
@@ -616,7 +616,7 @@ func (s *Handler) ServeRPC(w http.ResponseWriter, r *http.Request, filename stri
 
 	header := w.Header()
 	header.Set("Content-Type", "application/json; charset=utf-8")
-	header.Set("Cache-Control", "max-age=0, must-revalidate")
+	header.Set("Cache-Control", "public, max-age=0, must-revalidate")
 
 	_, ret, err := rpcWorker.Call(filename, fn, args)
 	if err != nil {
@@ -655,7 +655,7 @@ func (s *Handler) ServeCSSModule(w http.ResponseWriter, r *http.Request, query u
 	header := w.Header()
 	header.Set("Content-Type", "application/javascript; charset=utf-8")
 	if !query.Has("t") {
-		header.Set("Cache-Control", "max-age=0, must-revalidate")
+		header.Set("Cache-Control", "public, max-age=0, must-revalidate")
 		header.Set("Etag", etag)
 	}
 	w.Write([]byte("const css=\""))
@@ -791,7 +791,7 @@ func (s *Handler) ServeUnoCSS(w http.ResponseWriter, r *http.Request, query url.
 				header := w.Header()
 				header.Set("Content-Type", "text/css; charset=utf-8")
 				if !query.Has("t") {
-					header.Set("Cache-Control", "max-age=0, must-revalidate")
+					header.Set("Cache-Control", "public, max-age=0, must-revalidate")
 					header.Set("Etag", etag)
 				}
 				w.Write(css.([]byte))
@@ -817,7 +817,7 @@ func (s *Handler) ServeUnoCSS(w http.ResponseWriter, r *http.Request, query url.
 	header := w.Header()
 	header.Set("Content-Type", "text/css; charset=utf-8")
 	if !query.Has("t") {
-		header.Set("Cache-Control", "max-age=0, must-revalidate")
+		header.Set("Cache-Control", "public, max-age=0, must-revalidate")
 		header.Set("Etag", etag)
 	}
 	w.Write([]byte(css))
@@ -838,7 +838,7 @@ func (s *Handler) ServeInternalJS(w http.ResponseWriter, r *http.Request, name s
 	}
 	header := w.Header()
 	header.Set("Content-Type", "application/javascript; charset=utf-8")
-	header.Set("Cache-Control", "max-age=0, must-revalidate")
+	header.Set("Cache-Control", "public, max-age=0, must-revalidate")
 	header.Set("Etag", etag)
 	w.Write(data)
 }

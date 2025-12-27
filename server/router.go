@@ -51,7 +51,7 @@ const (
 )
 
 const (
-	ccMustRevalidate = "public, max-age=0, must-revalidate"
+	ccMustRevalidate = "public, max-age=0, no-store, must-revalidate"
 	ccOneDay         = "public, max-age=86400"
 	ccImmutable      = "public, max-age=31536000, immutable"
 	ctHTML           = "text/html; charset=utf-8"
