@@ -72,11 +72,11 @@ type PackageJSON struct {
 // ToNpmPackage converts PackageJSONRaw to PackageJSON
 func (a *PackageJSONRaw) ToNpmPackage() *PackageJSON {
 	browser := map[string]string{}
-	if a.Browser.Str != "" && isModule(a.Browser.Str) {
-		browser["."] = a.Browser.Str
+	if a.Browser.str != "" && isModule(a.Browser.str) {
+		browser["."] = a.Browser.str
 	}
-	if a.Browser.Map != nil {
-		for k, v := range a.Browser.Map {
+	if a.Browser.object != nil {
+		for k, v := range a.Browser.object {
 			s, isStr := v.(string)
 			if isStr {
 				browser[k] = s
@@ -166,28 +166,28 @@ func (a *PackageJSONRaw) ToNpmPackage() *PackageJSON {
 		Name:             a.Name,
 		Version:          a.Version,
 		Type:             a.Type,
-		Main:             a.Main.MainString(),
-		Module:           a.Module.MainString(),
-		Types:            a.Types.MainString(),
-		Typings:          a.Typings.MainString(),
+		Main:             a.Main.String(),
+		Module:           a.Module.String(),
+		Types:            a.Types.String(),
+		Typings:          a.Typings.String(),
 		Browser:          browser,
 		SideEffectsFalse: sideEffectsFalse,
 		SideEffects:      *sideEffects.ReadOnly(),
 		Dependencies:     dependencies,
 		PeerDependencies: peerDependencies,
-		Imports:          toMap(a.Imports),
-		TypesVersions:    toMap(a.TypesVersions),
+		Imports:          asMap(a.Imports),
+		TypesVersions:    asMap(a.TypesVersions),
 		Exports:          exports,
-		Esmsh:            toMap(a.Esmsh),
+		Esmsh:            asMap(a.Esmsh),
 		Deprecated:       depreacted,
 		Dist:             dist,
 	}
 
 	// normalize package module field
 	if p.Module == "" {
-		if es2015 := a.ES2015.MainString(); es2015 != "" {
+		if es2015 := a.ES2015.String(); es2015 != "" {
 			p.Module = es2015
-		} else if jsNextMain := a.JsNextMain.MainString(); jsNextMain != "" {
+		} else if jsNextMain := a.JsNextMain.String(); jsNextMain != "" {
 			p.Module = jsNextMain
 		} else if p.Main != "" && (p.Type == "module" || strings.HasSuffix(p.Main, ".mjs")) {
 			p.Module = p.Main
@@ -370,41 +370,41 @@ func handleDelim(t json.Token, dec *json.Decoder) (res any, err error) {
 }
 
 type JSONAny struct {
-	Str string
-	Map map[string]any
-	Any any
+	str    string
+	object map[string]any
+	v      any
 }
 
 func (a *JSONAny) MarshalJSON() ([]byte, error) {
-	if a.Str != "" {
-		return json.Marshal(a.Str)
+	if a.str != "" {
+		return json.Marshal(a.str)
 	}
-	if a.Map != nil {
-		return json.Marshal(a.Map)
+	if a.object != nil {
+		return json.Marshal(a.object)
 	}
-	return json.Marshal(a.Any)
+	return json.Marshal(a.v)
 }
 
 func (a *JSONAny) UnmarshalJSON(b []byte) error {
 	var s string
 	if json.Unmarshal(b, &s) == nil {
-		a.Str = s
+		a.str = s
 		return nil
 	}
 	var m map[string]any
 	if json.Unmarshal(b, &m) == nil {
-		a.Map = m
+		a.object = m
 		return nil
 	}
-	return json.Unmarshal(b, &a.Any)
+	return json.Unmarshal(b, &a.v)
 }
 
-func (a *JSONAny) MainString() string {
-	if a.Str != "" {
-		return a.Str
+func (a *JSONAny) String() string {
+	if a.str != "" {
+		return a.str
 	}
-	if a.Map != nil {
-		if v, ok := a.Map["."]; ok {
+	if a.object != nil {
+		if v, ok := a.object["."]; ok {
 			if s, isStr := v.(string); isStr {
 				return s
 			}
@@ -416,15 +416,15 @@ func (a *JSONAny) MainString() string {
 // isModule checks if the given string is a module file
 func isModule(s string) bool {
 	switch path.Ext(s) {
-	case ".js", ".ts", ".mjs", ".mts", ".jsx", ".tsx", ".cjs", ".cts":
+	case ".js", ".mjs", ".cjs", ".jsx", ".ts", ".mts", ".cts", ".tsx":
 		return true
 	default:
 		return false
 	}
 }
 
-// toMap converts any value to a `map[string]any`
-func toMap(v any) map[string]any {
+// asMap converts any value to a map[string]any, if the value is not a map[string]any, return nil
+func asMap(v any) map[string]any {
 	if m, ok := v.(map[string]any); ok {
 		return m
 	}

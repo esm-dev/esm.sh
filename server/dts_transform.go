@@ -85,10 +85,10 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 				var isSubmodule bool
 				if utils.ParseJSONFile(path.Join(dtsDir, specifier, "package.json"), &p) == nil {
 					dir := path.Join("/", path.Dir(dts))
-					if types := p.Types.MainString(); types != "" {
+					if types := p.Types.String(); types != "" {
 						specifier, _ = relPath(dir, "/"+path.Join(dir, specifier, types))
 						isSubmodule = true
-					} else if typings := p.Typings.MainString(); typings != "" {
+					} else if typings := p.Typings.String(); typings != "" {
 						specifier, _ = relPath(dir, "/"+path.Join(dir, specifier, typings))
 						isSubmodule = true
 					}
