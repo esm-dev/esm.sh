@@ -18,15 +18,15 @@ const addHelpMessage = "\033[30mesm.sh - A nobuild tool for modern web developme
 Usage: esm.sh add [...packages] [options]
 
 Examples:
-  esm.sh add react@19.0.0
+  esm.sh add react react-dom
   esm.sh add react@19 react-dom@19
-  esm.sh add react react-dom @esm.sh/router
+  esm.sh add react@19.0.0 react-dom@19.0.0
 
 Arguments:
-  [...packages]    Packages to add, separated by space
+  [...packages]  Packages to add
 
 Options:
-  --help           Show help message
+  --help         Show help message
 `
 
 const htmlTemplate = `<!DOCTYPE html>
@@ -68,7 +68,7 @@ func Add() {
 }
 
 func updateImportMap(packages []string) (err error) {
-	indexHtml, exists, err := lookupCloestFile("index.html")
+	indexHtml, exists, err := lookupClosestFile("index.html")
 	if err != nil {
 		return
 	}
