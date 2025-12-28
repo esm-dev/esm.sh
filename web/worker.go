@@ -9,11 +9,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/esm-dev/esm.sh/internal/app_dir"
 	"github.com/esm-dev/esm.sh/internal/deno"
 	"github.com/ije/gox/term"
 	"github.com/ije/gox/utils"
@@ -36,25 +36,19 @@ func (jsw *JSWorker) Start() (err error) {
 		return
 	}
 
-	homeDir, err := os.UserHomeDir()
+	appDir, err := app_dir.GetAppDir()
 	if err != nil {
 		return
 	}
 
-	workDir := filepath.Join(homeDir, ".esm.sh")
-	if runtime.GOOS == "windows" {
-		workDir = filepath.Join(homeDir, "AppData\\Local\\esm.sh")
-	}
-
-	jsPath := filepath.Join(workDir, jsw.script)
-
-	os.MkdirAll(workDir, 0755)
+	jsPath := filepath.Join(appDir, jsw.script)
+	os.MkdirAll(appDir, 0755)
 	err = os.WriteFile(jsPath, js, 0644)
 	if err != nil {
 		return
 	}
 
-	denoPath := deno.ResolveDenoPath(workDir)
+	denoPath := deno.ResolveDenoPath(appDir)
 	err = deno.CheckDeno(denoPath)
 	if err != nil {
 		return
@@ -62,8 +56,8 @@ func (jsw *JSWorker) Start() (err error) {
 
 	args := []string{
 		"run",
-		"--allow-read=" + homeDir,
-		"--allow-write=" + homeDir,
+		"--allow-read=" + appDir,
+		"--allow-write=" + appDir,
 		"--allow-env",
 		"--allow-net",
 		"--allow-sys",

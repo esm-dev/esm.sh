@@ -36,7 +36,7 @@ const htmlTemplate = `<!DOCTYPE html>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Hello, world!</title>
   <script type="importmap">
-    %s
+%s
   </script>
 </head>
 <body>
@@ -90,13 +90,12 @@ func updateImportMap(packages []string) (err error) {
 			if token == html.EndTagToken {
 				tagName, _ := tokenizer.TagName()
 				if string(tagName) == "head" && !updated {
-					buf.WriteString("  <script type=\"importmap\">\n    ")
+					buf.WriteString("  <script type=\"importmap\">\n")
 					importMap := importmap.ImportMap{}
-					if !importMap.AddPackages(packages) {
+					if !importMap.AddPackages(packages, false) {
 						return
 					}
-					imJson, _ := importMap.MarshalJSON()
-					buf.Write(imJson)
+					buf.WriteString(importMap.FormatJSON(2))
 					buf.WriteString("\n  </script>\n")
 					buf.Write(tokenizer.Raw())
 					updated = true
@@ -116,13 +115,12 @@ func updateImportMap(packages []string) (err error) {
 						}
 					}
 					if typeAttr != "importmap" && !updated {
-						buf.WriteString("<script type=\"importmap\">\n    ")
+						buf.WriteString("<script type=\"importmap\">\n")
 						importMap := importmap.ImportMap{}
-						if !importMap.AddPackages(packages) {
+						if !importMap.AddPackages(packages, false) {
 							return
 						}
-						imJson, _ := importMap.MarshalJSON()
-						buf.Write(imJson)
+						buf.WriteString(importMap.FormatJSON(2))
 						buf.WriteString("\n  </script>\n  ")
 						buf.Write(tokenizer.Raw())
 						updated = true
@@ -141,12 +139,11 @@ func updateImportMap(packages []string) (err error) {
 								}
 							}
 						}
-						buf.WriteString("\n    ")
-						if !importMap.AddPackages(packages) {
+						buf.WriteString("\n")
+						if !importMap.AddPackages(packages, false) {
 							return
 						}
-						imJson, _ := importMap.MarshalJSON()
-						buf.Write(imJson)
+						buf.WriteString(importMap.FormatJSON(2))
 						buf.WriteString("\n  ")
 						if token == html.EndTagToken {
 							buf.Write(tokenizer.Raw())
@@ -166,11 +163,10 @@ func updateImportMap(packages []string) (err error) {
 		err = os.WriteFile(indexHtml, buf.Bytes(), fi.Mode())
 	} else {
 		importMap := importmap.ImportMap{}
-		if !importMap.AddPackages(packages) {
+		if !importMap.AddPackages(packages, false) {
 			return
 		}
-		imJson, _ := importMap.MarshalJSON()
-		err = os.WriteFile(indexHtml, fmt.Appendf(nil, htmlTemplate, string(imJson)), 0644)
+		err = os.WriteFile(indexHtml, fmt.Appendf(nil, htmlTemplate, importMap.FormatJSON(2)), 0644)
 		if err == nil {
 			fmt.Println(term.Dim("Created index.html with importmap script."))
 		}
