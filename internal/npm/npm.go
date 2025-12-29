@@ -77,8 +77,8 @@ func ResolveDependencyVersion(v string) (Package, error) {
 			Version: pkgVersion,
 		}, nil
 	}
-	if strings.HasPrefix(v, "github:") {
-		repo, fragment := utils.SplitByLastByte(strings.TrimPrefix(v, "github:"), '#')
+	if after, ok := strings.CutPrefix(v, "github:"); ok {
+		repo, fragment := utils.SplitByLastByte(after, '#')
 		return Package{
 			Github:  true,
 			Name:    repo,
@@ -100,8 +100,7 @@ func ResolveDependencyVersion(v string) (Package, error) {
 			Version: strings.TrimPrefix(url.QueryEscape(gitUrl.Fragment), "semver:"),
 		}, nil
 	}
-	// http dependencies
-	if strings.HasPrefix(v, "https:") || strings.HasPrefix(v, "http:") {
+	if strings.HasPrefix(v, "https://") || strings.HasPrefix(v, "http://") {
 		u, e := url.Parse(v)
 		if e != nil || !strings.ContainsRune(u.Host, '.') {
 			return Package{}, errors.New("unsupported http dependency")

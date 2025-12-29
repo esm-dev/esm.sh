@@ -17,7 +17,9 @@ func TestParseFromHtmlFile(t *testing.T) {
   <title>Hello, world!</title>
   <script type="importmap">
     {
-	    "$cdn": "https://esm.sh",
+	    "config": {
+		    "cdn": "https://esm.sh"
+	    },
       "imports": {
         "react": "https://esm.sh/react@19.1.0",
         "react/": "https://esm.sh/react@19.1.0/",
@@ -44,8 +46,8 @@ func TestParseFromHtmlFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to parse import map: %v", err)
 	}
-	if importMap.Cdn != "https://esm.sh" {
-		t.Fatalf("Expected CDN 'https://esm.sh', got '%s'", importMap.Cdn)
+	if importMap.Config.Cdn != "https://esm.sh" {
+		t.Fatalf("Expected CDN 'https://esm.sh', got '%s'", importMap.Config.Cdn)
 	}
 	if len(importMap.Imports) != 4 {
 		t.Fatalf("Expected 4 imports, got %d", len(importMap.Imports))

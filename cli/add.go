@@ -92,7 +92,7 @@ func updateImportMap(packages []string) (err error) {
 				if string(tagName) == "head" && !updated {
 					buf.WriteString("  <script type=\"importmap\">\n")
 					importMap := importmap.ImportMap{}
-					if !importMap.AddPackages(packages, false) {
+					if !importMap.AddPackages(packages) {
 						return
 					}
 					buf.WriteString(importMap.FormatJSON(2))
@@ -117,7 +117,7 @@ func updateImportMap(packages []string) (err error) {
 					if typeAttr != "importmap" && !updated {
 						buf.WriteString("<script type=\"importmap\">\n")
 						importMap := importmap.ImportMap{}
-						if !importMap.AddPackages(packages, false) {
+						if !importMap.AddPackages(packages) {
 							return
 						}
 						buf.WriteString(importMap.FormatJSON(2))
@@ -140,7 +140,7 @@ func updateImportMap(packages []string) (err error) {
 							}
 						}
 						buf.WriteString("\n")
-						if !importMap.AddPackages(packages, false) {
+						if !importMap.AddPackages(packages) {
 							return
 						}
 						buf.WriteString(importMap.FormatJSON(2))
@@ -163,7 +163,7 @@ func updateImportMap(packages []string) (err error) {
 		err = os.WriteFile(indexHtml, buf.Bytes(), fi.Mode())
 	} else {
 		importMap := importmap.ImportMap{}
-		if !importMap.AddPackages(packages, false) {
+		if !importMap.AddPackages(packages) {
 			return
 		}
 		err = os.WriteFile(indexHtml, fmt.Appendf(nil, htmlTemplate, importMap.FormatJSON(2)), 0644)

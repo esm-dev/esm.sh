@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"github.com/esm-dev/esm.sh/internal/app_dir"
 	"github.com/esm-dev/esm.sh/internal/npm"
 	"github.com/ije/gox/sync"
+	"github.com/ije/gox/utils"
 )
 
 var (
@@ -29,12 +31,11 @@ type PackageInfo struct {
 }
 
 type Dependency struct {
-	Specifier string
-	Name      string
-	Version   string
-	Peer      bool
-	Github    bool
-	Jsr       bool
+	Name    string
+	Version string
+	Peer    bool
+	Github  bool
+	Jsr     bool
 }
 
 func (pkg PackageInfo) String() string {
@@ -43,6 +44,9 @@ func (pkg PackageInfo) String() string {
 		b.WriteString("gh/")
 	} else if pkg.Jsr {
 		b.WriteString("jsr/")
+	}
+	if len(pkg.Dependencies) > 0 || len(pkg.PeerDependencies) > 0 {
+		b.WriteString("*") // add external-all modifier of esm.sh
 	}
 	b.WriteString(pkg.Name)
 	b.WriteByte('@')
@@ -53,7 +57,7 @@ func (pkg PackageInfo) String() string {
 func fetchPackageInfo(cdnOrigin string, regPrefix string, pkgName string, pkgVersion string) (pkgInfo PackageInfo, err error) {
 	url := fmt.Sprintf("%s/%s%s@%s/package.json", cdnOrigin, regPrefix, pkgName, pkgVersion)
 
-	// check cache first
+	// check memory cache first
 	if v, ok := fetchCache.Load(url); ok {
 		pkgInfo, _ = v.(PackageInfo)
 		return
@@ -63,7 +67,7 @@ func fetchPackageInfo(cdnOrigin string, regPrefix string, pkgName string, pkgVer
 	unlock := keyedMutex.Lock(url)
 	defer unlock()
 
-	// check cache again after acquiring the lock state
+	// check memory cache again after acquiring the lock state
 	if v, ok := fetchCache.Load(url); ok {
 		pkgInfo, _ = v.(PackageInfo)
 		return
@@ -134,43 +138,96 @@ func fetchPackageInfo(cdnOrigin string, regPrefix string, pkgName string, pkgVer
 
 	// cache the package.json on disk
 	if appDir != "" {
-		cachePath := filepath.Join(appDir, "registry", regPrefix, pkgName+"@"+pkgVersion+".json")
+		cachePath := filepath.Join(appDir, "registry", regPrefix, pkgName+"@"+pkgInfo.Version+".json")
 		_ = os.MkdirAll(filepath.Dir(cachePath), 0755)
 		_ = os.WriteFile(cachePath, jsonData, 0644)
 	}
 
 	// cache the package info in memory
 	fetchCache.Store(url, pkgInfo)
+	if pkgInfo.Version != pkgVersion {
+		fetchCache.Store(fmt.Sprintf("%s/%s%s@%s/package.json", cdnOrigin, regPrefix, pkgName, pkgInfo.Version), pkgInfo)
+	}
 	return
 }
 
-func walkPackageDependencies(pkg PackageInfo, callback func(dep Dependency)) error {
-	if len(pkg.PeerDependencies) > 0 {
-		err := walkDependencies(pkg.PeerDependencies, true, callback)
-		if err != nil {
-			return err
-		}
+func resolveDependency(cdnOrigin string, dep Dependency) (pkgInfo PackageInfo, err error) {
+	var regPrefix string
+	if dep.Github {
+		regPrefix = "gh/"
+	} else if dep.Jsr {
+		regPrefix = "jsr/"
 	}
-	if len(pkg.Dependencies) > 0 {
-		err := walkDependencies(pkg.Dependencies, false, callback)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+	return fetchPackageInfo(cdnOrigin, regPrefix, dep.Name, dep.Version)
 }
 
-func walkDependencies(deps map[string]string, peer bool, callback func(dep Dependency)) error {
-	for specifier, version := range deps {
+func getPackageInfoFromUrl(urlRaw string) (pkgInfo PackageInfo, err error) {
+	u, err := url.Parse(urlRaw)
+	if err != nil {
+		err = fmt.Errorf("invalid url: %s", urlRaw)
+		return
+	}
+	pathname := u.Path
+	if strings.HasPrefix(pathname, "/jsr/") {
+		pkgInfo.Jsr = true
+		pathname = pathname[4:]
+	} else if strings.HasPrefix(pathname, "/gh/") {
+		pkgInfo.Github = true
+		pathname = pathname[3:]
+	}
+	segs := strings.Split(pathname[1:], "/")
+	if len(segs) == 0 {
+		err = fmt.Errorf("invalid url: %s", urlRaw)
+		return
+	}
+	if strings.HasPrefix(segs[0], "@") {
+		if len(segs) == 1 || segs[1] == "" {
+			err = fmt.Errorf("invalid url: %s", urlRaw)
+			return
+		}
+		name, version := utils.SplitByLastByte(segs[1], '@')
+		pkgInfo.Name = segs[0] + "/" + name
+		pkgInfo.Version = version
+	} else {
+		pkgInfo.Name, pkgInfo.Version = utils.SplitByLastByte(segs[0], '@')
+	}
+	// remove the leading `*` from the package name if it is from esm.sh
+	if len(pkgInfo.Name) > 0 && pkgInfo.Name[0] == '*' {
+		pkgInfo.Name = strings.TrimPrefix(pkgInfo.Name, "*")
+	}
+	return
+}
+
+func resolvePackageDependencies(pkg PackageInfo) (deps map[string]Dependency, err error) {
+	peerDeps, err := resovleDependencies(pkg.PeerDependencies, true)
+	if err != nil {
+		return nil, err
+	}
+	pkgDeps, err := resovleDependencies(pkg.Dependencies, false)
+	if err != nil {
+		return nil, err
+	}
+	deps = make(map[string]Dependency, len(peerDeps)+len(pkgDeps))
+	for _, dep := range peerDeps {
+		deps[dep.Name] = dep
+	}
+	for _, dep := range pkgDeps {
+		deps[dep.Name] = dep
+	}
+	return
+}
+
+func resovleDependencies(deps map[string]string, peer bool) ([]Dependency, error) {
+	rdeps := make([]Dependency, 0, len(deps))
+	for name, version := range deps {
+		dep := Dependency{
+			Name:    name,
+			Version: version,
+			Peer:    peer,
+		}
 		pkg, err := npm.ResolveDependencyVersion(version)
 		if err != nil {
-			return err
-		}
-		dep := Dependency{
-			Specifier: specifier,
-			Name:      specifier,
-			Version:   version,
-			Peer:      peer,
+			return nil, err
 		}
 		if pkg.Name != "" {
 			dep.Name = pkg.Name
@@ -181,7 +238,7 @@ func walkDependencies(deps map[string]string, peer bool, callback func(dep Depen
 			dep.Name = "@" + strings.Replace(dep.Name[5:], "__", "/", 1)
 			dep.Jsr = true
 		}
-		callback(dep)
+		rdeps = append(rdeps, dep)
 	}
-	return nil
+	return rdeps, nil
 }
