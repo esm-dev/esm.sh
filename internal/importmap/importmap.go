@@ -19,16 +19,17 @@ import (
 )
 
 type Config struct {
-	Cdn string `json:"cdn,omitempty"`
+	Cdn    string `json:"cdn"`
+	Target string `json:"target"`
 }
 
 type ImportMap struct {
-	Src       string                       `json:"$src,omitempty"`
-	Config    Config                       `json:"config,omitempty"`
-	Imports   map[string]string            `json:"imports,omitempty"`
-	Scopes    map[string]map[string]string `json:"scopes,omitempty"`
-	Routes    map[string]string            `json:"routes,omitempty"`
-	Integrity map[string]string            `json:"integrity,omitempty"`
+	Src       string                       `json:"$src"`
+	Imports   map[string]string            `json:"imports"`
+	Scopes    map[string]map[string]string `json:"scopes"`
+	Routes    map[string]string            `json:"routes"`
+	Integrity map[string]string            `json:"integrity"`
+	Config    Config                       `json:"config"`
 	baseUrl   *url.URL                     // cached base URL
 }
 
@@ -216,7 +217,13 @@ func (im *ImportMap) addPackage(pkg PackageInfo, indirect bool, targetImportsMap
 		}
 	}
 
-	target := "es2022" // todo: get target from CLI options
+	var target string
+	switch v := im.Config.Target; v {
+	case "es2015", "es2016", "es2017", "es2018", "es2019", "es2020", "es2021", "es2022", "es2023", "es2024", "esnext":
+		target = v
+	default:
+		target = "es2022"
+	}
 
 	baseUrl := cdnOrigin + "/" + pkg.String()
 	if strings.HasSuffix(pkg.Name, "@") {
