@@ -34,7 +34,6 @@ const htmlTemplate = `<!DOCTYPE html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Hello, world!</title>
   <script type="importmap">
 %s
   </script>
@@ -91,7 +90,7 @@ func updateImportMap(packages []string) (err error) {
 				tagName, _ := tokenizer.TagName()
 				if string(tagName) == "head" && !updated {
 					buf.WriteString("  <script type=\"importmap\">\n")
-					importMap := importmap.ImportMap{}
+					var importMap importmap.ImportMap
 					if !importMap.AddPackages(packages) {
 						return
 					}
@@ -116,7 +115,7 @@ func updateImportMap(packages []string) (err error) {
 					}
 					if typeAttr != "importmap" && !updated {
 						buf.WriteString("<script type=\"importmap\">\n")
-						importMap := importmap.ImportMap{}
+						var importMap importmap.ImportMap
 						if !importMap.AddPackages(packages) {
 							return
 						}
@@ -162,7 +161,7 @@ func updateImportMap(packages []string) (err error) {
 		}
 		err = os.WriteFile(indexHtml, buf.Bytes(), fi.Mode())
 	} else {
-		importMap := importmap.ImportMap{}
+		var importMap importmap.ImportMap
 		if !importMap.AddPackages(packages) {
 			return
 		}
