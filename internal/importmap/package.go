@@ -161,7 +161,7 @@ func resolveDependency(cdnOrigin string, dep Dependency) (pkgInfo PackageInfo, e
 	return fetchPackageInfo(cdnOrigin, regPrefix, dep.Name, dep.Version)
 }
 
-func getPackageInfoFromUrl(urlRaw string) (pkgInfo PackageInfo, err error) {
+func GetPackageInfoFromUrl(urlRaw string) (pkgInfo PackageInfo, err error) {
 	u, err := url.Parse(urlRaw)
 	if err != nil {
 		err = fmt.Errorf("invalid url: %s", urlRaw)

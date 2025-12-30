@@ -10,9 +10,15 @@ func TestAddPackages(t *testing.T) {
 	// 1. add packages
 	{
 		im := ImportMap{}
-		updated := im.AddPackages([]string{"react@19", "react-dom@19"})
-		if !updated {
-			t.Fatalf("Expected updated to be true, got false")
+		addedPackages, warnings, errors := im.AddPackages([]string{"react@19", "react-dom@19"})
+		if len(errors) > 0 {
+			t.Fatalf("Expected no errors, got %d", len(errors))
+		}
+		if len(warnings) > 0 {
+			t.Fatalf("Expected no warnings, got %d", len(warnings))
+		}
+		if len(addedPackages) != 2 {
+			t.Fatalf("Expected 2 added packages, got %d", len(addedPackages))
 		}
 		if len(im.Imports) != 4 {
 			t.Fatalf("Expected 4 imports, got %d", len(im.Imports))
@@ -37,9 +43,15 @@ func TestAddPackages(t *testing.T) {
 	// 2. add peer dependencies to `imports`
 	{
 		im := ImportMap{}
-		updated := im.AddPackages([]string{"react-dom@19"})
-		if !updated {
-			t.Fatalf("Expected updated to be true, got false")
+		addedPackages, warnings, errors := im.AddPackages([]string{"react-dom@19"})
+		if len(errors) > 0 {
+			t.Fatalf("Expected no errors, got %d", len(errors))
+		}
+		if len(warnings) > 0 {
+			t.Fatalf("Expected no warnings, got %d", len(warnings))
+		}
+		if len(addedPackages) != 1 {
+			t.Fatalf("Expected 1 added package, got %d", len(addedPackages))
 		}
 		if len(im.Imports) != 4 {
 			t.Fatalf("Expected 4 imports, got %d", len(im.Imports))
@@ -64,9 +76,15 @@ func TestAddPackages(t *testing.T) {
 	// 3. resolve dependencies without conflicts
 	{
 		im := ImportMap{}
-		updated := im.AddPackages([]string{"loose-envify@1.1.0"})
-		if !updated {
-			t.Fatalf("Expected updated to be true, got false")
+		addedPackages, warnings, errors := im.AddPackages([]string{"loose-envify@1.1.0"})
+		if len(errors) > 0 {
+			t.Fatalf("Expected no errors, got %d", len(errors))
+		}
+		if len(warnings) > 0 {
+			t.Fatalf("Expected no warnings, got %d", len(warnings))
+		}
+		if len(addedPackages) != 1 {
+			t.Fatalf("Expected 1 added package, got %d", len(addedPackages))
 		}
 		if len(im.Imports) != 2 {
 			t.Fatalf("Expected 2 imports, got %d", len(im.Imports))
@@ -91,9 +109,15 @@ func TestAddPackages(t *testing.T) {
 			t.Fatalf("Expected [js-tokens js-tokens/], got %v", keys)
 		}
 
-		updated = im.AddPackages([]string{"react@18"})
-		if !updated {
-			t.Fatalf("Expected updated to be true, got false")
+		addedPackages, warnings, errors = im.AddPackages([]string{"react@18"})
+		if len(errors) > 0 {
+			t.Fatalf("Expected no errors, got %d", len(errors))
+		}
+		if len(warnings) > 0 {
+			t.Fatalf("Expected no warnings, got %d", len(warnings))
+		}
+		if len(addedPackages) != 1 {
+			t.Fatalf("Expected 1 added package, got %d", len(addedPackages))
 		}
 		if len(im.Imports) != 4 {
 			t.Fatalf("Expected 4 imports, got %d", len(im.Imports))
@@ -121,9 +145,15 @@ func TestAddPackages(t *testing.T) {
 	// 4. resolve dependencies with conflicts
 	{
 		im := ImportMap{}
-		updated := im.AddPackages([]string{"loose-envify@1.0.0"})
-		if !updated {
-			t.Fatalf("Expected updated to be true, got false")
+		addedPackages, warnings, errors := im.AddPackages([]string{"loose-envify@1.0.0"})
+		if len(errors) > 0 {
+			t.Fatalf("Expected no errors, got %d", len(errors))
+		}
+		if len(warnings) > 0 {
+			t.Fatalf("Expected no warnings, got %d", len(warnings))
+		}
+		if len(addedPackages) != 1 {
+			t.Fatalf("Expected 1 added package, got %d", len(addedPackages))
 		}
 		if len(im.Imports) != 2 {
 			t.Fatalf("Expected 2 imports, got %d", len(im.Imports))
@@ -148,9 +178,15 @@ func TestAddPackages(t *testing.T) {
 			t.Fatalf("Expected [js-tokens js-tokens/], got %v", keys)
 		}
 
-		updated = im.AddPackages([]string{"react@18"})
-		if !updated {
-			t.Fatalf("Expected updated to be true, got false")
+		addedPackages, warnings, errors = im.AddPackages([]string{"react@18"})
+		if len(errors) > 0 {
+			t.Fatalf("Expected no errors, got %d", len(errors))
+		}
+		if len(warnings) > 0 {
+			t.Fatalf("Expected no warnings, got %d", len(warnings))
+		}
+		if len(addedPackages) != 1 {
+			t.Fatalf("Expected 1 added package, got %d", len(addedPackages))
 		}
 		if len(im.Imports) != 4 {
 			t.Fatalf("Expected 4 imports, got %d", len(im.Imports))
@@ -201,14 +237,22 @@ func TestAddPackages(t *testing.T) {
 	{
 		im := ImportMap{
 			Config: Config{
-				Cdn:       "https://next.esm.sh",
-				Target:    "esnext",
-				Integrity: true,
+				CDN:    "https://next.esm.sh",
+				Target: "esnext",
+				SRI: SRIConfig{
+					Algorithm: "sha512",
+				},
 			},
 		}
-		updated := im.AddPackages([]string{"react@19"})
-		if !updated {
-			t.Fatalf("Expected updated to be true, got false")
+		addedPackages, warnings, errors := im.AddPackages([]string{"react@19"})
+		if len(errors) > 0 {
+			t.Fatalf("Expected no errors, got %d", len(errors))
+		}
+		if len(warnings) > 0 {
+			t.Fatalf("Expected no warnings, got %d", len(warnings))
+		}
+		if len(addedPackages) != 1 {
+			t.Fatalf("Expected 1 added package, got %d", len(addedPackages))
 		}
 		if len(im.Imports) != 2 {
 			t.Fatalf("Expected 2 imports, got %d", len(im.Imports))

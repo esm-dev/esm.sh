@@ -5,20 +5,20 @@ import (
 	"os"
 )
 
-const helpMessage = "\033[30mesm.sh - A no-build tool for modern web development.\033[0m" + `
+const helpMessage = "\033[30mesm.sh - A nobuild tool for modern web development.\033[0m" + `
 
 Usage: esm.sh [command] [options]
 
 Commands:
-  add [...packages]    Add specified packages to the "importmap" script in index.html
-  tidy                    Clean up and optimize the "importmap" script in index.html
-  init                    Initialize a new web application
-  serve                   Serve the web application in production mode
-  dev                     Serve the web application in development mode with live reload
+  add [...packages]     Add specified packages to the "importmap" in index.html
+  tidy                  Clean up and optimize the "importmap" in index.html
+  init                  Initialize a new nobuild web app
+  serve                 Serve the web app in "production" mode
+  dev                   Serve the web app in "development" mode with live reload
 
 Options:
-  --version, -v           Show the version of esm.sh CLI
-  --help, -h              Display this help message
+  --version, -v         Show the version of esm.sh CLI
+  --help, -h            Display this help message
 `
 
 func Run() {

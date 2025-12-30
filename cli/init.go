@@ -26,9 +26,9 @@ Arguments:
 
 Options:
   --framework        JavaScript framework, Available options: Vanilla, React, Preact, Vue, Svelte
-  --css-framework    CSS framework, Available options: Vanilla, UnoCSS
+  --css-framework    CSS framework, Available options: Vanilla, Tailwind, UnoCSS
   --typescript       Use TypeScript, default is false
-  --help             Show help message
+  --help, -h         Show help message
 `
 
 var frameworks = []string{
@@ -41,6 +41,7 @@ var frameworks = []string{
 
 var cssFrameworks = []string{
 	"Vanilla",
+	"Tailwind",
 	"UnoCSS",
 }
 
@@ -53,7 +54,7 @@ func Init() {
 	projectName, _ := parseCommandFlag(2)
 	raw := &termRaw{}
 
-	if *help {
+	if *help || strings.Contains(os.Args[1], "-h") {
 		fmt.Print(initHelpMessage)
 		return
 	}
@@ -88,8 +89,11 @@ func Init() {
 	}
 
 	dir := "demo/" + strings.ToLower(*framework)
-	if *cssFramework == "UnoCSS" {
+	switch *cssFramework {
+	case "UnoCSS":
 		dir = "demo/with-unocss/" + strings.ToLower(*framework)
+	case "Tailwind":
+		dir = "demo/with-tailwind/" + strings.ToLower(*framework)
 	}
 	err = walkEmbedFS(&efs, dir, func(filename string) error {
 		savePath := projectName + strings.TrimPrefix(filename, dir)

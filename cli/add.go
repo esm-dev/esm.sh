@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/esm-dev/esm.sh/internal/importmap"
 	"github.com/ije/gox/term"
@@ -26,7 +27,7 @@ Arguments:
   [...packages]  Packages to add
 
 Options:
-  --help         Show help message
+  --help, -h     Show help message
 `
 
 const htmlTemplate = `<!DOCTYPE html>
@@ -49,7 +50,7 @@ func Add() {
 	help := flag.Bool("help", false, "Show help message")
 	arg0, argMore := parseCommandFlag(2)
 
-	if *help {
+	if *help || strings.Contains(os.Args[1], "-h") {
 		fmt.Print(addHelpMessage)
 		return
 	}
@@ -60,9 +61,11 @@ func Add() {
 		packages = append(packages, argMore...)
 	}
 
-	err := updateImportMap(packages)
-	if err != nil {
-		fmt.Println(term.Red("✖︎"), "Failed to add packages: "+err.Error())
+	if len(packages) > 0 {
+		err := updateImportMap(packages)
+		if err != nil {
+			fmt.Println(term.Red("✖︎"), "Failed to add packages: "+err.Error())
+		}
 	}
 }
 
@@ -91,9 +94,7 @@ func updateImportMap(packages []string) (err error) {
 				if string(tagName) == "head" && !updated {
 					buf.WriteString("  <script type=\"importmap\">\n")
 					var importMap importmap.ImportMap
-					if !importMap.AddPackages(packages) {
-						return
-					}
+					addPackages(&importMap, packages)
 					buf.WriteString(importMap.FormatJSON(2))
 					buf.WriteString("\n  </script>\n")
 					buf.Write(tokenizer.Raw())
@@ -116,9 +117,7 @@ func updateImportMap(packages []string) (err error) {
 					if typeAttr != "importmap" && !updated {
 						buf.WriteString("<script type=\"importmap\">\n")
 						var importMap importmap.ImportMap
-						if !importMap.AddPackages(packages) {
-							return
-						}
+						addPackages(&importMap, packages)
 						buf.WriteString(importMap.FormatJSON(2))
 						buf.WriteString("\n  </script>\n  ")
 						buf.Write(tokenizer.Raw())
@@ -139,9 +138,7 @@ func updateImportMap(packages []string) (err error) {
 							}
 						}
 						buf.WriteString("\n")
-						if !importMap.AddPackages(packages) {
-							return
-						}
+						addPackages(&importMap, packages)
 						buf.WriteString(importMap.FormatJSON(2))
 						buf.WriteString("\n  ")
 						if token == html.EndTagToken {
@@ -162,13 +159,28 @@ func updateImportMap(packages []string) (err error) {
 		err = os.WriteFile(indexHtml, buf.Bytes(), fi.Mode())
 	} else {
 		var importMap importmap.ImportMap
-		if !importMap.AddPackages(packages) {
-			return
-		}
+		addPackages(&importMap, packages)
 		err = os.WriteFile(indexHtml, fmt.Appendf(nil, htmlTemplate, importMap.FormatJSON(2)), 0644)
 		if err == nil {
 			fmt.Println(term.Dim("Created index.html with importmap script."))
 		}
 	}
 	return
+}
+
+func addPackages(importMap *importmap.ImportMap, packages []string) {
+	addedPackages, warnings, errors := importMap.AddPackages(packages)
+	if len(errors) > 0 {
+		for _, err := range errors {
+			fmt.Println(term.Red("[error]"), err.Error())
+		}
+	}
+	if len(warnings) > 0 {
+		for _, warning := range warnings {
+			fmt.Println(term.Yellow("[warn]"), warning)
+		}
+	}
+	for _, pkg := range addedPackages {
+		fmt.Println(term.Green("✔"), pkg.Name+"@"+term.Dim(pkg.Version))
+	}
 }

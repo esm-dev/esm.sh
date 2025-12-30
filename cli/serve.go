@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/esm-dev/esm.sh/web"
 	"github.com/ije/gox/term"
@@ -21,16 +22,16 @@ Arguments:
 
 Options:
   --port       Port to serve on, default is 3000
-  --help       Show help message
+  --help, -h   Show help message
 `
 
 // Serve a web app in development mode.
 func Serve(dev bool) {
 	port := flag.Int("port", 3000, "port to serve on")
-	help := flag.Bool("help", false, "port to serve on")
+	help := flag.Bool("help", false, "Show help message")
 	appDir, _ := parseCommandFlag(2)
 
-	if *help {
+	if *help || strings.HasPrefix(os.Args[1], "-h") {
 		fmt.Print(serveHelpMessage)
 		return
 	}
