@@ -2,11 +2,8 @@ package importmap
 
 import (
 	"bytes"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"net/url"
-	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -15,13 +12,12 @@ import (
 	"github.com/esm-dev/esm.sh/internal/npm"
 	"github.com/ije/gox/term"
 	"github.com/ije/gox/utils"
-	"golang.org/x/net/html"
 )
 
 type Config struct {
-	Cdn               string `json:"cdn"`
-	Target            string `json:"target"`
-	GenerateIntegrity bool   `json:"generateIntegrity"`
+	Cdn       string `json:"cdn"`
+	Target    string `json:"target"`
+	Integrity bool   `json:"integrity"`
 }
 
 type ImportMap struct {
@@ -31,59 +27,6 @@ type ImportMap struct {
 	Routes    map[string]string            `json:"routes"`
 	Integrity map[string]string            `json:"integrity"`
 	Config    Config                       `json:"config"`
-}
-
-// ParseFromHtmlFile parses an import map from an HTML file.
-func ParseFromHtmlFile(filename string) (importMap ImportMap, err error) {
-	file, err := os.Open(filename)
-	if err != nil {
-		return
-	}
-	defer file.Close()
-
-	tokenizer := html.NewTokenizer(file)
-	for {
-		tt := tokenizer.Next()
-		if tt == html.ErrorToken {
-			break
-		}
-		if tt == html.StartTagToken {
-			tagName, moreAttr := tokenizer.TagName()
-			if string(tagName) == "script" {
-				var typeAttr string
-				for moreAttr {
-					var key, val []byte
-					key, val, moreAttr = tokenizer.TagAttr()
-					if string(key) == "type" {
-						typeAttr = string(val)
-						break
-					}
-				}
-				if typeAttr == "importmap" {
-					if tokenizer.Next() != html.TextToken {
-						err = errors.New("invalid import map")
-						return
-					}
-					if json.Unmarshal(tokenizer.Raw(), &importMap) != nil {
-						err = errors.New("invalid import map")
-						return
-					}
-					importMap.Src = "file://" + string(filename)
-					break
-				}
-			} else if string(tagName) == "body" {
-				// stop parsing when we reach the body tag
-				break
-			}
-		} else if tt == html.EndTagToken {
-			tagName, _ := tokenizer.TagName()
-			if bytes.Equal(tagName, []byte("head")) {
-				// stop parsing when we reach the head end tag
-				break
-			}
-		}
-	}
-	return
 }
 
 func (im *ImportMap) Resolve(specifier string, referrer *url.URL) (string, bool) {

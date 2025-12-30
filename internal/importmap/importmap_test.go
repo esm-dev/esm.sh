@@ -2,68 +2,9 @@ package importmap
 
 import (
 	"net/url"
-	"os"
-	"path/filepath"
 	"sort"
 	"testing"
 )
-
-const indexHtml = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Hello, world!</title>
-  <script type="importmap">
-    {
-	    "config": {
-		    "cdn": "https://esm.sh"
-	    },
-      "imports": {
-        "react": "https://esm.sh/react@19.1.0",
-        "react/": "https://esm.sh/react@19.1.0/",
-        "react-dom": "https://esm.sh/*react-dom@19.1.0",
-        "react-dom/": "https://esm.sh/*react-dom@19.1.0/"
-      },
-      "scopes": {
-        "https://esm.sh/": {
-          "scheduler": "https://esm.sh/scheduler@0.26.0",
-          "scheduler/": "https://esm.sh/scheduler@0.26.0/"
-        }
-      }
-    }
-  </script>
-</head>
-<body>
-  <h1>Hello, world!</h1>
-</body>
-</html>
-`
-
-func TestParseFromHtmlFile(t *testing.T) {
-	tmpDir := t.TempDir()
-	htmlFile := filepath.Join(tmpDir, "index.html")
-	err := os.WriteFile(htmlFile, []byte(indexHtml), 0644)
-	if err != nil {
-		t.Fatalf("Failed to write HTML file: %v", err)
-	}
-	importMap, err := ParseFromHtmlFile(htmlFile)
-	if err != nil {
-		t.Fatalf("Failed to parse import map: %v", err)
-	}
-	if importMap.Config.Cdn != "https://esm.sh" {
-		t.Fatalf("Expected CDN 'https://esm.sh', got '%s'", importMap.Config.Cdn)
-	}
-	if len(importMap.Imports) != 4 {
-		t.Fatalf("Expected 4 imports, got %d", len(importMap.Imports))
-	}
-	if len(importMap.Scopes) != 1 {
-		t.Fatalf("Expected 1 scope, got %d", len(importMap.Scopes))
-	}
-	if len(importMap.Scopes["https://esm.sh/"]) != 2 {
-		t.Fatalf("Expected 2 imports in scope, got %d", len(importMap.Scopes["https://esm.sh/"]))
-	}
-}
 
 func TestAddPackages(t *testing.T) {
 	// 1. add packages
@@ -253,6 +194,31 @@ func TestAddPackages(t *testing.T) {
 		}
 		if scope["js-tokens"] != "https://esm.sh/js-tokens@4.0.0/es2022/js-tokens.mjs" {
 			t.Fatalf("Expected js-tokens to be resolved to js-tokens@4.0.0, got %s", scope["js-tokens"])
+		}
+	}
+
+	// 4. with config
+	{
+		im := ImportMap{
+			Config: Config{
+				Cdn:       "https://next.esm.sh",
+				Target:    "esnext",
+				Integrity: true,
+			},
+		}
+		updated := im.AddPackages([]string{"react@19"})
+		if !updated {
+			t.Fatalf("Expected updated to be true, got false")
+		}
+		if len(im.Imports) != 2 {
+			t.Fatalf("Expected 2 imports, got %d", len(im.Imports))
+		}
+		keys := getKeys(im.Imports)
+		if keys[0] != "react" || keys[1] != "react/" {
+			t.Fatalf("Expected [react react/], got %v", keys)
+		}
+		if im.Imports["react"] != "https://next.esm.sh/react@19.2.3/esnext/react.mjs" {
+			t.Fatalf("Expected react to be resolved to https://next.esm.sh/react@19.2.3/esnext/react.mjs, got %s", im.Imports["react"])
 		}
 	}
 }
