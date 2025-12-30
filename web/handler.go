@@ -961,7 +961,8 @@ func (s *Handler) analyzeDependencyTree(entry string, importMap importmap.Import
 				Name: "loader",
 				Setup: func(build esbuild.PluginBuild) {
 					build.OnResolve(esbuild.OnResolveOptions{Filter: ".*"}, func(args esbuild.OnResolveArgs) (esbuild.OnResolveResult, error) {
-						path, _ := importMap.Resolve(args.Path)
+						url, _ := url.Parse(args.Importer)
+						path, _ := importMap.Resolve(args.Path, url)
 						if isHttpSepcifier(path) || (!isRelPathSpecifier(path) && !isAbsPathSpecifier(path)) {
 							return esbuild.OnResolveResult{Path: path, External: true}, nil
 						}

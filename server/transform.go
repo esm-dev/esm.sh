@@ -78,7 +78,7 @@ func transform(options *ResolvedTransformOptions) (out *TransformOutput, err err
 	if jsxImportSource == "" && (loader == esbuild.LoaderJSX || loader == esbuild.LoaderTSX) {
 		var ok bool
 		for _, key := range []string{"@jsxRuntime", "@jsxImportSource", "preact", "react"} {
-			jsxImportSource, ok = options.importMap.Resolve(key)
+			jsxImportSource, ok = options.importMap.Resolve(key, nil)
 			if ok {
 				break
 			}
@@ -124,7 +124,8 @@ func transform(options *ResolvedTransformOptions) (out *TransformOutput, err err
 				Name: "resolver",
 				Setup: func(build esbuild.PluginBuild) {
 					build.OnResolve(esbuild.OnResolveOptions{Filter: ".*"}, func(args esbuild.OnResolveArgs) (esbuild.OnResolveResult, error) {
-						path, _ := options.importMap.Resolve(args.Path)
+						importerUrl, _ := url.Parse(args.Importer)
+						path, _ := options.importMap.Resolve(args.Path, importerUrl)
 						return esbuild.OnResolveResult{Path: path, External: true}, nil
 					})
 				},
@@ -177,7 +178,8 @@ func bundleHttpModule(npmrc *NpmRC, entry string, importMap importmap.ImportMap,
 				Name: "http-loader",
 				Setup: func(build esbuild.PluginBuild) {
 					build.OnResolve(esbuild.OnResolveOptions{Filter: ".*"}, func(args esbuild.OnResolveArgs) (esbuild.OnResolveResult, error) {
-						path, _ := importMap.Resolve(args.Path)
+						importerUrl, _ := url.Parse(args.Importer)
+						path, _ := importMap.Resolve(args.Path, importerUrl)
 						if isHttpSepcifier(args.Importer) && (isRelPathSpecifier(path) || isAbsPathSpecifier(path)) {
 							u, e := url.Parse(args.Importer)
 							if e == nil {

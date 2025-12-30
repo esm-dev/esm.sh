@@ -19,8 +19,9 @@ import (
 )
 
 type Config struct {
-	Cdn    string `json:"cdn"`
-	Target string `json:"target"`
+	Cdn               string `json:"cdn"`
+	Target            string `json:"target"`
+	GenerateIntegrity bool   `json:"generateIntegrity"`
 }
 
 type ImportMap struct {
@@ -30,7 +31,6 @@ type ImportMap struct {
 	Routes    map[string]string            `json:"routes"`
 	Integrity map[string]string            `json:"integrity"`
 	Config    Config                       `json:"config"`
-	baseUrl   *url.URL                     // cached base URL
 }
 
 // ParseFromHtmlFile parses an import map from an HTML file.
@@ -86,27 +86,44 @@ func ParseFromHtmlFile(filename string) (importMap ImportMap, err error) {
 	return
 }
 
-func (im *ImportMap) Resolve(path string) (string, bool) {
+func (im *ImportMap) Resolve(specifier string, referrer *url.URL) (string, bool) {
+	imports := im.Imports
+	baseUrl, err := url.Parse(im.Src)
+	if err != nil {
+		return "", false
+	}
+
+	specifier, _ = utils.SplitByFirstByte(specifier, '#')
 	var query string
-	path, query = utils.SplitByFirstByte(path, '?')
+	specifier, query = utils.SplitByFirstByte(specifier, '?')
 	if query != "" {
 		query = "?" + query
 	}
-	imports := im.Imports
-	if im.baseUrl == nil && im.Src != "" {
-		im.baseUrl, _ = url.Parse(im.Src)
-	}
-	// todo: check `scopes`
-	if len(imports) > 0 {
-		if v, ok := imports[path]; ok {
-			return normalizeUrl(im.baseUrl, v) + query, true
+
+	if referrer != nil {
+		scopeKeys := make(ScopeKeys, 0, len(im.Scopes))
+		for prefix := range im.Scopes {
+			scopeKeys = append(scopeKeys, prefix)
 		}
-		if strings.ContainsRune(path, '/') {
+		sort.Sort(scopeKeys)
+		for _, scopeKey := range scopeKeys {
+			if strings.HasPrefix(referrer.String(), scopeKey) {
+				imports = im.Scopes[scopeKey]
+				break
+			}
+		}
+	}
+
+	if len(imports) > 0 {
+		if v, ok := imports[specifier]; ok {
+			return normalizeUrl(baseUrl, v) + query, true
+		}
+		if strings.ContainsRune(specifier, '/') {
 			nonTrailingSlashImports := make([][2]string, 0, len(imports))
 			for k, v := range imports {
 				if strings.HasSuffix(k, "/") {
-					if strings.HasPrefix(path, k) {
-						return normalizeUrl(im.baseUrl, v+path[len(k):]) + query, true
+					if strings.HasPrefix(specifier, k) {
+						return normalizeUrl(baseUrl, v+specifier[len(k):]) + query, true
 					}
 				} else {
 					nonTrailingSlashImports = append(nonTrailingSlashImports, [2]string{k, v})
@@ -125,13 +142,13 @@ func (im *ImportMap) Resolve(path string) (string, bool) {
 				} else if query != "" {
 					q = query
 				}
-				if strings.HasPrefix(path, k+"/") {
-					return normalizeUrl(im.baseUrl, p+path[len(k):]) + q, true
+				if strings.HasPrefix(specifier, k+"/") {
+					return normalizeUrl(baseUrl, p+specifier[len(k):]) + q, true
 				}
 			}
 		}
 	}
-	return path + query, false
+	return specifier + query, false
 }
 
 func (im *ImportMap) AddPackages(packages []string) (updated bool) {
@@ -461,4 +478,26 @@ func formatMap(buf *strings.Builder, m map[string]string, indent int) {
 		}
 		buf.WriteByte('\n')
 	}
+}
+
+type ScopeKeys []string
+
+func (s ScopeKeys) Len() int {
+	return len(s)
+}
+
+// sort by the number of slashes in the key
+func (s ScopeKeys) Less(i, j int) bool {
+	iStr := s[i]
+	jStr := s[j]
+	iLen := strings.Count(iStr, "/")
+	jLen := strings.Count(jStr, "/")
+	if iLen == jLen {
+		return iStr > jStr
+	}
+	return iLen > jLen
+}
+
+func (s ScopeKeys) Swap(i, j int) {
+	s[i], s[j] = s[j], s[i]
 }
