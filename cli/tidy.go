@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/esm-dev/esm.sh/internal/importmap"
@@ -121,6 +122,7 @@ func tidy() (err error) {
 					for _, pkg := range packages {
 						packageNames = append(packageNames, pkg.Name+"@"+pkg.Version)
 					}
+					sort.Strings(packageNames)
 					addPackages(&importMap, packageNames)
 					buf.WriteString(importMap.FormatJSON(2))
 					buf.WriteString("\n  ")
