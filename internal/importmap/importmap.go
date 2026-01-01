@@ -414,25 +414,3 @@ func formatMap(buf *strings.Builder, m map[string]string, indent int) {
 		buf.WriteByte('\n')
 	}
 }
-
-type ScopeKeys []string
-
-func (s ScopeKeys) Len() int {
-	return len(s)
-}
-
-// sort by the number of slashes in the key
-func (s ScopeKeys) Less(i, j int) bool {
-	iStr := s[i]
-	jStr := s[j]
-	iLen := strings.Count(iStr, "/")
-	jLen := strings.Count(jStr, "/")
-	if iLen == jLen {
-		return iStr > jStr
-	}
-	return iLen > jLen
-}
-
-func (s ScopeKeys) Swap(i, j int) {
-	s[i], s[j] = s[j], s[i]
-}

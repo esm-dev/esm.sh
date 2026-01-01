@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strings"
+	"time"
 
 	"github.com/esm-dev/esm.sh/internal/importmap"
 	"github.com/ije/gox/term"
@@ -19,9 +21,9 @@ const addHelpMessage = "\033[30mesm.sh - A nobuild tool for modern web developme
 Usage: esm.sh add [...packages] [options]
 
 Examples:
-  esm.sh add react react-dom
-  esm.sh add react@19 react-dom@19
-  esm.sh add react@19.0.0 react-dom@19.0.0
+  esm.sh add react             ` + "\033[30m # latest \033[0m" + `
+  esm.sh add react@19          ` + "\033[30m # semver range \033[0m" + `
+  esm.sh add react@19.0.0      ` + "\033[30m # exact version \033[0m" + `
 
 Arguments:
   [...packages]  Packages to add
@@ -169,18 +171,38 @@ func updateImportMap(packages []string) (err error) {
 }
 
 func addPackages(importMap *importmap.ImportMap, packages []string) {
+	startTime := time.Now()
+	spinner := term.NewSpinner("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏", 5)
+	spinner.Start()
 	addedPackages, warnings, errors := importMap.AddPackages(packages)
+	spinner.Stop()
+
 	if len(errors) > 0 {
 		for _, err := range errors {
 			fmt.Println(term.Red("[error]"), err.Error())
 		}
+		return
 	}
+
+	record := make(map[string]string)
+	for _, pkg := range addedPackages {
+		record[pkg.Name] = importMap.Imports[pkg.Name]
+		record[pkg.Name+term.Dim("/*")] = importMap.Imports[pkg.Name+"/"]
+	}
+	keys := make([]string, 0, len(record))
+	for key := range record {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		fmt.Println(term.Green("✔"), key, term.Dim("→"), term.Dim(record[key]))
+	}
+
 	if len(warnings) > 0 {
 		for _, warning := range warnings {
 			fmt.Println(term.Yellow("[warn]"), warning)
 		}
 	}
-	for _, pkg := range addedPackages {
-		fmt.Println(term.Green("✔"), pkg.Name+"@"+term.Dim(pkg.Version))
-	}
+
+	fmt.Println(term.Green("✦"), "Done in", term.Dim(time.Since(startTime).String()))
 }

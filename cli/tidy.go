@@ -33,14 +33,10 @@ func Tidy() {
 		return
 	}
 
-	fmt.Println(term.Dim("✦"), term.Dim("Tidying up..."))
-
 	err := tidy()
 	if err != nil {
 		fmt.Println(term.Red("[error]"), "Failed to tidy up: "+err.Error())
 	}
-
-	fmt.Println(term.Green("✦"), "Tidied up successfully")
 }
 
 func tidy() (err error) {
