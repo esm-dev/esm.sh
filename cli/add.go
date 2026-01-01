@@ -171,8 +171,11 @@ func updateImportMap(packages []string) (err error) {
 }
 
 func addPackages(importMap *importmap.ImportMap, packages []string) {
+	term.HideCursor()
+	defer term.ShowCursor()
+
 	startTime := time.Now()
-	spinner := term.NewSpinner("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏", 5)
+	spinner := term.NewSpinner(term.SpinnerConfig{})
 	spinner.Start()
 	addedPackages, warnings, errors := importMap.AddPackages(packages)
 	spinner.Stop()

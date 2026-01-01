@@ -7,8 +7,8 @@ require (
 	github.com/gorilla/websocket v1.5.3
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/ije/esbuild-internal v0.27.2
-	github.com/ije/gox v0.10.2
-	github.com/ije/rex v1.15.3
+	github.com/ije/gox v0.10.3
+	github.com/ije/rex v1.15.4
 	github.com/mssola/useragent v1.0.0
 	github.com/yuin/goldmark v1.7.13
 	github.com/yuin/goldmark-meta v1.1.0
