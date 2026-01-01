@@ -3,7 +3,6 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -16,7 +15,7 @@ import (
 	"golang.org/x/net/html"
 )
 
-const tidyHelpMessage = "\033[30mesm.sh - A nobuild tool for modern web development.\033[0m" + `
+const tidyHelpMessage = `Clean up and optimize the "importmap" in index.html
 
 Usage: esm.sh tidy [options]
 
@@ -26,10 +25,8 @@ Options:
 
 // Tidy tidies up "importmap" script
 func Tidy() {
-	help := flag.Bool("help", false, "Show help message")
-	flag.Parse()
-
-	if *help || strings.Contains(os.Args[1], "-h") {
+	_, help := parseCommandFlags()
+	if help {
 		fmt.Print(tidyHelpMessage)
 		return
 	}

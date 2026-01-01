@@ -3,7 +3,6 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -16,7 +15,7 @@ import (
 	"golang.org/x/net/html"
 )
 
-const addHelpMessage = "\033[30mesm.sh - A nobuild tool for modern web development.\033[0m" + `
+const addHelpMessage = `Add packages to the "importmap" in index.html
 
 Usage: esm.sh add [...packages] [options]
 
@@ -26,7 +25,7 @@ Examples:
   esm.sh add react@19.0.0      ` + "\033[30m # exact version \033[0m" + `
 
 Arguments:
-  [...packages]  Packages to add
+  ...packages    Packages to add
 
 Options:
   --help, -h     Show help message
@@ -49,18 +48,11 @@ const htmlTemplate = `<!DOCTYPE html>
 
 // Add adds packages to "importmap" script
 func Add() {
-	help := flag.Bool("help", false, "Show help message")
-	arg0, argMore := parseCommandFlag(2)
+	packages, help := parseCommandFlags()
 
-	if *help || strings.Contains(os.Args[1], "-h") {
+	if help {
 		fmt.Print(addHelpMessage)
 		return
-	}
-
-	var packages []string
-	if arg0 != "" {
-		packages = append(packages, arg0)
-		packages = append(packages, argMore...)
 	}
 
 	if len(packages) > 0 {
@@ -190,7 +182,7 @@ func addPackages(importMap *importmap.ImportMap, packages []string) {
 	record := make(map[string]string)
 	for _, pkg := range addedPackages {
 		record[pkg.Name] = importMap.Imports[pkg.Name]
-		record[pkg.Name+term.Dim("/*")] = importMap.Imports[pkg.Name+"/"]
+		record[pkg.Name+"/"] = importMap.Imports[pkg.Name+"/"]
 	}
 	keys := make([]string, 0, len(record))
 	for key := range record {
@@ -198,7 +190,11 @@ func addPackages(importMap *importmap.ImportMap, packages []string) {
 	}
 	sort.Strings(keys)
 	for _, key := range keys {
-		fmt.Println(term.Green("✔"), key, term.Dim("→"), term.Dim(record[key]))
+		k := key
+		if !strings.HasSuffix(k, "/") {
+			k += " " // align with the next line
+		}
+		fmt.Println(term.Green("✔"), k, term.Dim("→"), term.Dim(record[key]))
 	}
 
 	if len(warnings) > 0 {

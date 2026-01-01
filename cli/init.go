@@ -17,12 +17,12 @@ import (
 //go:embed demo
 var efs embed.FS
 
-const initHelpMessage = "\033[30mesm.sh - A nobuild tool for modern web development.\033[0m" + `
+const initHelpMessage = `Initialize a new nobuild web app with esm.sh CDN.
 
 Usage: esm.sh init [project-name] [options]
 
 Arguments:
-  [project-name]     Name of the project, default is "esm-app"
+  project-name       Name of the project, default is "esm-app"
 
 Options:
   --framework        JavaScript framework, Available options: Vanilla, React, Preact, Vue, Svelte
@@ -50,15 +50,18 @@ func Init() {
 	framework := flag.String("framework", "", "JavaScript framework")
 	cssFramework := flag.String("css-framework", "", "CSS framework")
 	typescript := flag.Bool("typescript", false, "Use TypeScript")
-	help := flag.Bool("help", false, "Show help message")
-	projectName, _ := parseCommandFlag(2)
+	args, help := parseCommandFlags()
 	raw := &termRaw{}
 
-	if *help || strings.Contains(os.Args[1], "-h") {
+	if help {
 		fmt.Print(initHelpMessage)
 		return
 	}
 
+	var projectName string
+	if len(args) > 0 {
+		projectName = args[0]
+	}
 	if projectName == "" {
 		projectName = term.Input(raw, "Project name:", "esm-app")
 	}
