@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"net/http"
@@ -92,7 +93,7 @@ func Start() {
 	)
 
 	// start server
-	C := rex.Serve(rex.ServerConfig{
+	C := rex.Serve(context.Background(), rex.ServerConfig{
 		Port: uint16(config.Port),
 		TLS: rex.TLSConfig{
 			Port: uint16(config.TlsPort),
@@ -101,8 +102,12 @@ func Start() {
 				CacheDir:  path.Join(config.WorkDir, "autotls"),
 			},
 		},
+	}, func(port, tlsPort uint16) {
+		logger.Infof("Server is ready on http://localhost:%d", port)
+		if tlsPort > 0 {
+			logger.Infof("Server is ready on https://localhost:%d", tlsPort)
+		}
 	})
-	logger.Infof("Server is ready on http://localhost:%d", config.Port)
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGTERM, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGHUP, syscall.SIGABRT)

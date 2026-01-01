@@ -1,3 +1,9 @@
+run/cli/add:
+	@go run -tags debug main.go add ${pkg}
+
+run/cli/tidy:
+	@go run -tags debug main.go tidy
+
 run/cli/dev:
 	@go run -tags debug main.go dev cli/demo/${app}
 

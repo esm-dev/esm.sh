@@ -35,15 +35,20 @@ func (t *termRaw) Next() byte {
 	return buf[0]
 }
 
-// parseCommandFlag parses the command flag
-func parseCommandFlag(start int) (string, []string) {
-	if start >= len(os.Args) {
-		start = len(os.Args)
+// parseCommandFlags parses the command flags
+func parseCommandFlags() (args []string, helpFlag bool) {
+	rawArgs := make([]string, 0, len(os.Args)-2)
+	for _, arg := range os.Args[2:] {
+		if arg == "-h" || arg == "--help" {
+			helpFlag = true
+		} else {
+			rawArgs = append(rawArgs, arg)
+		}
 	}
-	flag.CommandLine.Parse(os.Args[start:])
-	args := make([]string, 0, len(os.Args)-2)
+	flag.CommandLine.Parse(rawArgs)
+	args = make([]string, 0, len(rawArgs))
 	nextVaule := false
-	for _, arg := range os.Args[start:] {
+	for _, arg := range rawArgs {
 		if !strings.HasPrefix(arg, "-") {
 			if !nextVaule {
 				args = append(args, arg)
@@ -54,20 +59,17 @@ func parseCommandFlag(start int) (string, []string) {
 			nextVaule = true
 		}
 	}
-	if len(args) == 0 {
-		return "", nil
-	}
-	return args[0], args[1:]
+	return
 }
 
-func lookupCloestFile(basename string) (filename string, exists bool, err error) {
+func lookupClosestFile(name string) (filename string, exists bool, err error) {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return "", false, err
 	}
 	dir := cwd
 	for {
-		indexHtml := filepath.Join(dir, basename)
+		indexHtml := filepath.Join(dir, name)
 		fi, err := os.Stat(indexHtml)
 		if err == nil && !fi.IsDir() {
 			return indexHtml, true, nil
@@ -80,7 +82,7 @@ func lookupCloestFile(basename string) (filename string, exists bool, err error)
 			break
 		}
 	}
-	return filepath.Join(cwd, basename), false, nil
+	return filepath.Join(cwd, name), false, nil
 }
 
 func walkEmbedFS(fs *embed.FS, dir string, callback func(filename string) error) error {

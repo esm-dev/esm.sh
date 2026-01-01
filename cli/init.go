@@ -17,18 +17,18 @@ import (
 //go:embed demo
 var efs embed.FS
 
-const initHelpMessage = "\033[30mesm.sh - A nobuild tool for modern web development.\033[0m" + `
+const initHelpMessage = `Initialize a new nobuild web app with esm.sh CDN.
 
 Usage: esm.sh init [project-name] [options]
 
 Arguments:
-  [project-name]     Name of the project, default is "esm-app"
+  project-name       Name of the project, default is "esm-app"
 
 Options:
   --framework        JavaScript framework, Available options: Vanilla, React, Preact, Vue, Svelte
-  --css-framework    CSS framework, Available options: Vanilla, UnoCSS
+  --css-framework    CSS framework, Available options: Vanilla, Tailwind, UnoCSS
   --typescript       Use TypeScript, default is false
-  --help             Show help message
+  --help, -h         Show help message
 `
 
 var frameworks = []string{
@@ -41,6 +41,7 @@ var frameworks = []string{
 
 var cssFrameworks = []string{
 	"Vanilla",
+	"Tailwind",
 	"UnoCSS",
 }
 
@@ -49,15 +50,18 @@ func Init() {
 	framework := flag.String("framework", "", "JavaScript framework")
 	cssFramework := flag.String("css-framework", "", "CSS framework")
 	typescript := flag.Bool("typescript", false, "Use TypeScript")
-	help := flag.Bool("help", false, "Show help message")
-	projectName, _ := parseCommandFlag(2)
+	args, help := parseCommandFlags()
 	raw := &termRaw{}
 
-	if *help {
+	if help {
 		fmt.Print(initHelpMessage)
 		return
 	}
 
+	var projectName string
+	if len(args) > 0 {
+		projectName = args[0]
+	}
 	if projectName == "" {
 		projectName = term.Input(raw, "Project name:", "esm-app")
 	}
@@ -88,8 +92,11 @@ func Init() {
 	}
 
 	dir := "demo/" + strings.ToLower(*framework)
-	if *cssFramework == "UnoCSS" {
+	switch *cssFramework {
+	case "UnoCSS":
 		dir = "demo/with-unocss/" + strings.ToLower(*framework)
+	case "Tailwind":
+		dir = "demo/with-tailwind/" + strings.ToLower(*framework)
 	}
 	err = walkEmbedFS(&efs, dir, func(filename string) error {
 		savePath := projectName + strings.TrimPrefix(filename, dir)

@@ -12,27 +12,35 @@ import (
 	"github.com/ije/gox/term"
 )
 
-const serveHelpMessage = "\033[30mesm.sh - A nobuild tool for modern web development.\033[0m" + `
+const serveHelpMessage = `Serve a nobuild web app with esm.sh CDN, HMR, transforming TS/Vue/Svelte on the fly.
 
-Usage: esm.sh serve [app-dir] [options]
+Usage: esm.sh %s [app-dir] [options]
 
 Arguments:
-  [app-dir]    Directory to serve, default is current directory
+  app-dir      Directory to serve, default is current directory
 
 Options:
   --port       Port to serve on, default is 3000
-  --help       Show help message
+  --help, -h   Show help message
 `
 
 // Serve a web app in development mode.
 func Serve(dev bool) {
 	port := flag.Int("port", 3000, "port to serve on")
-	help := flag.Bool("help", false, "port to serve on")
-	appDir, _ := parseCommandFlag(2)
+	args, help := parseCommandFlags()
 
-	if *help {
-		fmt.Print(serveHelpMessage)
+	if help {
+		if dev {
+			fmt.Printf(serveHelpMessage, "dev")
+		} else {
+			fmt.Printf(serveHelpMessage, "serve")
+		}
 		return
+	}
+
+	var appDir string
+	if len(args) > 0 {
+		appDir = args[0]
 	}
 
 	var err error

@@ -2,53 +2,75 @@ package importmap
 
 import (
 	"bytes"
-	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
-	"net/http"
 	"net/url"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/esm-dev/esm.sh/internal/npm"
-	"github.com/ije/gox/sync"
 	"github.com/ije/gox/term"
 	"github.com/ije/gox/utils"
 )
 
-type ImportMap struct {
-	Src       string                       `json:"$src,omitempty"`
-	Cdn       string                       `json:"$cdn,omitempty"`
-	Imports   map[string]string            `json:"imports,omitempty"`
-	Scopes    map[string]map[string]string `json:"scopes,omitempty"`
-	Routes    map[string]string            `json:"routes,omitempty"`
-	Integrity map[string]string            `json:"integrity,omitempty"`
-	srcUrl    *url.URL
+type Config struct {
+	CDN    string `json:"cdn"`
+	Target string `json:"target"`
+	SRI    any    `json:"sri"`
 }
 
-func (im *ImportMap) Resolve(path string) (string, bool) {
+type SRIConfig struct {
+	Algorithm string `json:"algorithm"`
+}
+
+type ImportMap struct {
+	Src       string                       `json:"$src"`
+	Imports   map[string]string            `json:"imports"`
+	Scopes    map[string]map[string]string `json:"scopes"`
+	Routes    map[string]string            `json:"routes"`
+	Integrity map[string]string            `json:"integrity"`
+	Config    Config                       `json:"config"`
+}
+
+func (im *ImportMap) Resolve(specifier string, referrer *url.URL) (string, bool) {
+	imports := im.Imports
+	baseUrl, err := url.Parse(im.Src)
+	if err != nil {
+		return "", false
+	}
+
+	specifier, _ = utils.SplitByFirstByte(specifier, '#')
 	var query string
-	path, query = utils.SplitByFirstByte(path, '?')
+	specifier, query = utils.SplitByFirstByte(specifier, '?')
 	if query != "" {
 		query = "?" + query
 	}
-	imports := im.Imports
-	if im.srcUrl == nil && im.Src != "" {
-		im.srcUrl, _ = url.Parse(im.Src)
-	}
-	// todo: check `scopes`
-	if len(imports) > 0 {
-		if v, ok := imports[path]; ok {
-			return im.toAbsPath(v) + query, true
+
+	if referrer != nil {
+		scopeKeys := make(ScopeKeys, 0, len(im.Scopes))
+		for prefix := range im.Scopes {
+			scopeKeys = append(scopeKeys, prefix)
 		}
-		if strings.ContainsRune(path, '/') {
+		sort.Sort(scopeKeys)
+		for _, scopeKey := range scopeKeys {
+			if strings.HasPrefix(referrer.String(), scopeKey) {
+				imports = im.Scopes[scopeKey]
+				break
+			}
+		}
+	}
+
+	if len(imports) > 0 {
+		if v, ok := imports[specifier]; ok {
+			return normalizeUrl(baseUrl, v) + query, true
+		}
+		if strings.ContainsRune(specifier, '/') {
 			nonTrailingSlashImports := make([][2]string, 0, len(imports))
 			for k, v := range imports {
 				if strings.HasSuffix(k, "/") {
-					if strings.HasPrefix(path, k) {
-						return im.toAbsPath(v+path[len(k):]) + query, true
+					if strings.HasPrefix(specifier, k) {
+						return normalizeUrl(baseUrl, v+specifier[len(k):]) + query, true
 					}
 				} else {
 					nonTrailingSlashImports = append(nonTrailingSlashImports, [2]string{k, v})
@@ -67,65 +89,65 @@ func (im *ImportMap) Resolve(path string) (string, bool) {
 				} else if query != "" {
 					q = query
 				}
-				if strings.HasPrefix(path, k+"/") {
-					return im.toAbsPath(p+path[len(k):]) + q, true
+				if strings.HasPrefix(specifier, k+"/") {
+					return normalizeUrl(baseUrl, p+specifier[len(k):]) + q, true
 				}
 			}
 		}
 	}
-	return path + query, false
+	return specifier + query, false
 }
 
-func (im *ImportMap) toAbsPath(path string) string {
-	if strings.HasPrefix(path, "./") || strings.HasPrefix(path, "../") {
-		if im.srcUrl != nil {
-			return im.srcUrl.ResolveReference(&url.URL{Path: path}).String()
-		}
-		return path
-	}
-	return path
-}
-
-func (im *ImportMap) AddPackages(packages []string) bool {
-	cdnOrigin := im.Cdn
-	if cdnOrigin == "" {
-		cdnOrigin = "https://esm.sh"
-	}
-
-	var resolvedPackages []PackageJSON
-	var errors []error
+func (im *ImportMap) AddPackages(packages []string) (addedPackages []PackageInfo, warnings []string, errors []error) {
 	var wg sync.WaitGroup
-	for _, pkg := range packages {
-		wg.Add(1)
-		go func(pkg string) {
-			defer wg.Done()
-			scopeName := ""
-			pkgName := pkg
-			if pkg[0] == '@' {
-				scopeName, pkgName = utils.SplitByFirstByte(pkg[1:], '/')
+	for _, specifier := range packages {
+		wg.Go(func() {
+			var scopeName string
+			var pkgName string
+			var regPrefix string
+			if strings.HasPrefix(specifier, "jsr:") {
+				regPrefix = "jsr/"
+				specifier = specifier[4:]
+			} else if strings.ContainsRune(specifier, '/') && specifier[0] != '@' {
+				regPrefix = "gh/"
+				specifier = strings.Replace(specifier, "#", "@", 1) // owner/repo#branch -> owner/repo@branch
 			}
-			pkgName, version := utils.SplitByFirstByte(pkgName, '@')
-			if !npm.Naming.Match(pkgName) || !(scopeName == "" || npm.Naming.Match(scopeName[1:])) || !(version == "" || npm.Versioning.Match(version)) {
-				errors = append(errors, fmt.Errorf("invalid package name or version: %s", pkg))
+			if len(specifier) > 0 && (specifier[0] == '@' || regPrefix == "gh/") {
+				scopeName, pkgName = utils.SplitByFirstByte(specifier, '/')
+			} else {
+				pkgName = specifier
+			}
+			if pkgName == "" {
+				// ignore empty package name
 				return
 			}
-			pkgJson, err := fetchPackageInfo(cdnOrigin, pkg)
+			pkgName, version := utils.SplitByFirstByte(pkgName, '@')
+			if pkgName == "" || !npm.Naming.Match(pkgName) || !(scopeName == "" || npm.Naming.Match(strings.TrimPrefix(scopeName, "@"))) || !(version == "" || npm.Versioning.Match(version)) {
+				errors = append(errors, fmt.Errorf("invalid package name or version: %s", specifier))
+				return
+			}
+			if scopeName != "" {
+				pkgName = scopeName + "/" + pkgName
+			}
+			pkgJson, err := fetchPackageInfo(im.cdnOrign(), regPrefix, pkgName, version)
 			if err != nil {
 				errors = append(errors, err)
 				return
 			}
-			resolvedPackages = append(resolvedPackages, pkgJson)
-		}(pkg)
+			addedPackages = append(addedPackages, pkgJson)
+		})
 	}
 	wg.Wait()
 
-	if len(errors) > 0 {
-		for _, err := range errors {
-			fmt.Println(term.Red("✖︎"), err.Error())
-		}
-		return false
+	for _, pkg := range addedPackages {
+		warns, errs := im.addPackage(pkg, false, nil)
+		warnings = append(warnings, warns...)
+		errors = append(errors, errs...)
 	}
+	return
+}
 
+func (im *ImportMap) addPackage(pkg PackageInfo, indirect bool, targetImportsMap map[string]string) (warnings []string, errors []error) {
 	if im.Imports == nil {
 		im.Imports = map[string]string{}
 	}
@@ -133,248 +155,262 @@ func (im *ImportMap) AddPackages(packages []string) bool {
 		im.Scopes = map[string]map[string]string{}
 	}
 
-	cdnScopeImports, hasCdnScopedImports := im.Scopes[cdnOrigin+"/"]
-	if !hasCdnScopedImports {
-		cdnScopeImports = map[string]string{}
-		im.Scopes[cdnOrigin+"/"] = cdnScopeImports
+	cdnOrigin := im.cdnOrign()
+	cdnScopeImportsMap, cdnScoped := im.Scopes[cdnOrigin+"/"]
+	if !cdnScoped {
+		cdnScopeImportsMap = map[string]string{}
+		im.Scopes[cdnOrigin+"/"] = cdnScopeImportsMap
 	}
-	for _, pkg := range resolvedPackages {
-		url := cdnOrigin + "/"
-		if len(pkg.Dependencies) > 0 || len(pkg.PeerDependencies) > 0 {
-			url += "*" // externall deps marker
-		}
-		url += pkg.Name + "@" + pkg.Version
-		im.Imports[pkg.Name] = url
-		im.Imports[pkg.Name+"/"] = url + "/"
-		if hasCdnScopedImports {
-			delete(cdnScopeImports, pkg.Name)
-			delete(cdnScopeImports, pkg.Name+"/")
+
+	importsMap := im.Imports
+	if indirect {
+		if targetImportsMap != nil {
+			importsMap = targetImportsMap
+		} else {
+			importsMap = cdnScopeImportsMap
 		}
 	}
-	for _, pkg := range resolvedPackages {
-		walkPackageDependencies(pkg, func(specifier, pkgName, pkgVersion, prefix string) {
-			if _, ok := im.Imports[specifier]; !ok {
-				prevUrl, prev := cdnScopeImports[specifier]
-				deepCheck := true
-			checkPrevUrl:
-				if prev {
-					pathname := strings.TrimPrefix(strings.TrimPrefix(strings.TrimPrefix(prevUrl, cdnOrigin+"/"), "*"), "@")
-					_, prevVersion := utils.SplitByFirstByte(pathname, '@')
-					prevVersion, _ = utils.SplitByFirstByte(prevVersion, '/')
-					if npm.IsExactVersion(prevVersion) {
-						if npm.IsExactVersion(pkgVersion) {
-							if pkgVersion == prevVersion {
-								if _, ok := cdnScopeImports[specifier+"/"]; !ok {
-									cdnScopeImports[specifier+"/"] = prevUrl + "/"
-								}
-								return
-							}
-						} else {
-							c, err := semver.NewConstraint(pkgVersion)
-							if err == nil && c.Check(semver.MustParse(prevVersion)) {
-								if _, ok := cdnScopeImports[specifier+"/"]; !ok {
-									cdnScopeImports[specifier+"/"] = prevUrl + "/"
-								}
-								return
-							}
-						}
-					}
-				}
-				if deepCheck {
-					if scopeImports, ok := im.Scopes[cdnOrigin+"/"+pkg.Name+"@"+pkg.Version+"/"]; ok {
-						prevUrl, prev = scopeImports[specifier]
-						if prev {
-							deepCheck = false
-							goto checkPrevUrl
-						}
-					}
-				}
-				p, err := fetchPackageInfo(cdnOrigin, pkgName+"@"+pkgVersion)
-				if err != nil {
-					errors = append(errors, err)
-					return
-				}
-				url := cdnOrigin + prefix + "/"
-				if len(p.Dependencies) > 0 || len(p.PeerDependencies) > 0 {
-					url += "*"
-				}
-				url += pkgName + "@" + p.Version
-				cdnScopeImports[specifier] = url
-				cdnScopeImports[specifier+"/"] = url + "/"
+
+	var target string
+	switch v := im.Config.Target; v {
+	case "es2015", "es2016", "es2017", "es2018", "es2019", "es2020", "es2021", "es2022", "es2023", "es2024", "esnext":
+		target = v
+	default:
+		target = "es2022"
+	}
+
+	baseUrl := cdnOrigin + "/" + pkg.String()
+	if strings.HasSuffix(pkg.Name, "@") {
+		_, nameNoScope := utils.SplitByFirstByte(pkg.Name, '/')
+		importsMap[pkg.Name] = baseUrl + "/" + target + "/" + nameNoScope + ".mjs"
+	} else {
+		importsMap[pkg.Name] = baseUrl + "/" + target + "/" + pkg.Name + ".mjs"
+	}
+	importsMap[pkg.Name+"/"] = baseUrl + "&target=" + target + "/"
+	if !indirect {
+		delete(cdnScopeImportsMap, pkg.Name)
+		delete(cdnScopeImportsMap, pkg.Name+"/")
+	}
+
+	deps, err := resolvePackageDependencies(pkg)
+	if err != nil {
+		fmt.Println(term.Red("[error]"), err.Error())
+		return
+	}
+
+	wg := sync.WaitGroup{}
+	for _, dep := range deps {
+		wg.Go(func() {
+			var targetImportsMap map[string]string
+			// if the version of the dependency is not exact,
+			// check if it is satisfied with the version in the import map
+			// or create a new scope for the dependency
+			importUrl, exists := im.Imports[dep.Name]
+			if !exists {
+				importUrl, exists = cdnScopeImportsMap[dep.Name]
 			}
+			if exists && strings.HasPrefix(importUrl, cdnOrigin+"/") {
+				p, err := GetPackageInfoFromUrl(importUrl)
+				if err == nil && npm.IsExactVersion(p.Version) {
+					if dep.Version == p.Version {
+						// the version of the dependency is exact and equals to the version in the import map
+						return
+					}
+					if !npm.IsExactVersion(dep.Version) {
+						c, err := semver.NewConstraint(dep.Version)
+						if err == nil && c.Check(semver.MustParse(p.Version)) {
+							// the version of the dependency is exact and satisfied with the version in the import map
+							return
+						}
+						if dep.Peer {
+							warnings = append(warnings, "incorrect peer dependency "+dep.Name+"@"+p.Version+term.Dim("(unmet "+dep.Version+")"))
+							return
+						}
+						scope := cdnOrigin + "/" + pkg.String() + "/"
+						ok := false
+						targetImportsMap, ok = im.Scopes[scope]
+						if !ok {
+							targetImportsMap = map[string]string{}
+							im.Scopes[scope] = targetImportsMap
+						}
+					}
+				}
+			}
+			pkg, err := resolveDependency(cdnOrigin, dep)
+			if err != nil {
+				errors = append(errors, err)
+				return
+			}
+			warns, errs := im.addPackage(pkg, !dep.Peer, targetImportsMap)
+			warnings = append(warnings, warns...)
+			errors = append(errors, errs...)
 		})
 	}
-	if len(errors) > 0 {
-		for _, err := range errors {
-			fmt.Println(term.Red("✖︎"), err.Error())
-		}
-		return false
+	wg.Wait()
+	return
+}
+
+func (im *ImportMap) cdnOrign() string {
+	cdn := im.Config.CDN
+	if strings.HasPrefix(cdn, "https://") || strings.HasPrefix(cdn, "http://") {
+		return cdn
 	}
-	for _, pkg := range resolvedPackages {
-		fmt.Println(term.Green("✔"), pkg.Name+term.Dim("@"+pkg.Version))
-	}
-	return true
+	return "https://esm.sh"
 }
 
 func (im *ImportMap) MarshalJSON() ([]byte, error) {
-	buf := bytes.Buffer{}
-	buf.WriteString("{\n")
-	if im.Cdn != "" {
-		buf.WriteString("      \"$cdn\": \"")
-		buf.WriteString(im.Cdn)
-		buf.WriteString("\",\n")
-	}
-	buf.WriteString("      \"imports\": {")
-	if len(im.Imports) > 0 {
-		buf.WriteByte('\n')
-		formatImports(&buf, im.Imports, 4)
-		buf.WriteString("      }")
-	} else {
-		buf.WriteString("}")
-	}
-	if len(im.Scopes) > 0 {
-		buf.WriteString(",\n      \"scopes\": {\n")
-		for scope, imports := range im.Scopes {
-			buf.WriteString("        \"")
-			buf.WriteString(scope)
-			buf.WriteString("\": {\n")
-			formatImports(&buf, imports, 5)
-			buf.WriteString("        }\n")
-		}
-		buf.WriteString("      }")
-	}
-	if len(im.Routes) > 0 {
-		buf.WriteString(",\n      \"routes\": {\n")
-		formatImports(&buf, im.Routes, 4)
-		buf.WriteString("      }")
-	}
-	if len(im.Integrity) > 0 {
-		buf.WriteString(",\n      \"integrity\": {\n")
-		formatImports(&buf, im.Integrity, 4)
-		buf.WriteString("      }")
-	}
-	buf.WriteString("\n    }")
-	return buf.Bytes(), nil
+	return []byte(im.FormatJSON(0)), nil
 }
 
-func formatImports[T any](buf *bytes.Buffer, m map[string]T, indent int) {
-	keys := make([]string, 0, len(m))
-	for key := range m {
+func (im *ImportMap) FormatJSON(indent int) string {
+	buf := strings.Builder{}
+	indentStr := bytes.Repeat([]byte{' ', ' '}, indent+1)
+	buf.Write(indentStr[0 : 2*indent])
+	buf.WriteString("{\n")
+	if im.Config.CDN != "" && im.Config.CDN != "https://esm.sh" {
+		buf.Write(indentStr)
+		buf.WriteString("\"config\": {\n")
+		buf.Write(indentStr)
+		buf.Write(indentStr)
+		buf.WriteString("\"cdn\": \"")
+		buf.WriteString(im.Config.CDN)
+		buf.WriteString("\"\n")
+		buf.Write(indentStr)
+		buf.WriteString("}\n")
+	}
+	buf.Write(indentStr)
+	buf.WriteString("\"imports\": {")
+	if len(im.Imports) > 0 {
+		buf.WriteByte('\n')
+		formatImports(&buf, im.Imports, indent+2)
+		buf.Write(indentStr)
+		buf.WriteByte('}')
+	} else {
+		buf.WriteByte('}')
+	}
+	scopes := make([]string, 0, len(im.Scopes))
+	if len(im.Scopes) > 0 {
+		for key, imports := range im.Scopes {
+			if len(imports) > 0 {
+				scopes = append(scopes, key)
+			}
+		}
+	}
+	sort.Strings(scopes)
+	if len(scopes) > 0 {
+		buf.WriteString(",\n")
+		buf.Write(indentStr)
+		buf.WriteString("\"scopes\": {\n")
+		i := 0
+		for _, scope := range scopes {
+			imports := im.Scopes[scope]
+			if len(imports) == 0 {
+				continue
+			}
+			buf.Write(indentStr)
+			buf.WriteString("  \"")
+			buf.WriteString(scope)
+			buf.WriteString("\": {\n")
+			formatImports(&buf, imports, indent+3)
+			buf.Write(indentStr)
+			buf.WriteString("  }")
+			if len(scopes) > 1 && i < len(scopes)-1 {
+				buf.WriteByte(',')
+			}
+			buf.WriteByte('\n')
+			i++
+		}
+		buf.Write(indentStr)
+		buf.WriteByte('}')
+	}
+	if len(im.Routes) > 0 {
+		buf.WriteString(",\n")
+		buf.Write(indentStr)
+		buf.WriteString("\"routes\": {\n")
+		formatMap(&buf, im.Routes, indent+2)
+		buf.Write(indentStr)
+		buf.WriteByte('}')
+	}
+	if len(im.Integrity) > 0 {
+		buf.WriteString(",\n")
+		buf.Write(indentStr)
+		buf.WriteString("\"integrity\": {\n")
+		formatMap(&buf, im.Integrity, indent+2)
+		buf.Write(indentStr)
+		buf.WriteByte('}')
+	}
+	buf.WriteByte('\n')
+	buf.Write(indentStr[0 : 2*indent])
+	buf.WriteByte('}')
+	return buf.String()
+}
+
+func normalizeUrl(baseUrl *url.URL, path string) string {
+	if baseUrl != nil && (strings.HasPrefix(path, "./") || strings.HasPrefix(path, "../")) {
+		return baseUrl.ResolveReference(&url.URL{Path: path}).String()
+	}
+	return path
+}
+
+func formatImports(buf *strings.Builder, imports map[string]string, indent int) {
+	keys := make([]string, 0, len(imports))
+	for key := range imports {
 		if keyLen := len(key); keyLen == 1 || (keyLen > 1 && !strings.HasSuffix(key, "/")) {
 			keys = append(keys, key)
 		}
 	}
 	sort.Strings(keys)
+	indentStr := bytes.Repeat([]byte{' ', ' '}, indent)
 	for i, key := range keys {
-		value, ok := any(m[key]).(string)
-		if !ok || value == "" {
-			// ignore non-string value
+		url, ok := imports[key]
+		if !ok || url == "" {
+			// ignore empty values
 			continue
 		}
-		buf.WriteString(strings.Repeat("  ", indent))
+		buf.Write(indentStr)
 		buf.WriteByte('"')
 		buf.WriteString(key)
 		buf.WriteString("\": \"")
-		buf.WriteString(value)
+		buf.WriteString(url)
 		buf.WriteByte('"')
-		if value, ok := m[key+"/"]; ok {
-			if str, ok := any(value).(string); ok && str != "" {
-				buf.WriteString(",\n")
-				buf.WriteString(strings.Repeat("  ", indent))
-				buf.WriteByte('"')
-				buf.WriteString(key + "/")
-				buf.WriteString("\": \"")
-				buf.WriteString(str)
-				buf.WriteByte('"')
-			}
+		if url, ok := imports[key+"/"]; ok && url != "" {
+			buf.WriteString(",\n")
+			buf.Write(indentStr)
+			buf.WriteByte('"')
+			buf.WriteString(key + "/")
+			buf.WriteString("\": \"")
+			buf.WriteString(url)
+			buf.WriteByte('"')
 		}
 		if i < len(keys)-1 {
-			buf.WriteString(",")
+			buf.WriteByte(',')
 		}
 		buf.WriteByte('\n')
 	}
 }
 
-type PackageJSON struct {
-	Name             string            `json:"name"`
-	Version          string            `json:"version"`
-	Dependencies     map[string]string `json:"dependencies"`
-	PeerDependencies map[string]string `json:"peerDependencies"`
-}
-
-var (
-	cacheMutex sync.KeyedMutex
-	cacheStore sync.Map
-)
-
-func fetchPackageInfo(cdnOrigin string, pkg string) (pkgJSON PackageJSON, err error) {
-	url := fmt.Sprintf("%s/%s/package.json", cdnOrigin, pkg)
-
-	// check cache first
-	if v, ok := cacheStore.Load(url); ok {
-		pkgJSON, _ = v.(PackageJSON)
-		return
+func formatMap(buf *strings.Builder, m map[string]string, indent int) {
+	keys := make([]string, 0, len(m))
+	for key := range m {
+		keys = append(keys, key)
 	}
-
-	// only one fetch at a time for the same url
-	unlock := cacheMutex.Lock(url)
-	defer unlock()
-
-	// check cache again after get lock
-	if v, ok := cacheStore.Load(url); ok {
-		pkgJSON, _ = v.(PackageJSON)
-		return
-	}
-
-	resp, err := http.Get(url)
-	if err != nil {
-		err = errors.New("http request failed: " + err.Error())
-		return
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode == 404 {
-		err = errors.New("package not found: " + pkg)
-		return
-	}
-	if resp.StatusCode != 200 {
-		msg, _ := io.ReadAll(resp.Body)
-		err = errors.New(string(msg))
-		return
-	}
-
-	err = json.NewDecoder(resp.Body).Decode(&pkgJSON)
-	if err != nil {
-		err = errors.New("could not parse package.json")
-	}
-	if err == nil {
-		cacheStore.Store(url, pkgJSON)
-	}
-	return
-}
-
-func walkPackageDependencies(pkg PackageJSON, callback func(specifier, pkgName, pkgVersion, prefix string)) {
-	if len(pkg.Dependencies) > 0 {
-		walkDependencies(pkg.Dependencies, callback)
-	}
-	if len(pkg.PeerDependencies) > 0 {
-		walkDependencies(pkg.PeerDependencies, callback)
-	}
-}
-
-func walkDependencies(deps map[string]string, callback func(specifier, pkgName, pkgVersion, prefix string)) {
-	for specifier, pkgVersion := range deps {
-		pkgName := specifier
-		pkg, err := npm.ResolveDependencyVersion(pkgVersion)
-		if err == nil && pkg.Name != "" {
-			pkgName = pkg.Name
-			pkgVersion = pkg.Version
+	sort.Strings(keys)
+	indentStr := bytes.Repeat([]byte{' ', ' '}, indent)
+	for i, key := range keys {
+		value, ok := m[key]
+		if !ok || value == "" {
+			// ignore empty values
+			continue
 		}
-		var prefix string
-		if pkg.Github {
-			prefix = "/gh"
-		} else if pkg.PkgPrNew {
-			prefix = "/pr"
+		buf.Write(indentStr)
+		buf.WriteByte('"')
+		buf.WriteString(key)
+		buf.WriteString("\": \"")
+		buf.WriteString(value)
+		buf.WriteByte('"')
+		if i < len(keys)-1 {
+			buf.WriteByte(',')
 		}
-		callback(specifier, pkgName, pkgVersion, prefix)
+		buf.WriteByte('\n')
 	}
 }

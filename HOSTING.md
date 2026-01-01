@@ -107,7 +107,11 @@ To deploy the server with CloudFlare CDN, you need to create following cache rul
 #### 1. Cache Static Content
 
 ```ruby
-(http.request.uri.path.extension in {"node" "wasm" "less" "sass" "scss" "stylus" "styl" "json" "jsonc" "csv" "xml" "plist" "tmLanguage" "tmTheme" "yml" "yaml" "txt" "glsl" "frag" "vert" "wgsl" "md" "mdx" "markdown" "html" "htm" "svg" "png" "jpg" "jpeg" "webp" "gif" "ico" "eot" "ttf" "otf" "woff" "woff2" "m4a" "mp3" "m3a" "ogg" "oga" "wav" "weba" "gz" "tgz" "css" "map"}) or (http.request.uri.path.extension eq "mjs" and starts_with(http.request.uri.path, "/node/")) or (ends_with(http.request.uri.path, ".d.ts")) or (ends_with(http.request.uri.path, ".d.mts")) or (ends_with(http.request.uri.path, ".d.cts"))
+(http.request.uri.path.extension in {"node" "wasm" "less" "sass" "scss" "stylus" "styl" "json" "jsonc" "csv" "xml" "plist" "tmLanguage" "tmTheme" "yml" "yaml" "txt" "glsl" "frag" "vert" "wgsl" "md" "mdx" "markdown" "html" "htm" "svg" "png" "jpg" "jpeg" "webp" "gif" "ico" "eot" "ttf" "otf" "woff" "woff2" "m4a" "mp3" "m3a" "ogg" "oga" "wav" "weba" "gz" "tgz" "css" "map"}) or
+(http.request.uri.path.extension eq "mjs" and starts_with(http.request.uri.path, "/node/")) or
+(ends_with(http.request.uri.path, ".d.ts")) or
+(ends_with(http.request.uri.path, ".d.mts")) or
+(ends_with(http.request.uri.path, ".d.cts"))
 ```
 
 Ensure "Ignore query string" option is enabled in the "cache key" settings.
@@ -115,20 +119,20 @@ Ensure "Ignore query string" option is enabled in the "cache key" settings.
 #### 2. Cache `?target=*`
 
 ```ruby
-(http.request.uri.query contains "target=es2015") or
-(http.request.uri.query contains "target=es2016") or
-(http.request.uri.query contains "target=es2017") or
-(http.request.uri.query contains "target=es2018") or
-(http.request.uri.query contains "target=es2019") or
-(http.request.uri.query contains "target=es2020") or
-(http.request.uri.query contains "target=es2021") or
-(http.request.uri.query contains "target=es2022") or
-(http.request.uri.query contains "target=es2023")or
-(http.request.uri.query contains "target=es2024") or
-(http.request.uri.query contains "target=esnext") or
-(http.request.uri.query contains "target=denonext") or
-(http.request.uri.query contains "target=deno") or
-(http.request.uri.query contains "target=node")
+(http.request.uri contains "target=es2015") or
+(http.request.uri contains "target=es2016") or
+(http.request.uri contains "target=es2017") or
+(http.request.uri contains "target=es2018") or
+(http.request.uri contains "target=es2019") or
+(http.request.uri contains "target=es2020") or
+(http.request.uri contains "target=es2021") or
+(http.request.uri contains "target=es2022") or
+(http.request.uri contains "target=es2023")or
+(http.request.uri contains "target=es2024") or
+(http.request.uri contains "target=esnext") or
+(http.request.uri contains "target=denonext") or
+(http.request.uri contains "target=deno") or
+(http.request.uri contains "target=node")
 ```
 
 #### 3. Cache `/(target)/`
