@@ -36,7 +36,7 @@ jobs:
           GO_TEST_S3_REGION: ${{ secrets.GO_TEST_S3_REGION }}
           GO_TEST_S3_ACCESS_KEY_ID: ${{ secrets.GO_TEST_S3_ACCESS_KEY_ID }}
           GO_TEST_S3_SECRET_ACCESS_KEY: ${{ secrets.GO_TEST_S3_SECRET_ACCESS_KEY }}
-          GO_TEST_S3_DIRNAME: test-deno-${{ matrix.deno-version }}
+          GO_TEST_S3_ROOTDIR: test-d-${{ matrix.deno-version }}
 
       - name: Run Integration Tests
         run: test/bootstrap.ts -q
