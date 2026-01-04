@@ -1,14 +1,16 @@
-name: Stage
+name: Release
 
 on:
   push:
-    branches: [main]
+    tags:
+      - 'v*'
+      - '!v*.*.*'
 
 jobs:
   deploy_server:
-    name: Deploy main branch to next.esm.sh
+    name: Deploy server to production
     runs-on: ubuntu-latest
-    environment: next.esm.sh
+    environment: esm.sh
 
     steps:
       - name: Checkout
@@ -28,8 +30,8 @@ jobs:
           DEPLOY_SSH_PORT: ${{ secrets.DEPLOY_SSH_PORT }}
           DEPLOY_SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
           DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
-          SERVER_VERSION: ${{ github.sha }}
-          RESET_ON_DEPLOY: yes
+          SERVER_CONFIG: ${{ secrets.SERVER_CONFIG }}
+          SERVER_VERSION: ${{ github.ref_name }}
 
   push_docker_image:
     name: Push docker image to ghcr.io
@@ -50,6 +52,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Login to GHCR
+        if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -62,7 +65,24 @@ jobs:
           context: .
           push: true
           platforms: linux/amd64,linux/arm64
-          tags: ghcr.io/esm-dev/esm.sh:dev
-          build-args: SERVER_VERSION=main
+          tags: ghcr.io/esm-dev/esm.sh:latest,ghcr.io/esm-dev/esm.sh:${{ github.ref_name }}
+          build-args: SERVER_VERSION=${{ github.ref_name }}
         env:
           DOCKER_BUILD_RECORD_UPLOAD: false
+
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    needs: [deploy_server, push_docker_image]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract Release Note
+        run: echo "console.log(require('fs').readFileSync('CHANGELOG-SERVER.md','utf8').split('## ')[1].slice('${{ github.ref_name }}'.length).trim())" | node > release-note.txt
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: release-note.txt

@@ -35,7 +35,7 @@ async function downloadBinaryFromGitHub() {
   const pkgInfo = JSON.parse(readFileSync(join(__dirname, "../package.json"), "utf8"));
   const [_, minor, patch] = pkgInfo.version.split(".");
   const tag = "v" + minor + (Number(patch) > 0 ? "_" + patch : "");
-  const url = `https://github.com/esm-dev/esm.sh/releases/download/${tag}/esm.sh-cli-${getOS()}-${getArch()}.gz`;
+  const url = `https://github.com/esm-dev/esm.sh/releases/download/${tag}/cli-${getOS()}-${getArch()}${getBinExtension()}.gz`;
   const res = await fetch(url);
   if (!res.ok) {
     res.body?.cancel();

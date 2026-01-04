@@ -23,7 +23,7 @@ func TestS3Storage(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	dirname := os.Getenv("GO_TEST_S3_DIRNAME")
+	dirname := os.Getenv("GO_TEST_S3_ROOTDIR")
 	if dirname == "" {
 		dirname = "test"
 	}
