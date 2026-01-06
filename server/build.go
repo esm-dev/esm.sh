@@ -1079,7 +1079,10 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 		_, ok2 := ctx.pkgJson.PeerDependencies[pkgName]
 		if ok1 || ok2 {
 			options.JSXImportSource = pkgName
-			if pkgName == "hono" {
+			switch pkgName {
+			case "mono-jsx":
+				options.JSXImportSource += "/dom"
+			case "hono":
 				options.JSXImportSource += "/jsx"
 			}
 			break

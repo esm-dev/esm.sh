@@ -333,6 +333,16 @@
       font-weight: 500
     }
   </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "highlight.js": "/highlight.js@11.9.0/es2022/lib/core.mjs",
+        "highlight.js/": "/highlight.js@11.9.0/",
+        "react/": "/react@19.2.0/"
+      }
+    }
+  </script>
+  <script src="/x" href="/_test/a.tsx"></script>
 </head>
 
 <body>
@@ -352,10 +362,10 @@
       </a></p>
   </footer>
   <script type="module">
-    import hljs from "/highlight.js@11.9.0/lib/core";
-    import javascript from "/highlight.js@11.9.0/lib/languages/javascript";
-    import json from "/highlight.js@11.9.0/lib/languages/json";
-    import xml from "/highlight.js@11.9.0/lib/languages/xml"; // for html/jsx syntax
+    import hljs from "highlight.js";
+    import javascript from "highlight.js/lib/languages/javascript";
+    import json from "highlight.js/lib/languages/json";
+    import xml from "highlight.js/lib/languages/xml"; // for html/jsx syntax
 
     // scroll to hashHeading
     const hashHeading = document.getElementById(location.hash.slice(1));
