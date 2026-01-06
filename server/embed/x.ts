@@ -5,30 +5,37 @@
 
 ((document, location) => {
   const currentScript = document.currentScript as HTMLScriptElement | null;
-  const $: typeof document.querySelector = (s: string) => document.querySelector(s);
-  if (location.protocol == "file:" || /^((\w+\.)?localhost|127\.0\.0\.1)$/.test(location.hostname)) {
-    console.error("[esm.sh/x] Please start your app with `npx esm.sh serve` in development mode.");
+  const src = currentScript?.src;
+  const href = currentScript?.getAttribute("href");
+  if (location.protocol === "file:" || /^(([\w\-]+\.)?local(host)?|127\.0\.0\.1)$/.test(location.hostname)) {
+    console.error("[esm.sh/x] Please start your app with `esm.sh dev` in development mode.");
     return;
   }
-  let main = currentScript?.getAttribute("href");
-  if (main) {
-    const mainUrl = new URL(main, location.href);
+  if (src && href) {
+    const cdnOrigin = new URL(src).origin;
+    const mainUrl = new URL(href, location.href);
+    const searchParams = mainUrl.searchParams;
+    const isCSS = mainUrl.pathname.endsWith(".css");
     const ctx = btoa(location.pathname).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-    const v = $<HTMLMetaElement>("meta[name=version]")?.content;
-    const { searchParams, pathname } = mainUrl;
-    if (pathname.endsWith("/uno.css")) {
+    const version = document.querySelector<HTMLMetaElement>("meta[name=version]")?.content;
+    if (isCSS) {
       searchParams.set("ctx", ctx);
-    } else if ($("script[type=importmap]")) {
+    } else if (document.querySelector("script[type=importmap]")) {
       searchParams.set("im", ctx);
     }
-    if (v) {
-      searchParams.set("v", v);
+    if (version && /^[\w\-.]+$/.test(version)) {
+      searchParams.set("v", version);
     }
-    main = new URL(currentScript!.src).origin + "/" + mainUrl;
-    if (pathname.endsWith(".css")) {
-      currentScript!.insertAdjacentHTML("afterend", `<link rel="stylesheet" href="${main}">`);
+    if (isCSS) {
+      const style = document.createElement("style");
+      const link = document.createElement("link");
+      style.textContent = "body{visibility:hidden}";
+      link.rel = "stylesheet";
+      link.href = cdnOrigin + "/" + mainUrl;
+      link.onload = () => style.remove();
+      currentScript.after(style, link);
     } else {
-      import(main);
+      import(cdnOrigin + "/" + mainUrl);
     }
   }
 })(document, location);
