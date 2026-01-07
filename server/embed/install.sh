@@ -68,13 +68,13 @@ done
 
 add_path() {
   if grep -Fxq "$1" "$config_file"; then
-    echo "Command already exists in $config_file, skipping write."
+    echo "esm.sh CLI is already added to \$PATH in $config_file"
   elif [[ -w $config_file ]]; then
     echo -e "\n# esm.sh" >> "$config_file"
-    echo "$command" >> "$config_file"
-    echo "\033[32mSuccessfully added esm.sh to \$PATH in $config_file\033[0m"
+    echo "$1" >> "$config_file"
+    echo "\033[32mSuccessfully added esm.sh CLI to \$PATH in $config_file\033[0m"
   else
-    echo "Manually add the directory to $config_file (or similar):"
+    echo "Manually add the path to $config_file (or similar):"
     echo "\033[2m  $1\033[22m"
   fi
 }
@@ -101,7 +101,7 @@ elif [[ ":$PATH:" != *":$bin_dir:"* ]]; then
     ;;
     *)
       export PATH=$bin_dir:$PATH
-      echo "Manually add the directory to $config_file (or similar):"
+      echo "Manually add the path to $config_file (or similar):"
       echo "\033[2m  export PATH=$bin_dir:\$PATH\033[22m"
     ;;
   esac
