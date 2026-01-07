@@ -51,7 +51,7 @@ const (
 )
 
 const (
-	ccMustRevalidate = "public, max-age=0, no-store, must-revalidate"
+	ccMustRevalidate = "public, max-age=0, must-revalidate"
 	ccOneDay         = "public, max-age=86400"
 	ccImmutable      = "public, max-age=31536000, immutable"
 	ctHTML           = "text/html; charset=utf-8"
@@ -414,6 +414,15 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 			}
 			ctx.SetHeader("Content-Type", ctJavaScript)
 			return js
+
+		case "/install":
+			data, err := embedFS.ReadFile("embed/install.sh")
+			if err != nil {
+				return rex.Status(404, "not found")
+			}
+			ctx.SetHeader("Content-Type", "text/plain; charset=utf-8")
+			ctx.SetHeader("Cache-Control", ccMustRevalidate)
+			return data
 		}
 
 		// for testing
@@ -617,20 +626,21 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 						switch string(name) {
 						case "script":
 							var (
-								typeAttr string
 								srcAttr  string
 								hrefAttr string
+								typeAttr string
 							)
 							for moreAttr {
 								var key, val []byte
 								key, val, moreAttr = tokenizer.TagAttr()
 								if len(val) > 0 {
-									if bytes.Equal(key, []byte("type")) {
-										typeAttr = string(val)
-									} else if bytes.Equal(key, []byte("src")) {
+									switch string(key) {
+									case "src":
 										srcAttr = string(val)
-									} else if bytes.Equal(key, []byte("href")) {
+									case "href":
 										hrefAttr = string(val)
+									case "type":
+										typeAttr = string(val)
 									}
 								}
 							}
