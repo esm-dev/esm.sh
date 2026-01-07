@@ -25,7 +25,7 @@ type SRIConfig struct {
 }
 
 type ImportMap struct {
-	Src       string                       `json:"$src"`
+	BaseUrl   string                       `json:"baseUrl"`
 	Imports   map[string]string            `json:"imports"`
 	Scopes    map[string]map[string]string `json:"scopes"`
 	Routes    map[string]string            `json:"routes"`
@@ -35,7 +35,7 @@ type ImportMap struct {
 
 func (im *ImportMap) Resolve(specifier string, referrer *url.URL) (string, bool) {
 	imports := im.Imports
-	baseUrl, err := url.Parse(im.Src)
+	baseUrl, err := url.Parse(im.BaseUrl)
 	if err != nil {
 		return "", false
 	}

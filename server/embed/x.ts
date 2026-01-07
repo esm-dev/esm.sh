@@ -12,27 +12,25 @@
     return;
   }
   if (src && href) {
+    const origin = location.origin;
     const cdnOrigin = new URL(src).origin;
     const mainUrl = new URL(href, location.href);
     const searchParams = mainUrl.searchParams;
-    const isCSS = mainUrl.pathname.endsWith(".css");
-    const ctx = btoa(location.pathname).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
     const version = document.querySelector<HTMLMetaElement>("meta[name=version]")?.content;
-    if (isCSS) {
-      searchParams.set("ctx", ctx);
-    } else if (document.querySelector("script[type=importmap]")) {
-      searchParams.set("im", ctx);
+    const basePath = document.querySelector<HTMLMetaElement>("meta[name=basepath]")?.content;
+    if (basePath && basePath.startsWith("/")) {
+      searchParams.set("b", btoa(basePath).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""));
     }
     if (version && /^[\w\-.]+$/.test(version)) {
       searchParams.set("v", version);
     }
-    if (isCSS) {
+    if (mainUrl.pathname.endsWith(".css")) {
       const style = document.createElement("style");
       const link = document.createElement("link");
       style.textContent = "body{visibility:hidden}";
       link.rel = "stylesheet";
       link.href = cdnOrigin + "/" + mainUrl;
-      link.onload = () => style.remove();
+      link.onload = link.onerror = () => style.remove();
       currentScript.after(style, link);
     } else {
       import(cdnOrigin + "/" + mainUrl);

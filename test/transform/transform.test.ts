@@ -88,7 +88,7 @@ Deno.test("transform", async (t) => {
 
   await t.step("transform module: vanilla", async () => {
     const im = btoaUrl("/vanilla/");
-    const res = await fetch(`http://localhost:8080/http://localhost:8083/vanilla/app/main.ts?im=${im}`);
+    const res = await fetch(`http://localhost:8080/http://localhost:8083/vanilla/app/main.ts?b=${im}`);
     assertEquals(res.status, 200);
     assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
     assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
@@ -100,7 +100,7 @@ Deno.test("transform", async (t) => {
 
   await t.step("transform module: react", async () => {
     const im = btoaUrl("/react/");
-    const res = await fetch(`http://localhost:8080/http://localhost:8083/react/app/main.tsx?im=${im}`);
+    const res = await fetch(`http://localhost:8080/http://localhost:8083/react/app/main.tsx?b=${im}`);
     assertEquals(res.status, 200);
     assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
     assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
@@ -112,7 +112,7 @@ Deno.test("transform", async (t) => {
 
   await t.step("transform module: preact", async () => {
     const im = btoaUrl("/preact/");
-    const res = await fetch(`http://localhost:8080/http://localhost:8083/preact/app/main.tsx?im=${im}`);
+    const res = await fetch(`http://localhost:8080/http://localhost:8083/preact/app/main.tsx?b=${im}`);
     assertEquals(res.status, 200);
     assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
     assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
@@ -125,7 +125,7 @@ Deno.test("transform", async (t) => {
   await t.step("transform module: vue", async () => {
     {
       const im = btoaUrl("/vue/");
-      const res = await fetch(`http://localhost:8080/http://localhost:8083/vue/app/main.ts?im=${im}`);
+      const res = await fetch(`http://localhost:8080/http://localhost:8083/vue/app/main.ts?b=${im}`);
       assertEquals(res.status, 200);
       assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
       assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
@@ -143,7 +143,7 @@ Deno.test("transform", async (t) => {
     }
     {
       const im = btoaUrl("/vue/");
-      const res = await fetch(`http://localhost:8080/http://localhost:8083/vue/app/App.vue?im=${im}`);
+      const res = await fetch(`http://localhost:8080/http://localhost:8083/vue/app/App.vue?b=${im}`);
       assertEquals(res.status, 200);
       assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
       assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
@@ -160,7 +160,7 @@ Deno.test("transform", async (t) => {
   await t.step("transform module: svelte", async () => {
     {
       const im = btoaUrl("/svelte/");
-      const res = await fetch(`http://localhost:8080/http://localhost:8083/svelte/app/main.ts?im=${im}`);
+      const res = await fetch(`http://localhost:8080/http://localhost:8083/svelte/app/main.ts?b=${im}`);
       assertEquals(res.status, 200);
       assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
       assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
@@ -176,7 +176,7 @@ Deno.test("transform", async (t) => {
     }
     {
       const im = btoaUrl("/svelte/");
-      const res = await fetch(`http://localhost:8080/http://localhost:8083/svelte/app/App.svelte?im=${im}`);
+      const res = await fetch(`http://localhost:8080/http://localhost:8083/svelte/app/App.svelte?b=${im}`);
       assertEquals(res.status, 200);
       assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
       assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
@@ -195,7 +195,35 @@ Deno.test("transform", async (t) => {
       assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
       assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
       const js = await res.text();
-      assertStringIncludes(js, `h1 id="esmsh">esm.sh</h1>`);
+      assertStringIncludes(js, `<h1 id="esmsh">esm.sh</h1>`);
+    }
+    {
+      const res = await fetch(`http://localhost:8080/http://localhost:8083/readme.md?jsx`);
+      assertEquals(res.status, 200);
+      assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
+      assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
+      const js = await res.text();
+      assertStringIncludes(js, `from"react/jsx-runtime"`);
+      assertStringIncludes(js, `"h1",{id:"esmsh",children:"esm.sh"}`);
+    }
+    {
+      const res = await fetch(`http://localhost:8080/http://localhost:8083/readme.md?svelte`);
+      assertEquals(res.status, 200);
+      assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
+      assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
+      const js = await res.text();
+      assertStringIncludes(js, `from"svelte/internal/client"`);
+      assertStringIncludes(js, `<h1 id="esmsh">esm.sh</h1>`);
+    }
+    {
+      const res = await fetch(`http://localhost:8080/http://localhost:8083/readme.md?vue`);
+      assertEquals(res.status, 200);
+      assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
+      assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
+      const js = await res.text();
+      assertStringIncludes(js, `from"vue"`);
+      assertStringIncludes(js, `("h1",`);
+      assertStringIncludes(js, `,"esm.sh")`);
     }
     {
       const res = await fetch(`http://localhost:8080/http://localhost:8083/SSRF/readme.md`);
@@ -206,47 +234,12 @@ Deno.test("transform", async (t) => {
         "Failed to build module: failed to fetch module http://localhost:8083/SSRF/readme.md: redirect not allowed",
       );
     }
-    {
-      const res = await fetch(`http://localhost:8080/https://raw.githubusercontent.com/esm-dev/esm.sh/refs/heads/main/README.md`);
-      assertEquals(res.status, 200);
-      assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
-      assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
-      const js = await res.text();
-      assertStringIncludes(js, `h1 id="esmsh">esm.sh</h1>`);
-    }
-    {
-      const res = await fetch(`http://localhost:8080/https://raw.githubusercontent.com/esm-dev/esm.sh/refs/heads/main/README.md?jsx`);
-      assertEquals(res.status, 200);
-      assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
-      assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
-      const js = await res.text();
-      assertStringIncludes(js, `from"react/jsx-runtime"`);
-      assertStringIncludes(js, `"h1",{id:"esmsh",children:"esm.sh"}`);
-    }
-    {
-      const res = await fetch(`http://localhost:8080/https://raw.githubusercontent.com/esm-dev/esm.sh/refs/heads/main/README.md?svelte`);
-      assertEquals(res.status, 200);
-      assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
-      assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
-      const js = await res.text();
-      assertStringIncludes(js, `from"svelte/internal/client"`);
-      assertStringIncludes(js, `<h1 id="esmsh">esm.sh</h1>`);
-    }
-    {
-      const res = await fetch(`http://localhost:8080/https://raw.githubusercontent.com/esm-dev/esm.sh/refs/heads/main/README.md?vue`);
-      assertEquals(res.status, 200);
-      assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
-      assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
-      const js = await res.text();
-      assertStringIncludes(js, `from"vue"`);
-      assertStringIncludes(js, `<h1 id="esmsh">esm.sh</h1>`);
-    }
   });
 
   await t.step("generate unocss", async () => {
     {
       const res = await fetch(
-        "http://localhost:8080/http://localhost:8083/with-unocss/vanilla/uno.css?ctx="
+        "http://localhost:8080/http://localhost:8083/with-unocss/vanilla/uno.css?b="
           + btoaUrl("/with-unocss/vanilla/"),
       );
       assertEquals(res.status, 200);
@@ -268,7 +261,7 @@ Deno.test("transform", async (t) => {
     }
     {
       const res = await fetch(
-        "http://localhost:8080/http://localhost:8083/with-unocss/react/uno.css?ctx="
+        "http://localhost:8080/http://localhost:8083/with-unocss/react/uno.css?b="
           + btoaUrl("/with-unocss/react/"),
       );
       assertEquals(res.status, 200);
@@ -290,7 +283,7 @@ Deno.test("transform", async (t) => {
     }
     {
       const res = await fetch(
-        "http://localhost:8080/http://localhost:8083/with-unocss/preact/uno.css?ctx="
+        "http://localhost:8080/http://localhost:8083/with-unocss/preact/uno.css?b="
           + btoaUrl("/with-unocss/preact/"),
       );
       assertEquals(res.status, 200);
@@ -312,7 +305,7 @@ Deno.test("transform", async (t) => {
     }
     {
       const res = await fetch(
-        "http://localhost:8080/http://localhost:8083/with-unocss/vue/uno.css?ctx="
+        "http://localhost:8080/http://localhost:8083/with-unocss/vue/uno.css?b="
           + btoaUrl("/with-unocss/vue/"),
       );
       assertEquals(res.status, 200);
@@ -334,7 +327,7 @@ Deno.test("transform", async (t) => {
     }
     {
       const res = await fetch(
-        "http://localhost:8080/http://localhost:8083/with-unocss/svelte/uno.css?ctx="
+        "http://localhost:8080/http://localhost:8083/with-unocss/svelte/uno.css?b="
           + btoaUrl("/with-unocss/svelte/"),
       );
       assertEquals(res.status, 200);
@@ -359,7 +352,7 @@ Deno.test("transform", async (t) => {
   await t.step("generate tailwindcss", async () => {
     {
       const res = await fetch(
-        "http://localhost:8080/http://localhost:8083/with-tailwindcss/vanilla/tailwind.css?ctx="
+        "http://localhost:8080/http://localhost:8083/with-tailwindcss/vanilla/tailwind.css?b="
           + btoaUrl("/with-tailwindcss/vanilla/"),
       );
       assertEquals(res.status, 200);

@@ -724,7 +724,7 @@ func (s *Handler) ServeUnoCSS(w http.ResponseWriter, r *http.Request, query url.
 					if len(innerText) > 0 {
 						err := json.Unmarshal(innerText, &importMap)
 						if err == nil {
-							importMap.Src = string(ctx)
+							importMap.BaseUrl = string(ctx)
 						}
 					}
 				} else if srcAttr == "" {
@@ -927,7 +927,7 @@ func (s *Handler) parseImportMap(filename string) (importMapRaw []byte, importMa
 						err = errors.New("invalid import map")
 						return
 					}
-					importMap.Src = "file://" + string(filename)
+					importMap.BaseUrl = "file://" + string(filename)
 					// todo: cache parsed import map
 					break
 				}
