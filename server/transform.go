@@ -77,9 +77,10 @@ func transform(options *ResolvedTransformOptions) (out *TransformOutput, err err
 
 	if jsxImportSource == "" && (loader == esbuild.LoaderJSX || loader == esbuild.LoaderTSX) {
 		var ok bool
-		for _, key := range []string{"@jsxRuntime", "@jsxImportSource", "preact", "react"} {
+		for _, key := range []string{"@jsxRuntime", "@jsxImportSource", "react/jsx-runtime", "preact/jsx-runtime"} {
 			jsxImportSource, ok = options.importMap.Resolve(key, nil)
 			if ok {
+				jsxImportSource = strings.TrimSuffix(jsxImportSource, "/jsx-runtime")
 				break
 			}
 		}

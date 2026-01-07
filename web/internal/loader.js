@@ -68,7 +68,7 @@ async function tsx(filename, importMap, sourceCode, isDev) {
     [lang, code, map] = await transformVue(filename, code, importMap, isDev);
   }
   if (!once.tsxWasm) {
-    once.tsxWasm = import("npm:@esm.sh/tsx@1.4.1").then(async (m) => {
+    once.tsxWasm = import("npm:@esm.sh/tsx@1.5.0").then(async (m) => {
       await m.init();
       return m;
     });

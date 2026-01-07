@@ -5,10 +5,9 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width" />
   <title>ESM&gt;CDN</title>
-  <meta name="description"
-    content="A global, fast & smart content delivery network(CDN) for modern(es6+) web development." />
+  <meta name="description" content="A _no-build_ JavaScript CDN for modern web development." />
   <meta name="keywords"
-    content="js,javascript,typescript,modern,web,dev,development,es,module,esm,es2015,es6,deno,npm,github,global,cdn,infrastructure,esbuild" />
+    content="js,javascript,CDN,modern,web,dev,development,es,module,esm,deno,npm,github,jsr,no-build" />
   <style>
     :root {
       --hljs-default-color: #454545;
@@ -333,6 +332,17 @@
       font-weight: 500
     }
   </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "highlight.js": "/highlight.js@11.9.0/es2022/lib/core.mjs",
+        "highlight.js/": "/highlight.js@11.9.0/"
+      }
+    }
+  </script>
+  <!-- <meta name="basepath" content="/$test"> -->
+  <!-- <script src="/x" href="/$test/a.tsx"></script> -->
+  <!-- <script src="/x" href="/$test/tailwind.css"></script> -->
 </head>
 
 <body>
@@ -352,10 +362,10 @@
       </a></p>
   </footer>
   <script type="module">
-    import hljs from "/highlight.js@11.9.0/lib/core";
-    import javascript from "/highlight.js@11.9.0/lib/languages/javascript";
-    import json from "/highlight.js@11.9.0/lib/languages/json";
-    import xml from "/highlight.js@11.9.0/lib/languages/xml"; // for html/jsx syntax
+    import hljs from "highlight.js";
+    import javascript from "highlight.js/lib/languages/javascript";
+    import json from "highlight.js/lib/languages/json";
+    import xml from "highlight.js/lib/languages/xml"; // for html/jsx syntax
 
     // scroll to hashHeading
     const hashHeading = document.getElementById(location.hash.slice(1));

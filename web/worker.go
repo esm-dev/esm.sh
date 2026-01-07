@@ -24,9 +24,9 @@ type JSWorker struct {
 	config    string
 	script    string
 	lock      sync.Mutex
-	process   *os.Process
 	stdin     io.Writer
 	stdout    io.Reader
+	process   *os.Process
 	outReader *bufio.Reader
 }
 
