@@ -2,33 +2,34 @@
 
 set -e
 
+VERSION="v0.1.0"
+
 if [ "$OS" = "Windows_NT" ]; then
-	echo "Windows is not supported"
-	exit 1
-else
-	case $(uname -sm) in
-	"Darwin x86_64")
-    target="darwin-amd64"
-  ;;
-	"Darwin arm64")
-    target="darwin-arm64"
-  ;;
-	"Linux aarch64")
-    target="linux-arm64"
-  ;;
-	*)
-    target="linux-amd64"
-  ;;
-	esac
+  echo "Windows is not supported"
+  exit 1
 fi
 
-version="v0.1.0"
-dl_url="https://github.com/esm-dev/esm.sh/releases/download/${version}/cli-${target}.gz"
+case $(uname -sm) in
+  "Darwin x86_64")
+    target="darwin-amd64"
+  ;;
+  "Darwin arm64")
+    target="darwin-arm64"
+  ;;
+  "Linux aarch64")
+    target="linux-arm64"
+  ;;
+  *)
+    target="linux-amd64"
+  ;;
+esac
+
+dl_url="https://github.com/esm-dev/esm.sh/releases/download/${VERSION}/cli-${target}.gz"
 bin_dir="$HOME/.esm.sh/bin"
 exe="$bin_dir/esm.sh"
 
 if [ ! -d "$bin_dir" ]; then
-	mkdir -p "$bin_dir"
+  mkdir -p "$bin_dir"
 fi
 
 curl --fail --location --progress-bar --output "$exe.gz" "$dl_url"

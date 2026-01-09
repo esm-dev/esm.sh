@@ -26,11 +26,11 @@ type SRIConfig struct {
 }
 
 type ImportMap struct {
-	baseUrl   *url.URL
-	Config    Config                       `json:"config,omitempty"`
+	Config    Config                       `json:"config"`
 	Imports   map[string]string            `json:"imports,omitempty"`
 	Scopes    map[string]map[string]string `json:"scopes,omitempty"`
 	Integrity map[string]string            `json:"integrity,omitempty"`
+	baseUrl   *url.URL
 }
 
 func Parse(baseUrl *url.URL, data []byte) (im ImportMap, err error) {
