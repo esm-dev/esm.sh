@@ -43,21 +43,41 @@ for await (const line of Deno.stdin.readable.pipeThrough(new TextDecoderStream()
 // transform TypeScript/JSX/TSX to JavaScript with HMR support
 async function tsx(filename, importMap, sourceCode, isDev) {
   const imports = importMap?.imports;
+  const devImports = {};
   if (imports && isDev) {
     // add `?dev` query to `react-dom` and `vue` imports for development mode
     for (const [specifier, url] of Object.entries(imports)) {
       if (
-        (specifier === "react" || specifier === "react-dom" || specifier === "react-dom/client" || specifier === "vue")
-        && (url.startsWith("https://") || url.startsWith("http://"))
+        (
+          specifier === "react" || specifier === "react/" || specifier.startsWith("react/")
+          || specifier === "react-dom" || specifier === "react-dom/" || specifier.startsWith("react-dom/")
+          || specifier === "vue"
+        ) && (url.startsWith("https://") || url.startsWith("http://"))
       ) {
-        const u = new URL(url);
-        const q = u.searchParams;
-        if (!q.has("dev")) {
-          q.set("dev", "true");
-          imports[specifier] = u.origin + u.pathname + u.search.replace("dev=true", "dev");
+        const [pkgName, subModule] = specifier.split("/");
+        const { pathname } = new URL(url);
+        const seg1 = pathname.split("/")[1];
+        if (seg1 === pkgName || seg1.startsWith(pkgName + "@")) {
+          const version = seg1.split("@")[1];
+          if (specifier.endsWith("/") || !version) {
+            devImports[specifier] = "https://esm.sh/" + pkgName + (version ? "@" + version : "@latest") + "&dev"
+              + (subModule ? "/" + subModule : "") + "/";
+          } else {
+            devImports[specifier] = "https://esm.sh/" + pkgName + "@" + version + "/es2022/" + (subModule || pkgName)
+              + ".development.mjs";
+            if (specifier === "react" || specifier === "react/" || specifier.startsWith("react/")) {
+              devImports["react/jsx-dev-runtime"] = "https://esm.sh/react@" + version + "/es2022/jsx-dev-runtime.development.mjs";
+            }
+          }
         }
       }
     }
+  }
+  let jsxImportSource = undefined;
+  if (["react/", "react/jsx-runtime", "react/jsx-dev-runtime"].some(s => !!(imports?.[s]))) {
+    jsxImportSource = "react";
+  } else if (["preact/", "preact/jsx-runtime", "preact/jsx-dev-runtime"].some(s => !!(imports?.[s]))) {
+    jsxImportSource = "preact";
   }
   let lang = filename.endsWith(".md?jsx") ? "jsx" : undefined;
   let code = sourceCode ?? await Deno.readTextFile("." + filename);
@@ -80,7 +100,8 @@ async function tsx(filename, importMap, sourceCode, isDev) {
     filename,
     lang,
     code,
-    importMap: importMap ?? undefined,
+    jsxImportSource,
+    importMap: isDev ? { imports: devImports } : undefined,
     sourceMap: isDev ? (map ? "external" : "inline") : undefined,
     dev: isDev
       ? {
