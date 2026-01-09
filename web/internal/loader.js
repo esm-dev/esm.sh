@@ -47,9 +47,10 @@ async function tsx(filename, importMap, sourceCode, isDev) {
   if (imports && isDev) {
     // add `?dev` query to `react-dom` and `vue` imports for development mode
     for (const [specifier, url] of Object.entries(imports)) {
+      const isReact =  specifier === "react" || specifier === "react/" || specifier.startsWith("react/")
       if (
         (
-          specifier === "react" || specifier === "react/" || specifier.startsWith("react/")
+          isReact
           || specifier === "react-dom" || specifier === "react-dom/" || specifier.startsWith("react-dom/")
           || specifier === "vue"
         ) && (url.startsWith("https://") || url.startsWith("http://"))
@@ -65,9 +66,9 @@ async function tsx(filename, importMap, sourceCode, isDev) {
           } else {
             devImports[specifier] = "https://esm.sh/" + pkgName + "@" + version + "/es2022/" + (subModule || pkgName)
               + ".development.mjs";
-            if (specifier === "react" || specifier === "react/" || specifier.startsWith("react/")) {
-              devImports["react/jsx-dev-runtime"] = "https://esm.sh/react@" + version + "/es2022/jsx-dev-runtime.development.mjs";
-            }
+          }
+          if (isReact && version) {
+            devImports["react/jsx-dev-runtime"] = "https://esm.sh/react@" + version + "/es2022/jsx-dev-runtime.development.mjs";
           }
         }
       }
