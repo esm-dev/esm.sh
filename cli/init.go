@@ -96,7 +96,7 @@ func Init() {
 	case "UnoCSS":
 		dir = "demo/with-unocss/" + strings.ToLower(*framework)
 	case "Tailwind":
-		dir = "demo/with-tailwind/" + strings.ToLower(*framework)
+		dir = "demo/with-tailwindcss/" + strings.ToLower(*framework)
 	}
 	err = walkEmbedFS(&efs, dir, func(filename string) error {
 		savePath := projectName + strings.TrimPrefix(filename, dir)

@@ -7,8 +7,8 @@ const once = {};
 
 for await (const line of Deno.stdin.readable.pipeThrough(new TextDecoderStream()).pipeThrough(new TextLineStream())) {
   try {
-    const [type, ...args] = JSON.parse(line);
-    switch (type) {
+    const [loader, ...args] = JSON.parse(line);
+    switch (loader) {
       case "tsx": {
         output("js", await tsx(...args));
         break;
@@ -32,7 +32,7 @@ for await (const line of Deno.stdin.readable.pipeThrough(new TextDecoderStream()
         break;
       }
       default: {
-        output("error", "Unknown loader type: " + type);
+        output("error", "Unknown loader: " + loader);
       }
     }
   } catch (e) {
@@ -68,11 +68,12 @@ async function tsx(filename, importMap, sourceCode, isDev) {
     [lang, code, map] = await transformVue(filename, code, importMap, isDev);
   }
   if (!once.tsxWasm) {
-    once.tsxWasm = import("npm:@esm.sh/tsx@1.5.0").then(async (m) => {
+    once.tsxWasm = import("npm:@esm.sh/tsx@1.5.1").then(async (m) => {
       await m.init();
       return m;
     });
   }
+
   const react = imports?.react;
   const preact = imports?.preact;
   const ret = (await once.tsxWasm).transform({
@@ -146,10 +147,10 @@ async function tailwind(_id, content, config) {
     once.tailwindCompilers = new Map();
   }
   if (!once.tailwind) {
-    once.tailwind = import("npm:tailwindcss@4.1.16");
+    once.tailwind = import("npm:tailwindcss@4.1.18");
   }
   if (!once.oxide) {
-    once.oxide = import("npm:@esm.sh/oxide-wasm@0.1.3").then(({ init, extract }) => init().then(() => ({ extract })));
+    once.oxide = import("npm:@esm.sh/oxide-wasm@0.1.4").then(({ init, extract }) => init().then(() => ({ extract })));
   }
   let compiler = once.tailwindCompilers.get(compilerId);
   if (!compiler || compiler.configCSS !== config?.css) {

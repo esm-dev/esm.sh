@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
 	"os"
@@ -64,7 +65,7 @@ func NewHandler(config Config) *Handler {
 func (s *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	pathname := r.URL.Path
 	switch pathname {
-	case "/@hmr", "/@refresh", "/@prefresh", "/@vdr", "/@rpc-runtime":
+	case "/@hmr", "/@refresh", "/@prefresh", "/@vdr":
 		s.ServeInternalJS(w, r, pathname[2:])
 	case "/@hmr-ws":
 		if s.watchData == nil {
@@ -73,10 +74,6 @@ func (s *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		s.ServeHmrWS(w, r)
 	default:
-		if strings.HasPrefix(pathname, "/@rpc/") {
-			s.ServeRPC(w, r, pathname[6:])
-			return
-		}
 		filename := filepath.Join(s.config.AppDir, pathname)
 		fi, err := os.Lstat(filename)
 		if err == nil && fi.IsDir() {
@@ -117,14 +114,15 @@ func (s *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		query := r.URL.Query()
-		if query.Has("url") {
+		extname := filepath.Ext(filename)
+		if query.Has("url") && extname != ".html" {
 			header := w.Header()
 			header.Set("Content-Type", "application/javascript; charset=utf-8")
 			header.Set("Cache-Control", "public, max-age=31536000, immutable")
 			w.Write([]byte(`const url = new URL(import.meta.url);url.searchParams.delete("url");export default url.href;`))
 			return
 		}
-		switch extname := filepath.Ext(filename); extname {
+		switch extname {
 		case ".html":
 			etag := fmt.Sprintf("w/\"%x-%x%s\"", fi.ModTime().UnixMilli(), fi.Size(), s.etagSuffix)
 			if r.Header.Get("If-None-Match") == etag {
@@ -136,28 +134,30 @@ func (s *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			header.Set("Cache-Control", "public, max-age=0, must-revalidate")
 			header.Set("Etag", etag)
 			s.ServeHtml(w, r, pathname)
+			return
+
 		case ".js", ".mjs", ".jsx", ".ts", ".mts", ".tsx", ".vue", ".svelte":
 			if !query.Has("raw") {
-				if query.Has("rpc") {
-					s.ServeRPCModule(w, r, pathname)
-					return
-				}
 				s.ServeModule(w, r, pathname, query, nil)
 				return
 			}
-			fallthrough
+
 		case ".css":
 			if !query.Has("raw") {
 				if query.Has("module") {
 					s.ServeCSSModule(w, r, query)
 					return
 				}
+				if strings.HasSuffix(pathname, "/tailwind.css") {
+					s.ServeFrameworkCSS(w, r, query, "tailwind")
+					return
+				}
 				if strings.HasSuffix(pathname, "/uno.css") {
-					s.ServeUnoCSS(w, r, query)
+					s.ServeFrameworkCSS(w, r, query, "unocss")
 					return
 				}
 			}
-			fallthrough
+
 		case ".md":
 			if !query.Has("raw") {
 				markdown, err := os.ReadFile(filename)
@@ -211,31 +211,30 @@ func (s *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				}
 				return
 			}
-			fallthrough
-		default:
-			etag := fmt.Sprintf("w/\"%x-%x\"", fi.ModTime().UnixMilli(), fi.Size())
-			if r.Header.Get("If-None-Match") == etag && !query.Has("t") {
-				w.WriteHeader(http.StatusNotModified)
-				return
-			}
-			file, err := os.Open(filename)
-			if err != nil {
-				http.Error(w, "Internal Server Error", 500)
-				return
-			}
-			defer file.Close()
-			contentType := mime.GetContentType(filename)
-			if contentType == "" {
-				contentType = "application/octet-stream"
-			}
-			header := w.Header()
-			header.Set("Content-Type", contentType)
-			if !query.Has("t") {
-				header.Set("Cache-Control", "public, max-age=0, must-revalidate")
-				header.Set("Etag", etag)
-			}
-			io.Copy(w, file)
 		}
+
+		etag := fmt.Sprintf("w/\"%x-%x\"", fi.ModTime().UnixMilli(), fi.Size())
+		if r.Header.Get("If-None-Match") == etag && !query.Has("t") {
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+		file, err := os.Open(filename)
+		if err != nil {
+			http.Error(w, "Internal Server Error", 500)
+			return
+		}
+		defer file.Close()
+		contentType := mime.GetContentType(filename)
+		if contentType == "" {
+			contentType = "application/octet-stream"
+		}
+		header := w.Header()
+		header.Set("Content-Type", contentType)
+		if !query.Has("t") {
+			header.Set("Cache-Control", "public, max-age=0, must-revalidate")
+			header.Set("Etag", etag)
+		}
+		io.Copy(w, file)
 	}
 }
 
@@ -252,10 +251,9 @@ func (s *Handler) ServeHtml(w http.ResponseWriter, r *http.Request, filename str
 	defer htmlFile.Close()
 
 	u := url.URL{Path: filename}
-	im := base64.RawURLEncoding.EncodeToString([]byte(filename))
 	tokenizer := html.NewTokenizer(htmlFile)
 	hotLinks := []string{}
-	unocss := ""
+	frameworkCSS := ""
 	overriding := ""
 
 	for {
@@ -296,7 +294,7 @@ func (s *Handler) ServeHtml(w http.ResponseWriter, r *http.Request, filename str
 						switch attrKey {
 						case "src":
 							w.Write([]byte(" src=\""))
-							w.Write([]byte(srcAttr + "?im=" + im))
+							w.Write([]byte(srcAttr))
 							w.Write([]byte{'"'})
 						default:
 							w.Write([]byte{' '})
@@ -314,15 +312,14 @@ func (s *Handler) ServeHtml(w http.ResponseWriter, r *http.Request, filename str
 					// replace `<script src="https://esm.sh/x" href="..."></script>`
 					// with `<script type="module" src="..."></script>`
 					if srcUrl, parseErr := url.Parse(srcAttr); parseErr == nil && srcUrl.Path == "/x" {
-						hrefAttr, _ = utils.SplitByFirstByte(hrefAttr, '?')
-						hrefAttr = u.ResolveReference(&url.URL{Path: hrefAttr}).Path
-						if hrefAttr == "uno.css" || strings.HasSuffix(hrefAttr, "/uno.css") {
-							if unocss == "" {
-								unocssHref := hrefAttr + "?ctx=" + im
+						href, _ := utils.SplitByFirstByte(hrefAttr, '?')
+						href = u.ResolveReference(&url.URL{Path: href}).Path
+						if href == "/tailwind.css" || strings.HasPrefix(href, "/tailwind.css") || href == "/uno.css" || strings.HasPrefix(href, "/uno.css") {
+							if frameworkCSS == "" {
 								w.Write([]byte("<link rel=\"stylesheet\" href=\""))
-								w.Write([]byte(unocssHref))
+								w.Write([]byte(href))
 								w.Write([]byte{'"', '>'})
-								unocss = unocssHref
+								frameworkCSS = href
 							}
 							overriding = "script"
 						} else {
@@ -333,7 +330,7 @@ func (s *Handler) ServeHtml(w http.ResponseWriter, r *http.Request, filename str
 									// strip
 								case "src":
 									w.Write([]byte(" src=\""))
-									w.Write([]byte(hrefAttr + "?im=" + base64.RawURLEncoding.EncodeToString([]byte(filename))))
+									w.Write([]byte(hrefAttr))
 									w.Write([]byte{'"'})
 								default:
 									w.Write([]byte{' '})
@@ -351,28 +348,27 @@ func (s *Handler) ServeHtml(w http.ResponseWriter, r *http.Request, filename str
 					}
 				}
 			case "link":
-				rel := attrs["rel"]
-				href := attrs["href"]
-				if !isHttpSepcifier(href) {
-					href = u.ResolveReference(&url.URL{Path: href}).Path
-					if href == "uno.css" || strings.HasSuffix(href, "/uno.css") {
-						if unocss == "" {
-							href = href + "?ctx=" + base64.RawURLEncoding.EncodeToString([]byte(filename))
+				relAttr := attrs["rel"]
+				hrefAtr := attrs["href"]
+				if !isHttpSepcifier(hrefAtr) {
+					href := u.ResolveReference(&url.URL{Path: hrefAtr}).Path
+					if href == "/tailwind.css" || strings.HasPrefix(href, "/tailwind.css") || href == "/uno.css" || strings.HasPrefix(href, "/uno.css") {
+						if frameworkCSS == "" {
 							w.Write([]byte("<link rel=\"stylesheet\" href=\""))
 							w.Write([]byte(href))
 							w.Write([]byte{'"', '>'})
-							unocss = href
+							frameworkCSS = href
 						}
 						continue
-					} else if rel == "stylesheet" || rel == "icon" {
-						hotLinks = append(hotLinks, href)
+					} else if relAttr == "stylesheet" || relAttr == "icon" {
+						hotLinks = append(hotLinks, hrefAtr)
 					}
 					w.Write([]byte("<link"))
 					for attrKey, attrVal := range attrs {
 						switch attrKey {
 						case "href":
 							w.Write([]byte(" href=\""))
-							w.Write([]byte(href))
+							w.Write([]byte(hrefAtr))
 							w.Write([]byte{'"'})
 						default:
 							w.Write([]byte{' '})
@@ -412,16 +408,13 @@ func (s *Handler) ServeHtml(w http.ResponseWriter, r *http.Request, filename str
 		}
 
 		// reload the unocss when the module dependency tree is changed
-		if unocss != "" {
-			w.Write([]byte(`const uno="`))
-			w.Write([]byte(unocss))
-			w.Write([]byte(`",unoEl=$("link[href='"+uno+"']");`))
-			w.Write([]byte(`hot.watch("*",(kind,filename)=>{if(/\.(js|mjs|jsx|ts|mts|tsx|vue|svelte)$/i.test(filename)){unoEl.href=uno+"&t="+Date.now().toString(36)}});`))
+		if frameworkCSS != "" {
+			w.Write([]byte(`{const href="` + frameworkCSS + `",link=$("link[href='"+href+"']");`))
+			w.Write([]byte(`hot.watch("*",(kind,filename)=>{if(/\.(js|mjs|jsx|ts|mts|tsx|vue|svelte)$/i.test(filename)){link.href=href+"?t="+Date.now().toString(36)}});`))
 			// reload the page when the uno.css file is modified
-			filename, _ := utils.SplitByFirstByte(unocss, '?')
-			w.Write([]byte("hot.watch(\""))
-			w.Write([]byte(filename))
-			w.Write([]byte("\",()=>location.reload());"))
+			w.Write([]byte(`hot.watch("`))
+			w.Write([]byte(frameworkCSS))
+			w.Write([]byte(`",()=>location.reload())}`))
 		}
 
 		w.Write([]byte("</script>"))
@@ -490,7 +483,7 @@ func (s *Handler) ServeModule(w http.ResponseWriter, r *http.Request, filename s
 		http.Error(w, "Loader worker not started", 500)
 		return
 	}
-	_, importMap, err := s.parseImportMap(string(im))
+	_, importMap, err := s.getAppImportMap()
 	if err != nil {
 		http.Error(w, "could not parse import map: "+err.Error(), 500)
 		return
@@ -514,120 +507,6 @@ func (s *Handler) ServeModule(w http.ResponseWriter, r *http.Request, filename s
 		header.Set("Etag", etag)
 	}
 	w.Write([]byte(js))
-}
-
-func (s *Handler) ServeRPCModule(w http.ResponseWriter, r *http.Request, filename string) {
-	filename = filepath.Join(s.config.AppDir, filename)
-	fi, err := os.Lstat(filename)
-	if err != nil {
-		if os.IsNotExist(err) {
-			http.Error(w, "Not Found", 404)
-		} else {
-			http.Error(w, "Internal Server Error", 500)
-		}
-		return
-	}
-	etag := fmt.Sprintf("w/\"%x-%x%s\"", fi.ModTime().UnixMilli(), fi.Size(), s.etagSuffix)
-	if r.Header.Get("If-None-Match") == etag {
-		w.WriteHeader(http.StatusNotModified)
-		return
-	}
-
-	cacheKey := fmt.Sprintf("module-%s?rpc", filename)
-	etagCacheKey := fmt.Sprintf("module-%s?rpc.etag", filename)
-	if js, ok := s.loaderCache.Load(cacheKey); ok {
-		if e, ok := s.loaderCache.Load(etagCacheKey); ok {
-			if e.(string) == etag {
-				header := w.Header()
-				header.Set("Content-Type", "application/javascript; charset=utf-8")
-				header.Set("Cache-Control", "public, max-age=0, must-revalidate")
-				header.Set("Etag", etag)
-				w.Write(js.([]byte))
-				return
-			}
-		}
-	}
-
-	namedExports, err := validateModule(filename)
-	if err != nil {
-		http.Error(w, err.Error(), 400)
-		return
-	}
-
-	js := fmt.Sprintf(`import{proxy}from"/@rpc-runtime";export const{%s}=proxy(import.meta.url);`, strings.Join(namedExports, ","))
-	s.loaderCache.Store(cacheKey, []byte(js))
-	s.loaderCache.Store(etagCacheKey, etag)
-
-	header := w.Header()
-	header.Set("Content-Type", "application/javascript; charset=utf-8")
-	header.Set("Cache-Control", "public, max-age=0, must-revalidate")
-	header.Set("Etag", etag)
-	w.Write([]byte(js))
-}
-
-func (s *Handler) ServeRPC(w http.ResponseWriter, r *http.Request, filename string) {
-	query := r.URL.Query()
-
-	fn := query.Get("fn")
-	if fn == "" {
-		http.Error(w, "Required parameter 'fn' is missing", 400)
-		return
-	}
-
-	im, err := base64.RawURLEncoding.DecodeString(query.Get("im"))
-	if err != nil {
-		http.Error(w, "Required parameter 'im' is missing", 400)
-		return
-	}
-
-	importMapRaw, _, err := s.parseImportMap(string(im))
-	if err != nil {
-		http.Error(w, "could not parse import map: "+err.Error(), 500)
-		return
-	}
-
-	var args []any
-	if json.NewDecoder(r.Body).Decode(&args) != nil {
-		http.Error(w, "Failed to decode rpc args", 400)
-		return
-	}
-
-	importMapJsonPath := filepath.Join(s.config.AppDir, ".importmap.json")
-	err = os.WriteFile(importMapJsonPath, []byte(importMapRaw), 0644)
-	if err != nil {
-		http.Error(w, "Failed to write import map: "+err.Error(), 500)
-		return
-	}
-	defer os.Remove(importMapJsonPath)
-
-	// todo: cache rpc worker
-	rpcWorker := &JSWorker{
-		wd:     s.config.AppDir,
-		script: "rpc-worker.js",
-		config: ".importmap.json",
-	}
-	err = rpcWorker.Start()
-	if err != nil {
-		fmt.Println(term.Red("Failed to start loader worker: " + err.Error()))
-		http.Error(w, "Failed to start loader worker: "+err.Error(), 500)
-		return
-	}
-	defer rpcWorker.Stop()
-
-	header := w.Header()
-	header.Set("Content-Type", "application/json; charset=utf-8")
-	header.Set("Cache-Control", "public, max-age=0, must-revalidate")
-
-	_, ret, err := rpcWorker.Call(filename, fn, args)
-	if err != nil {
-		json.NewEncoder(w).Encode(map[string]any{
-			"error": err.Error(),
-		})
-	} else {
-		w.Write([]byte("{\"result\":"))
-		w.Write([]byte(ret))
-		w.Write([]byte("}"))
-	}
 }
 
 func (s *Handler) ServeCSSModule(w http.ResponseWriter, r *http.Request, query url.Values) {
@@ -671,28 +550,19 @@ func (s *Handler) ServeCSSModule(w http.ResponseWriter, r *http.Request, query u
 	w.Write([]byte("export default css;"))
 }
 
-func (s *Handler) ServeUnoCSS(w http.ResponseWriter, r *http.Request, query url.Values) {
-	ctx, err := base64.RawURLEncoding.DecodeString(query.Get("ctx"))
+func (s *Handler) ServeFrameworkCSS(w http.ResponseWriter, r *http.Request, query url.Values, framework string) {
+	indexHtmlFile, err := os.Open(filepath.Join(s.config.AppDir, "index.html"))
 	if err != nil {
-		http.Error(w, "Bad Request", 400)
+		fmt.Println(term.Red("[error] failed to open index.html: " + err.Error()))
+		http.Error(w, "Internal Server Error", 500)
 		return
 	}
-	imHtmlFilename := filepath.Join(s.config.AppDir, string(ctx))
-	imHtmlFile, err := os.Open(imHtmlFilename)
-	if err != nil {
-		if os.IsNotExist(err) {
-			http.Error(w, "Bad Request", 400)
-		} else {
-			http.Error(w, "Internal Server Error", 500)
-		}
-		return
-	}
-	defer imHtmlFile.Close()
+	defer indexHtmlFile.Close()
 
 	contents := [][]byte{}
 	jsEntries := map[string]struct{}{}
 	importMap := importmap.ImportMap{}
-	tokenizer := html.NewTokenizer(imHtmlFile)
+	tokenizer := html.NewTokenizer(indexHtmlFile)
 	for {
 		tt := tokenizer.Next()
 		if tt == html.ErrorToken {
@@ -724,7 +594,7 @@ func (s *Handler) ServeUnoCSS(w http.ResponseWriter, r *http.Request, query url.
 					if len(innerText) > 0 {
 						err := json.Unmarshal(innerText, &importMap)
 						if err == nil {
-							importMap.BaseUrl = string(ctx)
+							importMap.BaseUrl = "file://index.html"
 						}
 					}
 				} else if srcAttr == "" {
@@ -740,7 +610,7 @@ func (s *Handler) ServeUnoCSS(w http.ResponseWriter, r *http.Request, query url.
 						jsEntries[srcAttr] = struct{}{}
 					}
 				}
-			case "link", "meta", "title", "base", "head", "noscript", "slot", "template", "option":
+			case "link", "meta", "title", "base", "head", "noscript":
 				// ignore
 			default:
 				contents = append(contents, tokenizer.Raw())
@@ -759,11 +629,9 @@ func (s *Handler) ServeUnoCSS(w http.ResponseWriter, r *http.Request, query url.
 
 	tree := map[string][]byte{}
 	for entry := range jsEntries {
-		t, err := s.analyzeDependencyTree(filepath.Join(filepath.Dir(imHtmlFilename), entry), importMap)
+		t, err := s.analyzeDependencyTree(filepath.Join(s.config.AppDir, entry), importMap)
 		if err == nil {
-			for filename, code := range t {
-				tree[filename] = code
-			}
+			maps.Copy(tree, t)
 		}
 	}
 	xx := xxhash.New()
@@ -783,8 +651,8 @@ func (s *Handler) ServeUnoCSS(w http.ResponseWriter, r *http.Request, query url.
 		w.WriteHeader(http.StatusNotModified)
 		return
 	}
-	cacheKey := fmt.Sprintf("unocss-%s", ctx)
-	etagCacheKey := fmt.Sprintf("unocss-%s.etag", ctx)
+	cacheKey := framework
+	etagCacheKey := framework + ".etag"
 	if css, ok := s.loaderCache.Load(cacheKey); ok {
 		if e, ok := s.loaderCache.Load(etagCacheKey); ok {
 			if e.(string) == etag {
@@ -804,9 +672,14 @@ func (s *Handler) ServeUnoCSS(w http.ResponseWriter, r *http.Request, query url.
 		return
 	}
 	config := map[string]any{"filename": r.URL.Path, "css": string(configCSS)}
-	_, cssRaw, err := s.loaderWorker.Call("unocss", r.URL.Path+"?"+r.URL.RawQuery, string(bytes.Join(contents, []byte{'\n'})), config)
+	_, cssRaw, err := s.loaderWorker.Call(framework, r.URL.Path+"?"+r.URL.RawQuery, string(bytes.Join(contents, []byte{'\n'})), config)
+	if err != nil {
+		fmt.Println(term.Red("[error] loader(" + framework + "): " + err.Error()))
+		http.Error(w, "Internal Server Error", 500)
+		return
+	}
 	var css string
-	json.Unmarshal([]byte(cssRaw), &css)
+	err = json.Unmarshal([]byte(cssRaw), &css)
 	if err != nil {
 		fmt.Println(term.Red("[error] " + err.Error()))
 		http.Error(w, "Internal Server Error", 500)
@@ -895,8 +768,8 @@ func (s *Handler) ServeHmrWS(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Handler) parseImportMap(filename string) (importMapRaw []byte, importMap importmap.ImportMap, err error) {
-	file, err := os.Open(filepath.Join(s.config.AppDir, filename))
+func (s *Handler) getAppImportMap() (importMapRaw []byte, importMap importmap.ImportMap, err error) {
+	file, err := os.Open(filepath.Join(s.config.AppDir, "index.html"))
 	if err != nil {
 		return
 	}
@@ -927,7 +800,7 @@ func (s *Handler) parseImportMap(filename string) (importMapRaw []byte, importMa
 						err = errors.New("invalid import map")
 						return
 					}
-					importMap.BaseUrl = "file://" + string(filename)
+					importMap.BaseUrl = "file://index.html"
 					// todo: cache parsed import map
 					break
 				}
@@ -1150,9 +1023,12 @@ func (s *Handler) preload() {
 					Path: pathname,
 				},
 			}
-			if strings.HasSuffix(entry, "uno.css") {
+			if strings.HasSuffix(entry, "tailwind.css") {
 				r.URL.RawQuery = "ctx=" + im
-				s.ServeUnoCSS(w, r, r.URL.Query())
+				s.ServeFrameworkCSS(w, r, r.URL.Query(), "tailwind")
+			} else if strings.HasSuffix(entry, "uno.css") {
+				r.URL.RawQuery = "ctx=" + im
+				s.ServeFrameworkCSS(w, r, r.URL.Query(), "unocss")
 			} else {
 				r.URL.RawQuery = "im=" + im
 				s.ServeModule(w, r, pathname, r.URL.Query(), nil)

@@ -142,7 +142,9 @@ class HotContext {
       callback = maybeUrl;
       maybeUrl = undefined;
     }
-    if (maybeUrl) {
+    if (maybeUrl === "*") {
+      watch("*", callback);
+    } else if (maybeUrl) {
       watch(new URL(maybeUrl, location).pathname, callback);
     } else {
       watch(this.#url.pathname, callback);

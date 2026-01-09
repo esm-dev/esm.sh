@@ -15,9 +15,9 @@ import (
 )
 
 type Config struct {
-	CDN    string `json:"cdn"`
-	Target string `json:"target"`
-	SRI    any    `json:"sri"`
+	CDN    string `json:"cdn,omitempty"`
+	Target string `json:"target,omitempty"`
+	SRI    any    `json:"sri,omitempty"`
 }
 
 type SRIConfig struct {
@@ -25,12 +25,12 @@ type SRIConfig struct {
 }
 
 type ImportMap struct {
-	BaseUrl   string                       `json:"baseUrl"`
-	Imports   map[string]string            `json:"imports"`
-	Scopes    map[string]map[string]string `json:"scopes"`
-	Routes    map[string]string            `json:"routes"`
-	Integrity map[string]string            `json:"integrity"`
-	Config    Config                       `json:"config"`
+	BaseUrl   string                       `json:"baseUrl,omitempty"`
+	Imports   map[string]string            `json:"imports,omitempty"`
+	Scopes    map[string]map[string]string `json:"scopes,omitempty"`
+	Routes    map[string]string            `json:"routes,omitempty"`
+	Integrity map[string]string            `json:"integrity,omitempty"`
+	Config    Config                       `json:"config,omitempty"`
 }
 
 func (im *ImportMap) Resolve(specifier string, referrer *url.URL) (string, bool) {

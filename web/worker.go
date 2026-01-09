@@ -56,8 +56,8 @@ func (jsw *JSWorker) Start() (err error) {
 
 	args := []string{
 		"run",
-		"--allow-read=" + appDir,
-		"--allow-write=" + appDir,
+		"--allow-read",
+		"--allow-write",
 		"--allow-env",
 		"--allow-net",
 		"--allow-sys",
