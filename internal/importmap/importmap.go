@@ -66,35 +66,16 @@ func (im *ImportMap) Resolve(specifier string, referrer *url.URL) (string, bool)
 			return normalizeUrl(baseUrl, v) + query, true
 		}
 		if strings.ContainsRune(specifier, '/') {
-			nonTrailingSlashImports := make([][2]string, 0, len(imports))
 			for k, v := range imports {
 				if strings.HasSuffix(k, "/") {
 					if strings.HasPrefix(specifier, k) {
 						return normalizeUrl(baseUrl, v+specifier[len(k):]) + query, true
 					}
-				} else {
-					nonTrailingSlashImports = append(nonTrailingSlashImports, [2]string{k, v})
-				}
-			}
-			// expand match
-			// e.g. `"react": "https://esm.sh/react@18` -> `"react/": "https://esm.sh/react@18/`
-			for _, p := range nonTrailingSlashImports {
-				k, v := p[0], p[1]
-				p, q := utils.SplitByLastByte(v, '?')
-				if q != "" {
-					q = "?" + q
-					if query != "" {
-						q += "&" + query[1:]
-					}
-				} else if query != "" {
-					q = query
-				}
-				if strings.HasPrefix(specifier, k+"/") {
-					return normalizeUrl(baseUrl, p+specifier[len(k):]) + q, true
 				}
 			}
 		}
 	}
+
 	return specifier + query, false
 }
 
