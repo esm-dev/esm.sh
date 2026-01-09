@@ -2,6 +2,7 @@ package importmap
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"sort"
@@ -25,19 +26,25 @@ type SRIConfig struct {
 }
 
 type ImportMap struct {
-	BaseUrl   string                       `json:"baseUrl,omitempty"`
+	baseUrl   *url.URL
+	Config    Config                       `json:"config,omitempty"`
 	Imports   map[string]string            `json:"imports,omitempty"`
 	Scopes    map[string]map[string]string `json:"scopes,omitempty"`
-	Routes    map[string]string            `json:"routes,omitempty"`
 	Integrity map[string]string            `json:"integrity,omitempty"`
-	Config    Config                       `json:"config,omitempty"`
+}
+
+func Parse(baseUrl *url.URL, data []byte) (im ImportMap, err error) {
+	if err = json.Unmarshal(data, &im); err != nil {
+		return
+	}
+	im.baseUrl = baseUrl
+	return
 }
 
 func (im *ImportMap) Resolve(specifier string, referrer *url.URL) (string, bool) {
 	imports := im.Imports
-	baseUrl, err := url.Parse(im.BaseUrl)
-	if err != nil {
-		return "", false
+	if im.baseUrl == nil {
+		im.baseUrl, _ = url.Parse("file:///")
 	}
 
 	specifier, _ = utils.SplitByFirstByte(specifier, '#')
@@ -63,13 +70,13 @@ func (im *ImportMap) Resolve(specifier string, referrer *url.URL) (string, bool)
 
 	if len(imports) > 0 {
 		if v, ok := imports[specifier]; ok {
-			return normalizeUrl(baseUrl, v) + query, true
+			return normalizeUrl(im.baseUrl, v) + query, true
 		}
 		if strings.ContainsRune(specifier, '/') {
 			for k, v := range imports {
 				if strings.HasSuffix(k, "/") {
 					if strings.HasPrefix(specifier, k) {
-						return normalizeUrl(baseUrl, v+specifier[len(k):]) + query, true
+						return normalizeUrl(im.baseUrl, v+specifier[len(k):]) + query, true
 					}
 				}
 			}
@@ -301,14 +308,6 @@ func (im *ImportMap) FormatJSON(indent int) string {
 			buf.WriteByte('\n')
 			i++
 		}
-		buf.Write(indentStr)
-		buf.WriteByte('}')
-	}
-	if len(im.Routes) > 0 {
-		buf.WriteString(",\n")
-		buf.Write(indentStr)
-		buf.WriteString("\"routes\": {\n")
-		formatMap(&buf, im.Routes, indent+2)
 		buf.Write(indentStr)
 		buf.WriteByte('}')
 	}

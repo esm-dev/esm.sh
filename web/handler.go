@@ -592,10 +592,7 @@ func (s *Handler) ServeFrameworkCSS(w http.ResponseWriter, r *http.Request, quer
 					tokenizer.Next()
 					innerText := bytes.TrimSpace(tokenizer.Text())
 					if len(innerText) > 0 {
-						err := json.Unmarshal(innerText, &importMap)
-						if err == nil {
-							importMap.BaseUrl = "file://index.html"
-						}
+						importMap, _ = importmap.Parse(nil, innerText)
 					}
 				} else if srcAttr == "" {
 					// inline script content
@@ -796,11 +793,11 @@ func (s *Handler) getAppImportMap() (importMapRaw []byte, importMap importmap.Im
 				if typeAttr == "importmap" {
 					tokenizer.Next()
 					importMapRaw = tokenizer.Text()
-					if json.Unmarshal(importMapRaw, &importMap) != nil {
+					importMap, err = importmap.Parse(nil, importMapRaw)
+					if err != nil {
 						err = errors.New("invalid import map")
 						return
 					}
-					importMap.BaseUrl = "file://index.html"
 					// todo: cache parsed import map
 					break
 				}

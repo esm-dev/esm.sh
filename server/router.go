@@ -584,7 +584,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 			fetchClient, recycle := fetch.NewClient(ctx.UserAgent(), 15, false, allowedHosts)
 			defer recycle()
 
-			if strings.HasSuffix(modUrl.Path, "/uno.css") || strings.HasSuffix(modUrl.Path, "/tailwind.css") {
+			if strings.HasSuffix(modUrl.Path, "/tailwind.css") || strings.HasSuffix(modUrl.Path, "/uno.css") {
 				h := sha1.New()
 				h.Write([]byte(modUrlStr))
 				h.Write([]byte(basePath))
@@ -648,10 +648,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 								tokenizer.Next()
 								innerText := bytes.TrimSpace(tokenizer.Text())
 								if len(innerText) > 0 {
-									err := json.Unmarshal(innerText, &importMap)
-									if err == nil {
-										importMap.BaseUrl = baseUrl.String()
-									}
+									importMap, _ = importmap.Parse(baseUrl, innerText)
 								}
 							} else if srcAttr == "" {
 								// inline script content
@@ -775,11 +772,11 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 									tokenizer.Next()
 									innerText := bytes.TrimSpace(tokenizer.Text())
 									if len(innerText) > 0 {
-										err := json.Unmarshal(innerText, &importMap)
+										var err error
+										importMap, err = importmap.Parse(baseUrl, innerText)
 										if err != nil {
 											return rex.Status(400, "Invalid import map")
 										}
-										importMap.BaseUrl = baseUrl.String()
 									}
 									break
 								}
