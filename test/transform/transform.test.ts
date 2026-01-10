@@ -4,7 +4,7 @@ import { join } from "jsr:@std/path";
 
 Deno.test("transform", async (t) => {
   const modUrl = new URL(import.meta.url);
-  const demoRootDir = join(modUrl.pathname, "../../../cli/demo");
+  const templateDir = join(modUrl.pathname, "../../../cli/template");
   const ac = new AbortController();
 
   Deno.serve({
@@ -22,7 +22,7 @@ Deno.test("transform", async (t) => {
       return Response.redirect("http://192.168.1.42/readme.md", 302);
     }
     try {
-      const file = join(demoRootDir, pathname);
+      const file = join(templateDir, pathname);
       const f = await Deno.open(file);
       return new Response(f.readable, {
         headers: {
