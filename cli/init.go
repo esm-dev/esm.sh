@@ -14,7 +14,7 @@ import (
 	"github.com/ije/gox/term"
 )
 
-//go:embed demo
+//go:embed template
 var efs embed.FS
 
 const initHelpMessage = `Initialize a new nobuild web app with esm.sh CDN.
@@ -91,13 +91,16 @@ func Init() {
 		}
 	}
 
-	dir := "demo/" + strings.ToLower(*framework)
+	var dir string
 	switch *cssFramework {
-	case "UnoCSS":
-		dir = "demo/with-unocss/" + strings.ToLower(*framework)
 	case "Tailwind":
-		dir = "demo/with-tailwindcss/" + strings.ToLower(*framework)
+		dir = "template/with-tailwindcss/" + strings.ToLower(*framework)
+	case "UnoCSS":
+		dir = "template/with-unocss/" + strings.ToLower(*framework)
+	default:
+		dir = "template/" + strings.ToLower(*framework)
 	}
+
 	err = walkEmbedFS(&efs, dir, func(filename string) error {
 		savePath := projectName + strings.TrimPrefix(filename, dir)
 		os.MkdirAll(filepath.Dir(savePath), 0755)
@@ -154,10 +157,10 @@ func Init() {
 	fmt.Println(" ")
 	fmt.Println(term.Dim("Project created successfully."))
 	fmt.Println(term.Dim("We highly recommend installing our VS Code extension for a better DX: https://link.esm.sh/vsce"))
-	fmt.Println(term.Dim("To start the app in development mode, run:"))
 	fmt.Println(" ")
+	fmt.Println(term.Dim("To start the app in development mode, run:"))
 	fmt.Println(term.Dim("$ ") + "cd " + projectName)
-	if strings.Contains(os.Args[0], "/node_modules/") {
+	if strings.Contains(os.Args[0], "/node_modules/@esm.sh/cli-") {
 		fmt.Println(term.Dim("$ ") + "npx esm.sh dev")
 	} else {
 		fmt.Println(term.Dim("$ ") + "esm.sh dev")

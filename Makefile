@@ -8,10 +8,10 @@ run/cli/tidy:
 	@go run -tags debug main.go tidy
 
 run/cli/dev:
-	@go run -tags debug main.go dev cli/demo/${app}
+	@go run -tags debug main.go dev cli/template/${tpl}
 
 run/cli/serve:
-	@go run -tags debug main.go serve cli/demo/${app}
+	@go run -tags debug main.go serve cli/template/${tpl}
 
 run/server: config.json
 	@rm -rf .esmd/log
