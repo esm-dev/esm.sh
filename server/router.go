@@ -656,7 +656,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 								content = append(content, string(tokenizer.Text()))
 							} else {
 								if hrefAttr != "" && strings.HasSuffix(srcAttr, "/x") {
-									if !isHttpSepcifier(hrefAttr) && endsWith(hrefAttr, moduleExts...) {
+									if !isHttpSpecifier(hrefAttr) && endsWith(hrefAttr, moduleExts...) {
 										jsEntries[hrefAttr] = struct{}{}
 									}
 								}

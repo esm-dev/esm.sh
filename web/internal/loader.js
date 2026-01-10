@@ -1,9 +1,10 @@
 import { TextLineStream } from "jsr:@std/streams@1.0.9/text-line-stream";
 
+const once = {};
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 const output = (type, data) => Deno.stdout.write(enc.encode(">>>" + type + ":" + JSON.stringify(data) + "\n"));
-const once = {};
+const error = (message) => output("error", message);
 
 for await (const line of Deno.stdin.readable.pipeThrough(new TextDecoderStream()).pipeThrough(new TextLineStream())) {
   try {
@@ -32,11 +33,11 @@ for await (const line of Deno.stdin.readable.pipeThrough(new TextDecoderStream()
         break;
       }
       default: {
-        output("error", "Unknown loader: " + loader);
+        error("Unknown loader: " + loader);
       }
     }
   } catch (e) {
-    output("error", e.message);
+    error(e.message);
   }
 }
 
@@ -47,7 +48,7 @@ async function tsx(filename, importMap, sourceCode, isDev) {
   if (imports && isDev) {
     // add `?dev` query to `react-dom` and `vue` imports for development mode
     for (const [specifier, url] of Object.entries(imports)) {
-      const isReact =  specifier === "react" || specifier === "react/" || specifier.startsWith("react/")
+      const isReact = specifier === "react" || specifier === "react/" || specifier.startsWith("react/");
       if (
         (
           isReact
@@ -183,7 +184,7 @@ async function tailwind(_id, content, config) {
           switch (id) {
             case "tailwindcss": {
               if (!once.tailwindIndexCSS) {
-                once.tailwindIndexCSS = fetch("https://esm.sh/tailwindcss@4.1.16/index.css").then(res => res.text());
+                once.tailwindIndexCSS = fetch("https://esm.sh/tailwindcss@4.1.18/index.css").then(res => res.text());
               }
               const css = await once.tailwindIndexCSS;
               return {

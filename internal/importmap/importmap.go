@@ -42,18 +42,23 @@ func Parse(baseUrl *url.URL, data []byte) (im ImportMap, err error) {
 }
 
 func (im *ImportMap) Resolve(specifier string, referrer *url.URL) (string, bool) {
-	imports := im.Imports
 	if im.baseUrl == nil {
 		im.baseUrl, _ = url.Parse("file:///")
 	}
 
-	specifier, _ = utils.SplitByFirstByte(specifier, '#')
+	var hash string
+	specifier, hash = utils.SplitByFirstByte(specifier, '#')
+	if hash != "" {
+		hash = "#" + hash
+	}
+
 	var query string
 	specifier, query = utils.SplitByFirstByte(specifier, '?')
 	if query != "" {
 		query = "?" + query
 	}
 
+	imports := im.Imports
 	if referrer != nil {
 		scopeKeys := make(ScopeKeys, 0, len(im.Scopes))
 		for prefix := range im.Scopes {
@@ -83,7 +88,7 @@ func (im *ImportMap) Resolve(specifier string, referrer *url.URL) (string, bool)
 		}
 	}
 
-	return specifier + query, false
+	return specifier + query + hash, false
 }
 
 func (im *ImportMap) AddPackages(packages []string) (addedPackages []PackageInfo, warnings []string, errors []error) {

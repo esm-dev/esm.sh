@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -492,7 +491,7 @@ func (s *Handler) ServeModule(w http.ResponseWriter, r *http.Request, filename s
 	if preTransform != nil {
 		args[3] = string(preTransform)
 	}
-	_, js, err := s.callLoaderJS(args...)
+	_, js, err := s.loaderWorker.Call(args...)
 	if err != nil {
 		fmt.Println(term.Red("[error] " + err.Error()))
 		http.Error(w, "Internal Server Error", 500)
@@ -669,16 +668,9 @@ func (s *Handler) ServeFrameworkCSS(w http.ResponseWriter, r *http.Request, quer
 		return
 	}
 	config := map[string]any{"filename": r.URL.Path, "css": string(configCSS)}
-	_, cssRaw, err := s.loaderWorker.Call(framework, r.URL.Path+"?"+r.URL.RawQuery, string(bytes.Join(contents, []byte{'\n'})), config)
+	_, css, err := s.loaderWorker.Call(framework, r.URL.Path+"?"+r.URL.RawQuery, string(bytes.Join(contents, []byte{'\n'})), config)
 	if err != nil {
 		fmt.Println(term.Red("[error] loader(" + framework + "): " + err.Error()))
-		http.Error(w, "Internal Server Error", 500)
-		return
-	}
-	var css string
-	err = json.Unmarshal([]byte(cssRaw), &css)
-	if err != nil {
-		fmt.Println(term.Red("[error] " + err.Error()))
 		http.Error(w, "Internal Server Error", 500)
 		return
 	}
@@ -884,7 +876,7 @@ func (s *Handler) analyzeDependencyTree(entry string, importMap importmap.Import
 							if s.loaderWorker == nil {
 								return esbuild.OnLoadResult{}, errors.New("loader worker not started")
 							}
-							lang, code, err := s.callLoaderJS(ext[1:], pathname, contents, importMap)
+							lang, code, err := s.loaderWorker.Call(ext[1:], pathname, contents, importMap)
 							if err != nil {
 								return esbuild.OnLoadResult{}, err
 							}
@@ -1032,14 +1024,4 @@ func (s *Handler) preload() {
 			}
 		}
 	}
-}
-
-func (s *Handler) callLoaderJS(args ...any) (format string, code string, err error) {
-	var data string
-	format, data, err = s.loaderWorker.Call(args...)
-	if err != nil {
-		return
-	}
-	err = json.Unmarshal([]byte(data), &code)
-	return
 }

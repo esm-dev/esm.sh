@@ -70,7 +70,7 @@ func resolveSvelteVersion(npmrc *NpmRC, importMap importmap.ImportMap) (svelteVe
 	svelteVersion = "5"
 	if len(importMap.Imports) > 0 {
 		svelteUrl, ok := importMap.Imports["svelte"]
-		if ok && isHttpSepcifier(svelteUrl) {
+		if ok && isHttpSpecifier(svelteUrl) {
 			u, e := url.Parse(svelteUrl)
 			if e == nil {
 				_, v, _, _ := splitEsmPath(u.Path)
@@ -150,7 +150,7 @@ func resolveVueVersion(npmrc *NpmRC, importMap importmap.ImportMap) (vueVersion 
 	vueVersion = "3"
 	if len(importMap.Imports) > 0 {
 		vueUrl, ok := importMap.Imports["vue"]
-		if ok && isHttpSepcifier(vueUrl) {
+		if ok && isHttpSpecifier(vueUrl) {
 			u, e := url.Parse(vueUrl)
 			if e == nil {
 				_, v, _, _ := splitEsmPath(u.Path)

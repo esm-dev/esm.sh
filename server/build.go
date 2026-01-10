@@ -856,7 +856,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 					}
 
 					// check if the specifier is in the `imports` field and is a http module
-					if ctx.externalAll && isHttpSepcifier(specifier) {
+					if ctx.externalAll && isHttpSpecifier(specifier) {
 						return esbuild.OnResolveResult{
 							Path:     args.Path,
 							External: true,
