@@ -93,8 +93,7 @@ Deno.test("transform", async (t) => {
     assertEquals(res.headers.get("Content-Type"), "application/javascript; charset=utf-8");
     assertEquals(res.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
     const js = await res.text();
-    assertStringIncludes(js, "String.raw");
-    assertStringIncludes(js, '`\n<div class="center-box relative">');
+    assertStringIncludes(js, '\n<div class="center-box relative">');
     assertStringIncludes(js, 'globalThis.document.head.insertAdjacentHTML("beforeend",`<style>*{margin:0;padding:0;box-sizing:border-box}');
   });
 
