@@ -77,11 +77,22 @@ func transform(options *ResolvedTransformOptions) (out *TransformOutput, err err
 
 	if jsxImportSource == "" && (loader == esbuild.LoaderJSX || loader == esbuild.LoaderTSX) {
 		var ok bool
-		for _, key := range []string{"@jsxRuntime", "@jsxImportSource", "react/jsx-runtime", "preact/jsx-runtime"} {
-			jsxImportSource, ok = options.importMap.Resolve(key, nil)
-			if ok {
-				jsxImportSource = strings.TrimSuffix(jsxImportSource, "/jsx-runtime")
+		for _, key := range []string{"@jsxRuntime", "@jsxImportSource"} {
+			path, resolved := options.importMap.Resolve(key, nil)
+			if resolved {
+				jsxImportSource = strings.TrimSuffix(path, "/jsx-runtime")
+				ok = true
 				break
+			}
+		}
+		if !ok {
+			for _, key := range []string{"react/jsx-runtime", "preact/jsx-runtime"} {
+				_, resolved := options.importMap.Resolve(key, nil)
+				if resolved {
+					jsxImportSource = strings.TrimSuffix(key, "/jsx-runtime")
+					ok = true
+					break
+				}
 			}
 		}
 		if !ok {
@@ -126,7 +137,10 @@ func transform(options *ResolvedTransformOptions) (out *TransformOutput, err err
 				Setup: func(build esbuild.PluginBuild) {
 					build.OnResolve(esbuild.OnResolveOptions{Filter: ".*"}, func(args esbuild.OnResolveArgs) (esbuild.OnResolveResult, error) {
 						importerUrl, _ := url.Parse(args.Importer)
-						path, _ := options.importMap.Resolve(args.Path, importerUrl)
+						path, ok := options.importMap.Resolve(args.Path, importerUrl)
+						if ok && isHttpSpecifier(path) {
+							return esbuild.OnResolveResult{Path: args.Path, External: true}, nil
+						}
 						return esbuild.OnResolveResult{Path: path, External: true}, nil
 					})
 				},
@@ -155,7 +169,7 @@ func transform(options *ResolvedTransformOptions) (out *TransformOutput, err err
 
 // bundleHttpModule bundles the http module and it's submodules.
 func bundleHttpModule(npmrc *NpmRC, entry string, importMap importmap.ImportMap, collectDependencies bool, fetchClient *fetch.FetchClient) (js []byte, jsx bool, css []byte, dependencyTree map[string][]byte, err error) {
-	if !isHttpSepcifier(entry) {
+	if !isHttpSpecifier(entry) {
 		err = errors.New("require a http module")
 		return
 	}
@@ -180,8 +194,12 @@ func bundleHttpModule(npmrc *NpmRC, entry string, importMap importmap.ImportMap,
 				Setup: func(build esbuild.PluginBuild) {
 					build.OnResolve(esbuild.OnResolveOptions{Filter: ".*"}, func(args esbuild.OnResolveArgs) (esbuild.OnResolveResult, error) {
 						importerUrl, _ := url.Parse(args.Importer)
-						path, _ := importMap.Resolve(args.Path, importerUrl)
-						if isHttpSepcifier(args.Importer) && (isRelPathSpecifier(path) || isAbsPathSpecifier(path)) {
+						path, ok := importMap.Resolve(args.Path, importerUrl)
+						if ok && isHttpSpecifier(path) {
+							// ignore external modules in the import map
+							return esbuild.OnResolveResult{Path: args.Path, External: true}, nil
+						}
+						if isHttpSpecifier(args.Importer) && (isRelPathSpecifier(path) || isAbsPathSpecifier(path)) {
 							u, e := url.Parse(args.Importer)
 							if e == nil {
 								var query string
@@ -193,7 +211,7 @@ func bundleHttpModule(npmrc *NpmRC, entry string, importMap importmap.ImportMap,
 								path = u.Scheme + "://" + u.Host + u.Path + query
 							}
 						}
-						if isHttpSepcifier(path) && (args.Kind != esbuild.ResolveJSDynamicImport || collectDependencies) {
+						if isHttpSpecifier(path) && (args.Kind != esbuild.ResolveJSDynamicImport || collectDependencies) {
 							u, e := url.Parse(path)
 							if e == nil {
 								if u.Scheme == entryUrl.Scheme && u.Host == entryUrl.Host {

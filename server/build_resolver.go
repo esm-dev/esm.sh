@@ -743,7 +743,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 	}
 
 	// if it's a http module
-	if isHttpSepcifier(specifier) {
+	if isHttpSpecifier(specifier) {
 		return specifier, nil
 	}
 

@@ -1,3 +1,6 @@
+run/cli/init:
+	@go run -tags debug main.go init
+
 run/cli/add:
 	@go run -tags debug main.go add ${pkg}
 

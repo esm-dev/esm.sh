@@ -194,12 +194,12 @@ func normalizeConfig(config *Config) {
 		config.AccessLog = os.Getenv("ACCESS_LOG") == "true"
 	}
 	if config.NpmRegistry != "" {
-		if isHttpSepcifier(config.NpmRegistry) {
+		if isHttpSpecifier(config.NpmRegistry) {
 			config.NpmRegistry = strings.TrimRight(config.NpmRegistry, "/") + "/"
 		}
 	} else {
 		v := os.Getenv("NPM_REGISTRY")
-		if v != "" && isHttpSepcifier(v) {
+		if v != "" && isHttpSpecifier(v) {
 			config.NpmRegistry = strings.TrimRight(v, "/") + "/"
 		} else {
 			config.NpmRegistry = npmRegistry
@@ -217,7 +217,7 @@ func normalizeConfig(config *Config) {
 	if len(config.NpmScopedRegistries) > 0 {
 		regs := make(map[string]NpmRegistry)
 		for scope, rc := range config.NpmScopedRegistries {
-			if strings.HasPrefix(scope, "@") && isHttpSepcifier(rc.Registry) {
+			if strings.HasPrefix(scope, "@") && isHttpSpecifier(rc.Registry) {
 				rc.Registry = strings.TrimRight(rc.Registry, "/") + "/"
 				regs[scope] = rc
 			} else {

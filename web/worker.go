@@ -2,6 +2,7 @@ package web
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,7 +17,6 @@ import (
 	"github.com/esm-dev/esm.sh/internal/app_dir"
 	"github.com/esm-dev/esm.sh/internal/deno"
 	"github.com/ije/gox/term"
-	"github.com/ije/gox/utils"
 )
 
 type JSWorker struct {
@@ -56,8 +56,8 @@ func (jsw *JSWorker) Start() (err error) {
 
 	args := []string{
 		"run",
-		"--allow-read=" + appDir,
-		"--allow-write=" + appDir,
+		"--allow-read",
+		"--allow-write",
 		"--allow-env",
 		"--allow-net",
 		"--allow-sys",
@@ -131,29 +131,36 @@ func (jsw *JSWorker) Call(args ...any) (format string, output string, err error)
 		return
 	}
 	for {
-		var line string
-		line, err = jsw.outReader.ReadString('\n')
+		var line []byte
+		line, err = jsw.outReader.ReadBytes('\n')
 		if err != nil {
 			return
 		}
-		if len(line) > 3 && strings.HasPrefix(line, ">>>") {
-			flag, data := utils.SplitByFirstByte(line[3:], ':')
-			if flag == "debug" || flag == "error" {
-				var msg string
-				err = json.Unmarshal([]byte(data), &msg)
-				if err != nil {
-					return
-				}
-				if flag == "debug" {
-					fmt.Println(term.Dim(msg))
-					continue
-				}
-				err = errors.New(msg)
-			} else {
-				format = flag
-				output = data
+		if len(line) > 3 && bytes.HasPrefix(line, []byte{'>', '>', '>'}) {
+			data := line[3:]
+			index := bytes.IndexByte(data, ':')
+			if index == -1 {
+				// ignore invalid message
+				continue
 			}
-			return
+			var str string
+			err = json.Unmarshal(data[index+1:], &str)
+			if err != nil {
+				// ignore invalid message
+				return
+			}
+			flag := string(data[:index])
+			switch flag {
+			case "debug":
+				fmt.Println(term.Dim(str))
+			case "error":
+				err = errors.New(str)
+				return
+			default:
+				format = flag
+				output = str
+				return
+			}
 		}
 	}
 }

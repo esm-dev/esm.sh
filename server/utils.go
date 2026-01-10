@@ -57,8 +57,8 @@ func isJsonModuleSpecifier(specifier string) bool {
 	return subpath != "" && strings.HasSuffix(subpath, ".json")
 }
 
-// isHttpSepcifier returns true if the specifier is a remote URL.
-func isHttpSepcifier(specifier string) bool {
+// isHttpSpecifier returns true if the specifier is a remote URL.
+func isHttpSpecifier(specifier string) bool {
 	return strings.HasPrefix(specifier, "https://") || strings.HasPrefix(specifier, "http://")
 }
 
@@ -69,7 +69,7 @@ func isRelPathSpecifier(specifier string) bool {
 
 // isAbsPathSpecifier returns true if the specifier is an absolute path.
 func isAbsPathSpecifier(specifier string) bool {
-	return strings.HasPrefix(specifier, "/") || strings.HasPrefix(specifier, "file://")
+	return strings.HasPrefix(specifier, "/") || strings.HasPrefix(specifier, "file:///")
 }
 
 // checks if the given hostname is a local address.

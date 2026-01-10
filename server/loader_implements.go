@@ -70,7 +70,7 @@ func resolveSvelteVersion(npmrc *NpmRC, importMap importmap.ImportMap) (svelteVe
 	svelteVersion = "5"
 	if len(importMap.Imports) > 0 {
 		svelteUrl, ok := importMap.Imports["svelte"]
-		if ok && isHttpSepcifier(svelteUrl) {
+		if ok && isHttpSpecifier(svelteUrl) {
 			u, e := url.Parse(svelteUrl)
 			if e == nil {
 				_, v, _, _ := splitEsmPath(u.Path)
@@ -150,7 +150,7 @@ func resolveVueVersion(npmrc *NpmRC, importMap importmap.ImportMap) (vueVersion 
 	vueVersion = "3"
 	if len(importMap.Imports) > 0 {
 		vueUrl, ok := importMap.Imports["vue"]
-		if ok && isHttpSepcifier(vueUrl) {
+		if ok && isHttpSpecifier(vueUrl) {
 			u, e := url.Parse(vueUrl)
 			if e == nil {
 				_, v, _, _ := splitEsmPath(u.Path)
@@ -175,7 +175,7 @@ func resolveVueVersion(npmrc *NpmRC, importMap importmap.ImportMap) (vueVersion 
 }
 
 func generateTailwindCSS(npmrc *NpmRC, configCSS string, content string) (out *LoaderOutput, err error) {
-	tailwindVersion := "4.1.16"
+	tailwindVersion := "4.1.18"
 	loaderExecPath := path.Join(config.WorkDir, "bin", "tailwind-"+tailwindVersion)
 
 	err = doOnce(loaderExecPath, func() (err error) {
@@ -245,6 +245,7 @@ func generateUnoCSS(npmrc *NpmRC, configCSS string, content string) (out *Loader
 }
 
 func compileTailwindCSSLoader(npmrc *NpmRC, pkgVersion string, loaderExecPath string) (err error) {
+	oxideWasmVersion := "0.1.4"
 	wd := path.Join(npmrc.StoreDir(), "tailwindcss@"+pkgVersion)
 
 	// install @esm.sh/tailwindcss
@@ -253,7 +254,7 @@ func compileTailwindCSSLoader(npmrc *NpmRC, pkgVersion string, loaderExecPath st
 		return
 	}
 	npmrc.installDependencies(wd, pkgJson, false, nil)
-	npmrc.installDependencies(wd, &npm.PackageJSON{Dependencies: map[string]string{"@esm.sh/oxide-wasm": "0.1.3"}}, false, nil)
+	npmrc.installDependencies(wd, &npm.PackageJSON{Dependencies: map[string]string{"@esm.sh/oxide-wasm": oxideWasmVersion}}, false, nil)
 
 	_, err = utils.CopyFile(path.Join(wd, "node_modules/tailwindcss/index.css"), path.Join(wd, "tailwindcss_index.css"))
 	if err != nil {

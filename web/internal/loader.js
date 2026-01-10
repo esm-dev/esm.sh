@@ -1,14 +1,15 @@
 import { TextLineStream } from "jsr:@std/streams@1.0.9/text-line-stream";
 
+const once = {};
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 const output = (type, data) => Deno.stdout.write(enc.encode(">>>" + type + ":" + JSON.stringify(data) + "\n"));
-const once = {};
+const error = (message) => output("error", message);
 
 for await (const line of Deno.stdin.readable.pipeThrough(new TextDecoderStream()).pipeThrough(new TextLineStream())) {
   try {
-    const [type, ...args] = JSON.parse(line);
-    switch (type) {
+    const [loader, ...args] = JSON.parse(line);
+    switch (loader) {
       case "tsx": {
         output("js", await tsx(...args));
         break;
@@ -32,32 +33,53 @@ for await (const line of Deno.stdin.readable.pipeThrough(new TextDecoderStream()
         break;
       }
       default: {
-        output("error", "Unknown loader type: " + type);
+        error("Unknown loader: " + loader);
       }
     }
   } catch (e) {
-    output("error", e.message);
+    error(e.message);
   }
 }
 
 // transform TypeScript/JSX/TSX to JavaScript with HMR support
 async function tsx(filename, importMap, sourceCode, isDev) {
   const imports = importMap?.imports;
+  const devImports = {};
   if (imports && isDev) {
     // add `?dev` query to `react-dom` and `vue` imports for development mode
     for (const [specifier, url] of Object.entries(imports)) {
+      const isReact = specifier === "react" || specifier === "react/" || specifier.startsWith("react/");
       if (
-        (specifier === "react" || specifier === "react-dom" || specifier === "react-dom/client" || specifier === "vue")
-        && (url.startsWith("https://") || url.startsWith("http://"))
+        (
+          isReact
+          || specifier === "react-dom" || specifier === "react-dom/" || specifier.startsWith("react-dom/")
+          || specifier === "vue"
+        ) && (url.startsWith("https://") || url.startsWith("http://"))
       ) {
-        const u = new URL(url);
-        const q = u.searchParams;
-        if (!q.has("dev")) {
-          q.set("dev", "true");
-          imports[specifier] = u.origin + u.pathname + u.search.replace("dev=true", "dev");
+        const [pkgName, subModule] = specifier.split("/");
+        const { pathname } = new URL(url);
+        const seg1 = pathname.split("/")[1];
+        if (seg1 === pkgName || seg1.startsWith(pkgName + "@")) {
+          const version = seg1.split("@")[1];
+          if (specifier.endsWith("/") || !version) {
+            devImports[specifier] = "https://esm.sh/" + pkgName + (version ? "@" + version : "@latest") + "&dev"
+              + (subModule ? "/" + subModule : "") + "/";
+          } else {
+            devImports[specifier] = "https://esm.sh/" + pkgName + "@" + version + "/es2022/" + (subModule || pkgName)
+              + ".development.mjs";
+          }
+          if (isReact && version) {
+            devImports["react/jsx-dev-runtime"] = "https://esm.sh/react@" + version + "/es2022/jsx-dev-runtime.development.mjs";
+          }
         }
       }
     }
+  }
+  let jsxImportSource = undefined;
+  if (["react/", "react/jsx-runtime", "react/jsx-dev-runtime"].some(s => !!(imports?.[s]))) {
+    jsxImportSource = "react";
+  } else if (["preact/", "preact/jsx-runtime", "preact/jsx-dev-runtime"].some(s => !!(imports?.[s]))) {
+    jsxImportSource = "preact";
   }
   let lang = filename.endsWith(".md?jsx") ? "jsx" : undefined;
   let code = sourceCode ?? await Deno.readTextFile("." + filename);
@@ -68,18 +90,20 @@ async function tsx(filename, importMap, sourceCode, isDev) {
     [lang, code, map] = await transformVue(filename, code, importMap, isDev);
   }
   if (!once.tsxWasm) {
-    once.tsxWasm = import("npm:@esm.sh/tsx@1.5.0").then(async (m) => {
+    once.tsxWasm = import("npm:@esm.sh/tsx@1.5.1").then(async (m) => {
       await m.init();
       return m;
     });
   }
+
   const react = imports?.react;
   const preact = imports?.preact;
   const ret = (await once.tsxWasm).transform({
     filename,
     lang,
     code,
-    importMap: importMap ?? undefined,
+    jsxImportSource,
+    importMap: isDev ? { imports: devImports } : undefined,
     sourceMap: isDev ? (map ? "external" : "inline") : undefined,
     dev: isDev
       ? {
@@ -146,10 +170,10 @@ async function tailwind(_id, content, config) {
     once.tailwindCompilers = new Map();
   }
   if (!once.tailwind) {
-    once.tailwind = import("npm:tailwindcss@4.1.16");
+    once.tailwind = import("npm:tailwindcss@4.1.18");
   }
   if (!once.oxide) {
-    once.oxide = import("npm:@esm.sh/oxide-wasm@0.1.3").then(({ init, extract }) => init().then(() => ({ extract })));
+    once.oxide = import("npm:@esm.sh/oxide-wasm@0.1.4").then(({ init, extract }) => init().then(() => ({ extract })));
   }
   let compiler = once.tailwindCompilers.get(compilerId);
   if (!compiler || compiler.configCSS !== config?.css) {
@@ -160,7 +184,7 @@ async function tailwind(_id, content, config) {
           switch (id) {
             case "tailwindcss": {
               if (!once.tailwindIndexCSS) {
-                once.tailwindIndexCSS = fetch("https://esm.sh/tailwindcss@4.1.16/index.css").then(res => res.text());
+                once.tailwindIndexCSS = fetch("https://esm.sh/tailwindcss@4.1.18/index.css").then(res => res.text());
               }
               const css = await once.tailwindIndexCSS;
               return {

@@ -2,6 +2,7 @@ package importmap
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"sort"
@@ -15,9 +16,9 @@ import (
 )
 
 type Config struct {
-	CDN    string `json:"cdn"`
-	Target string `json:"target"`
-	SRI    any    `json:"sri"`
+	CDN    string `json:"cdn,omitempty"`
+	Target string `json:"target,omitempty"`
+	SRI    any    `json:"sri,omitempty"`
 }
 
 type SRIConfig struct {
@@ -25,28 +26,39 @@ type SRIConfig struct {
 }
 
 type ImportMap struct {
-	BaseUrl   string                       `json:"baseUrl"`
-	Imports   map[string]string            `json:"imports"`
-	Scopes    map[string]map[string]string `json:"scopes"`
-	Routes    map[string]string            `json:"routes"`
-	Integrity map[string]string            `json:"integrity"`
 	Config    Config                       `json:"config"`
+	Imports   map[string]string            `json:"imports,omitempty"`
+	Scopes    map[string]map[string]string `json:"scopes,omitempty"`
+	Integrity map[string]string            `json:"integrity,omitempty"`
+	baseUrl   *url.URL
+}
+
+func Parse(baseUrl *url.URL, data []byte) (im ImportMap, err error) {
+	if err = json.Unmarshal(data, &im); err != nil {
+		return
+	}
+	im.baseUrl = baseUrl
+	return
 }
 
 func (im *ImportMap) Resolve(specifier string, referrer *url.URL) (string, bool) {
-	imports := im.Imports
-	baseUrl, err := url.Parse(im.BaseUrl)
-	if err != nil {
-		return "", false
+	if im.baseUrl == nil {
+		im.baseUrl, _ = url.Parse("file:///")
 	}
 
-	specifier, _ = utils.SplitByFirstByte(specifier, '#')
+	var hash string
+	specifier, hash = utils.SplitByFirstByte(specifier, '#')
+	if hash != "" {
+		hash = "#" + hash
+	}
+
 	var query string
 	specifier, query = utils.SplitByFirstByte(specifier, '?')
 	if query != "" {
 		query = "?" + query
 	}
 
+	imports := im.Imports
 	if referrer != nil {
 		scopeKeys := make(ScopeKeys, 0, len(im.Scopes))
 		for prefix := range im.Scopes {
@@ -63,39 +75,20 @@ func (im *ImportMap) Resolve(specifier string, referrer *url.URL) (string, bool)
 
 	if len(imports) > 0 {
 		if v, ok := imports[specifier]; ok {
-			return normalizeUrl(baseUrl, v) + query, true
+			return normalizeUrl(im.baseUrl, v) + query, true
 		}
 		if strings.ContainsRune(specifier, '/') {
-			nonTrailingSlashImports := make([][2]string, 0, len(imports))
 			for k, v := range imports {
 				if strings.HasSuffix(k, "/") {
 					if strings.HasPrefix(specifier, k) {
-						return normalizeUrl(baseUrl, v+specifier[len(k):]) + query, true
+						return normalizeUrl(im.baseUrl, v+specifier[len(k):]) + query, true
 					}
-				} else {
-					nonTrailingSlashImports = append(nonTrailingSlashImports, [2]string{k, v})
-				}
-			}
-			// expand match
-			// e.g. `"react": "https://esm.sh/react@18` -> `"react/": "https://esm.sh/react@18/`
-			for _, p := range nonTrailingSlashImports {
-				k, v := p[0], p[1]
-				p, q := utils.SplitByLastByte(v, '?')
-				if q != "" {
-					q = "?" + q
-					if query != "" {
-						q += "&" + query[1:]
-					}
-				} else if query != "" {
-					q = query
-				}
-				if strings.HasPrefix(specifier, k+"/") {
-					return normalizeUrl(baseUrl, p+specifier[len(k):]) + q, true
 				}
 			}
 		}
 	}
-	return specifier + query, false
+
+	return specifier + query + hash, false
 }
 
 func (im *ImportMap) AddPackages(packages []string) (addedPackages []PackageInfo, warnings []string, errors []error) {
@@ -320,14 +313,6 @@ func (im *ImportMap) FormatJSON(indent int) string {
 			buf.WriteByte('\n')
 			i++
 		}
-		buf.Write(indentStr)
-		buf.WriteByte('}')
-	}
-	if len(im.Routes) > 0 {
-		buf.WriteString(",\n")
-		buf.Write(indentStr)
-		buf.WriteString("\"routes\": {\n")
-		formatMap(&buf, im.Routes, indent+2)
 		buf.Write(indentStr)
 		buf.WriteByte('}')
 	}

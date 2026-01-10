@@ -8,5 +8,4 @@ import (
 )
 
 var VERSION = fmt.Sprintf("%x", time.Now().Unix())
-
-const DEBUG = true
+var DEBUG = true
