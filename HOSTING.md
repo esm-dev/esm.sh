@@ -30,7 +30,7 @@ You can find all the server options in [config.example.jsonc](./config.example.j
 You will need [Go](https://golang.org/dl) 1.25+ to compile and run the server.
 
 ```bash
-go run server/esmd/main.go --config=config.json
+go run main.go --config=config.json
 ```
 
 Then you can import `React` from <http://localhost:8080/react>.
