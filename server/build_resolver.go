@@ -774,11 +774,11 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 			SubModuleName: stripEntryModuleExt(subPath),
 		}
 		if withTypeJSON {
-			resolvedPath = "/" + subModule.Specifier()
+			resolvedPath = "/" + subModule.String()
 			if !strings.HasSuffix(subPath, ".json") {
 				entry := ctx.resolveEntry(subModule)
 				if entry.main != "" {
-					resolvedPath = "/" + subModule.Name() + entry.main[1:]
+					resolvedPath = "/" + subModule.ID() + entry.main[1:]
 				}
 			}
 			if kind == esbuild.ResolveJSDynamicImport {
@@ -836,7 +836,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 	// e.g. "react": "github:facebook/react#v18.2.0"
 	p, err := npm.ResolveDependencyVersion(pkgVersion)
 	if err != nil {
-		resolvedPath = fmt.Sprintf("/error.js?type=%s&name=%s&importer=%s", strings.ReplaceAll(err.Error(), " ", "-"), pkgName, ctx.esmPath.Specifier())
+		resolvedPath = fmt.Sprintf("/error.js?type=%s&name=%s&importer=%s", strings.ReplaceAll(err.Error(), " ", "-"), pkgName, ctx.esmPath.String())
 		return
 	}
 	if p.Url != "" {
@@ -871,7 +871,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 	}
 
 	if withTypeJSON {
-		resolvedPath = "/" + dep.Specifier()
+		resolvedPath = "/" + dep.String()
 		if subPath == "" || !strings.HasSuffix(subPath, ".json") {
 			b := &BuildContext{
 				npmrc:   ctx.npmrc,
@@ -884,7 +884,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 			}
 			entry := b.resolveEntry(dep)
 			if entry.main != "" {
-				resolvedPath = "/" + dep.Name() + entry.main[1:]
+				resolvedPath = "/" + dep.ID() + entry.main[1:]
 			}
 		}
 		if kind == esbuild.ResolveJSDynamicImport {
@@ -932,7 +932,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 		dep.PkgVersion = "^" + p.Version
 	}
 
-	resolvedPath = "/" + dep.Specifier()
+	resolvedPath = "/" + dep.String()
 	// workaround for es5-ext "../#/.." path
 	if dep.PkgName == "es5-ext" {
 		resolvedPath = strings.ReplaceAll(resolvedPath, "/#/", "/%23/")
@@ -983,7 +983,7 @@ func (ctx *BuildContext) resolveDTS(entry BuildEntry) (string, error) {
 	if entry.types != "" {
 		return fmt.Sprintf(
 			"/%s/%s%s",
-			ctx.esmPath.Name(),
+			ctx.esmPath.ID(),
 			ctx.getBuildArgsPrefix(true),
 			strings.TrimPrefix(entry.types, "./"),
 		), nil
@@ -1047,7 +1047,7 @@ func (ctx *BuildContext) resolveDTS(entry BuildEntry) (string, error) {
 
 func (ctx *BuildContext) getImportPath(esm EsmPath, buildArgsPrefix string, externalAll bool) string {
 	if strings.HasSuffix(esm.SubPath, ".json") && ctx.existsPkgFile(esm.SubPath) {
-		return "/" + esm.Name() + "/" + esm.SubPath + "?module"
+		return "/" + esm.ID() + "/" + esm.SubPath + "?module"
 	}
 	asteriskPrefix := ""
 	if externalAll {
@@ -1072,7 +1072,7 @@ func (ctx *BuildContext) getImportPath(esm EsmPath, buildArgsPrefix string, exte
 	return fmt.Sprintf(
 		"/%s%s/%s%s/%s.mjs",
 		asteriskPrefix,
-		esm.Name(),
+		esm.ID(),
 		buildArgsPrefix,
 		ctx.target,
 		name,

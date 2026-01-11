@@ -35,7 +35,7 @@ func (p EsmPath) Package() npm.Package {
 	}
 }
 
-func (p EsmPath) Name() string {
+func (p EsmPath) ID() string {
 	name := p.PkgName
 	if p.PkgVersion != "" && p.PkgVersion != "*" && p.PkgVersion != "latest" {
 		name += "@" + p.PkgVersion
@@ -49,11 +49,11 @@ func (p EsmPath) Name() string {
 	return name
 }
 
-func (p EsmPath) Specifier() string {
+func (p EsmPath) String() string {
 	if p.SubModuleName != "" {
-		return p.Name() + "/" + p.SubModuleName
+		return p.ID() + "/" + p.SubModuleName
 	}
-	return p.Name()
+	return p.ID()
 }
 
 func parseEsmPath(npmrc *NpmRC, pathname string) (esm EsmPath, extraQuery string, exactVersion bool, hasTargetSegment bool, err error) {
