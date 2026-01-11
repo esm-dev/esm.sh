@@ -33,7 +33,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 		marker = set.New[string]()
 	}
 
-	dtsPath := path.Join("/"+ctx.esmPath.Name(), buildArgsPrefix, dts)
+	dtsPath := path.Join("/"+ctx.esmPath.ID(), buildArgsPrefix, dts)
 	if marker.Has(dtsPath) {
 		// already transformed
 		return
@@ -146,7 +146,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 			if strings.ContainsRune(subPath, '*') {
 				return fmt.Sprintf(
 					"{ESM_CDN_ORIGIN}/%s/%s%s",
-					ctx.esmPath.Name(),
+					ctx.esmPath.ID(),
 					ctx.getBuildArgsPrefix(true),
 					subPath,
 				), nil
@@ -160,7 +160,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 				if entry.types != "" {
 					return fmt.Sprintf(
 						"{ESM_CDN_ORIGIN}/%s/%s%s",
-						ctx.esmPath.Name(),
+						ctx.esmPath.ID(),
 						ctx.getBuildArgsPrefix(true),
 						strings.TrimPrefix(entry.types, "./"),
 					), nil
@@ -246,7 +246,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 		}
 
 		if kind == TsDeclareModule {
-			return fmt.Sprintf("{ESM_CDN_ORIGIN}/%s", dtsModule.Specifier()), nil
+			return fmt.Sprintf("{ESM_CDN_ORIGIN}/%s", dtsModule.String()), nil
 		}
 
 		return fmt.Sprintf("{ESM_CDN_ORIGIN}%s", b.Path()), nil

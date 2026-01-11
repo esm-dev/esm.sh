@@ -180,12 +180,12 @@ func (ctx *BuildContext) buildPath() {
 			ctx.path = fmt.Sprintf(
 				"/%s%s/%s%s",
 				asteriskPrefix,
-				esm.Name(),
+				esm.ID(),
 				ctx.getBuildArgsPrefix(true),
 				esm.SubPath,
 			)
 		} else {
-			ctx.path = "/" + esm.Specifier()
+			ctx.path = "/" + esm.String()
 		}
 		return
 	}
@@ -216,7 +216,7 @@ func (ctx *BuildContext) buildPath() {
 	ctx.path = fmt.Sprintf(
 		"/%s%s/%s%s/%s.mjs",
 		asteriskPrefix,
-		esm.Name(),
+		esm.ID(),
 		ctx.getBuildArgsPrefix(ctx.target == "types"),
 		ctx.target,
 		name,
@@ -231,7 +231,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 	}
 
 	if DEBUG && !analyzeMode {
-		ctx.logger.Debugf(`build(%s): Entry{main: "%s", module: %v, types: "%s"}`, ctx.esmPath.Specifier(), entry.main, entry.module, entry.types)
+		ctx.logger.Debugf(`build(%s): Entry{main: "%s", module: %v, types: "%s"}`, ctx.esmPath.String(), entry.main, entry.module, entry.types)
 	}
 
 	isTypesOnly := strings.HasPrefix(ctx.pkgJson.Name, "@types/") || entry.isTypesOnly()
@@ -245,7 +245,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 		}
 		meta = &BuildMeta{
 			TypesOnly: true,
-			Dts:       "/" + ctx.esmPath.Name() + entry.types[1:],
+			Dts:       "/" + ctx.esmPath.ID() + entry.types[1:],
 		}
 		return
 	}
@@ -405,7 +405,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 					// ban `file:` imports
 					if after, ok := strings.CutPrefix(args.Path, "file:"); ok {
 						return esbuild.OnResolveResult{
-							Path:     fmt.Sprintf("/error.js?type=unsupported-file-dependency&name=%s&importer=%s", after, ctx.esmPath.Specifier()),
+							Path:     fmt.Sprintf("/error.js?type=unsupported-file-dependency&name=%s&importer=%s", after, ctx.esmPath.String()),
 							External: true,
 						}, nil
 					}
@@ -550,7 +550,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 					// node native modules do not work via http import
 					if strings.HasSuffix(filename, ".node") && existsFile(filename) {
 						return esbuild.OnResolveResult{
-							Path:     fmt.Sprintf("/error.js?type=unsupported-node-native-module&name=%s&importer=%s", path.Base(args.Path), ctx.esmPath.Specifier()),
+							Path:     fmt.Sprintf("/error.js?type=unsupported-node-native-module&name=%s&importer=%s", path.Base(args.Path), ctx.esmPath.String()),
 							External: true,
 						}, nil
 					}
@@ -680,7 +680,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 
 							if len(args.With) > 0 && args.With["type"] == "css" {
 								return esbuild.OnResolveResult{
-									Path:        "/" + ctx.esmPath.Name() + utils.NormalizePathname(modulePath) + "?module",
+									Path:        "/" + ctx.esmPath.ID() + utils.NormalizePathname(modulePath) + "?module",
 									External:    true,
 									SideEffects: esbuild.SideEffectsFalse,
 								}, nil
@@ -943,7 +943,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 					if semverLessThan(svelteVersion, "4.0.0") {
 						return esbuild.OnLoadResult{}, errors.New("svelte version must be greater than 4.0.0")
 					}
-					out, err := transformSvelte(ctx.npmrc, svelteVersion, ctx.esmPath.Specifier(), string(code))
+					out, err := transformSvelte(ctx.npmrc, svelteVersion, ctx.esmPath.String(), string(code))
 					if err != nil {
 						return esbuild.OnLoadResult{}, err
 					}
@@ -977,7 +977,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 					if semverLessThan(vueVersion, "3.0.0") {
 						return esbuild.OnLoadResult{}, errors.New("vue version must be greater than 3.0.0")
 					}
-					out, err := transformVue(ctx.npmrc, vueVersion, ctx.esmPath.Specifier(), string(code))
+					out, err := transformVue(ctx.npmrc, vueVersion, ctx.esmPath.String(), string(code))
 					if err != nil {
 						return esbuild.OnLoadResult{}, err
 					}
@@ -1479,7 +1479,7 @@ func (ctx *BuildContext) buildTypes() (ret *BuildMeta, err error) {
 		return
 	}
 
-	ret = &BuildMeta{Dts: "/" + ctx.esmPath.Name() + dts[1:]}
+	ret = &BuildMeta{Dts: "/" + ctx.esmPath.ID() + dts[1:]}
 	return
 }
 
@@ -1532,7 +1532,7 @@ func (ctx *BuildContext) install() (err error) {
 			}
 		}
 
-		ctx.wd = path.Join(ctx.npmrc.StoreDir(), ctx.esmPath.Name())
+		ctx.wd = path.Join(ctx.npmrc.StoreDir(), ctx.esmPath.ID())
 		ctx.pkgJson = p
 	}
 

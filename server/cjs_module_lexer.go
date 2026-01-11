@@ -82,7 +82,7 @@ func cjsModuleLexer(b *BuildContext, cjsEntry string) (ret cjsModuleLexerResult,
 			return
 		}
 		js := path.Join(b.wd, "reveal_"+strings.ReplaceAll(cjsEntry[2:], "/", "_"))
-		err = os.WriteFile(js, fmt.Appendf(nil, `console.log(JSON.stringify(Object.keys((await import("npm:%s")).default)))`, path.Join(b.esmPath.Name(), cjsEntry)), 0644)
+		err = os.WriteFile(js, fmt.Appendf(nil, `console.log(JSON.stringify(Object.keys((await import("npm:%s")).default)))`, path.Join(b.esmPath.ID(), cjsEntry)), 0644)
 		if err != nil {
 			return
 		}
