@@ -29,9 +29,10 @@ func ResolveDenoPath(workDir string) string {
 func CheckDenoPath(denoPath string) (err error) {
 	fi, err := os.Lstat(denoPath)
 	if err == nil {
-		if !fi.IsDir() && validateDenoPath(denoPath) == nil {
+		if !fi.IsDir() && validateDenoVersion(denoPath) == nil {
 			return nil
 		}
+		// remove the invalid deno path and install a new one
 		os.RemoveAll(denoPath)
 	}
 	return installDeno(denoPath, version)
@@ -44,7 +45,7 @@ func installDeno(installPath string, version string) (err error) {
 	// check system installed deno
 	systemDenoPath, err := exec.LookPath("deno")
 	if err == nil {
-		err = validateDenoPath(systemDenoPath)
+		err = validateDenoVersion(systemDenoPath)
 		if err == nil {
 			if runtime.GOOS == "windows" {
 				_, err = utils.CopyFile(systemDenoPath, installPath)
@@ -142,7 +143,7 @@ func getDenoDownloadURL(version string) (string, error) {
 	return fmt.Sprintf("https://github.com/denoland/deno/releases/download/v%s/deno-%s-%s.zip", version, arch, os), nil
 }
 
-func validateDenoPath(denoPath string) error {
+func validateDenoVersion(denoPath string) error {
 	cmd := exec.Command(denoPath, "eval", "console.log(Deno.version.deno)")
 	output, err := cmd.Output()
 	if err != nil {
