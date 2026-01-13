@@ -49,7 +49,7 @@ func (jsw *JSWorker) Start() (err error) {
 	}
 
 	denoPath := deno.ResolveDenoPath(appDir)
-	err = deno.CheckDeno(denoPath)
+	err = deno.CheckDenoPath(denoPath)
 	if err != nil {
 		return
 	}

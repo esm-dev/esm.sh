@@ -76,7 +76,7 @@ func cjsModuleLexer(b *BuildContext, cjsEntry string) (ret cjsModuleLexerResult,
 	if cjsModuleLexerIgnoredPackages.Has(b.esmPath.PkgName) {
 		denoPath := deno.ResolveDenoPath(config.WorkDir)
 		err = doOnce("check-deno", func() (err error) {
-			return deno.CheckDeno(denoPath)
+			return deno.CheckDenoPath(denoPath)
 		})
 		if err != nil {
 			return
