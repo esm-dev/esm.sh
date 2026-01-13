@@ -26,15 +26,14 @@ func ResolveDenoPath(workDir string) string {
 	return denoPath
 }
 
-func CheckDeno(denoPath string) (err error) {
+func CheckDenoPath(denoPath string) (err error) {
 	fi, err := os.Lstat(denoPath)
 	if err == nil {
-		if fi.IsDir() {
-			return errors.New("path is a dir")
+		if !fi.IsDir() && validateDenoPath(denoPath) == nil {
+			return nil
 		}
-		return validateDenoPath(denoPath)
+		os.RemoveAll(denoPath)
 	}
-
 	return installDeno(denoPath, version)
 }
 

@@ -19,7 +19,7 @@ type LoaderOutput struct {
 func runLoader(loaderJsPath string, filename string, code string) (out *LoaderOutput, err error) {
 	denoPath := deno.ResolveDenoPath(config.WorkDir)
 	err = doOnce("check-deno", func() (err error) {
-		return deno.CheckDeno(denoPath)
+		return deno.CheckDenoPath(denoPath)
 	})
 	if err != nil {
 		return
