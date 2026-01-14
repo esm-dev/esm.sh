@@ -268,8 +268,8 @@ func legacyESM(ctx *rex.Context, fs storage.Storage, buildVersionPrefix string) 
 
 	if res.StatusCode == 301 || res.StatusCode == 302 {
 		url := res.Header.Get("Location")
-		if strings.HasPrefix(url, "https://legacy.esm.sh") {
-			url = getOrigin(ctx) + strings.TrimPrefix(url, "https://legacy.esm.sh")
+		if after, ok := strings.CutPrefix(url, "https://legacy.esm.sh"); ok {
+			url = getOrigin(ctx) + after
 		}
 		return redirect(ctx, url, res.StatusCode == 301)
 	}
