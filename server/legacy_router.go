@@ -46,13 +46,8 @@ func esmLegacyRouter(fs storage.Storage) rex.Handle {
 			return rex.Status(405, "Method Not Allowed")
 		}
 
-		// `/react-dom@18.3.1&pin=v135`
-		if strings.Contains(pathname, "&pin=v") {
-			return legacyESM(ctx, fs, "")
-		}
-
 		// `/react-dom@18.3.1?pin=v135`
-		if q := ctx.R.URL.RawQuery; strings.HasPrefix(q, "pin=v") || strings.Contains(q, "&pin=v") {
+		if q := ctx.R.URL.RawQuery; q != "" && (strings.HasPrefix(q, "pin=v") || strings.Contains(q, "&pin=v")) {
 			query := ctx.R.URL.Query()
 			v := query.Get("pin")
 			if len(v) > 1 && v[0] == 'v' && valid.IsDigtalOnlyString(v[1:]) {
@@ -62,6 +57,11 @@ func esmLegacyRouter(fs storage.Storage) rex.Handle {
 				}
 				return legacyESM(ctx, fs, "")
 			}
+		}
+
+		// `/react-dom@18.3.1&pin=v135`
+		if strings.Contains(pathname, "&pin=v") {
+			return legacyESM(ctx, fs, "")
 		}
 
 		// `/stable/react@18.3.1?dev`
