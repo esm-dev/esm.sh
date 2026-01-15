@@ -67,12 +67,6 @@ func Start() {
 	}
 	logger.Debugf("storage initialized, type: %s, endpoint: %s", config.Storage.Type, config.Storage.Endpoint)
 
-	// initialize legacy storage
-	legacyStorage, err := storage.NewFSStorage(path.Join(config.WorkDir, "/cache"))
-	if err != nil {
-		logger.Fatalf("failed to initialize legacy storage: %v", err)
-	}
-
 	// pre-compile uno generator in background
 	npmrc := &NpmRC{NpmRegistry: NpmRegistry{Registry: "https://registry.npmjs.org/"}}
 	go generateTailwindCSS(npmrc, `@import "tailwindcss";`, "flex")
@@ -88,7 +82,7 @@ func Start() {
 		rex.Optional(rex.AccessLogger(accessLogger), config.AccessLog),
 		rex.Optional(rex.Compress(), config.Compress),
 		rex.Optional(customLandingPage(&config.CustomLandingPage), config.CustomLandingPage.Origin != ""),
-		rex.Optional(esmLegacyRouter(legacyStorage), config.LegacyServer != ""),
+		rex.Optional(esmLegacyRouter(esmStorage), config.LegacyServer != ""),
 		esmRouter(esmStorage, logger),
 	)
 
