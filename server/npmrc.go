@@ -544,11 +544,6 @@ func extractPackageTarball(installDir string, pkgName string, tarball io.Reader)
 		if err != nil {
 			return err
 		}
-		// strip leading `package/` (npm specific)
-		filename := strings.TrimPrefix(h.Name, "package/")
-		// normalize the filename
-		filename = utils.NormalizePathname(filename)
-		savepath := filepath.Join(pkgDir, filename)
 		if h.Typeflag != tar.TypeReg {
 			continue
 		}
@@ -556,6 +551,12 @@ func extractPackageTarball(installDir string, pkgName string, tarball io.Reader)
 		if h.Size > maxAssetFileSize {
 			continue
 		}
+		// normalize the filename
+		_, filename := utils.SplitByFirstByte(utils.NormalizePathname(h.Name)[1:], '/')
+		if filename == "" {
+			continue
+		}
+		savepath := filepath.Join(pkgDir, filename)
 		extname := filepath.Ext(savepath)
 		if !(extname != "" && (assetExts[extname[1:]] || slices.Contains(moduleExts, extname) || extname == ".map" || extname == ".css" || extname == ".svelte" || extname == ".vue")) {
 			// ignore unsupported formats
