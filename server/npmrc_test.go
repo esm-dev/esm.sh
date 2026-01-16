@@ -11,9 +11,7 @@ import (
 	"testing"
 )
 
-// TestExtractPackageTarball_PathTraversal tests the extractPackageTarball function
-// with a malicious tarball containing a path traversal attempt
-func TestExtractPackageTarball_PathTraversal(t *testing.T) {
+func TestExtractPackageTarball(t *testing.T) {
 	b := make([]byte, 16)
 	rand.Read(b)
 	installDir := filepath.Join(os.TempDir(), hex.EncodeToString(b))
