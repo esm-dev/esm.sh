@@ -13,7 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"path"
+	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
@@ -109,7 +109,7 @@ func NewNpmRcFromJSON(jsonData []byte) (npmrc *NpmRC, err error) {
 }
 
 func (rc *NpmRC) StoreDir() string {
-	return path.Join(config.WorkDir, "npm")
+	return filepath.Join(config.WorkDir, "npm")
 }
 
 func (npmrc *NpmRC) getRegistryByPackageName(packageName string) *NpmRegistry {
@@ -243,7 +243,7 @@ func (npmrc *NpmRC) getPackageInfo(pkgName string, version string) (packageJson 
 	return withCache(getCacheKey(pkgName, version), time.Duration(config.NpmQueryCacheTTL)*time.Second, func() (*npm.PackageJSON, string, error) {
 		if !npm.IsDistTag(version) && npm.IsExactVersion(version) {
 			var raw npm.PackageJSONRaw
-			pkgJsonPath := path.Join(npmrc.StoreDir(), pkgName+"@"+version, "node_modules", pkgName, "package.json")
+			pkgJsonPath := filepath.Join(npmrc.StoreDir(), pkgName+"@"+version, "node_modules", pkgName, "package.json")
 			if utils.ParseJSONFile(pkgJsonPath, &raw) == nil {
 				return raw.ToNpmPackage(), "", nil
 			}
@@ -304,8 +304,8 @@ func (npmrc *NpmRC) getPackageInfoByDate(pkgName string, dateVersion string) (pa
 }
 
 func (npmrc *NpmRC) installPackage(pkg npm.Package) (packageJson *npm.PackageJSON, err error) {
-	installDir := path.Join(npmrc.StoreDir(), pkg.String())
-	packageJsonPath := path.Join(installDir, "node_modules", pkg.Name, "package.json")
+	installDir := filepath.Join(npmrc.StoreDir(), pkg.String())
+	packageJsonPath := filepath.Join(installDir, "node_modules", pkg.Name, "package.json")
 
 	// check if the package has been installed
 	var raw npm.PackageJSONRaw
@@ -331,12 +331,12 @@ func (npmrc *NpmRC) installPackage(pkg npm.Package) (packageJson *npm.PackageJSO
 			buf := bytes.NewBuffer(nil)
 			buf.WriteString(`{"name":"` + pkg.Name + `","version":"` + pkg.Version + `"`)
 			var denoJson *npm.PackageJSON
-			if deonJsonPath := path.Join(installDir, "node_modules", pkg.Name, "deno.json"); existsFile(deonJsonPath) {
+			if deonJsonPath := filepath.Join(installDir, "node_modules", pkg.Name, "deno.json"); existsFile(deonJsonPath) {
 				var raw npm.PackageJSONRaw
 				if utils.ParseJSONFile(deonJsonPath, &raw) == nil {
 					denoJson = raw.ToNpmPackage()
 				}
-			} else if deonJsoncPath := path.Join(installDir, "node_modules", pkg.Name, "deno.jsonc"); existsFile(deonJsoncPath) {
+			} else if deonJsoncPath := filepath.Join(installDir, "node_modules", pkg.Name, "deno.jsonc"); existsFile(deonJsoncPath) {
 				data, err := os.ReadFile(deonJsoncPath)
 				if err == nil {
 					var raw npm.PackageJSONRaw
@@ -383,7 +383,7 @@ func (npmrc *NpmRC) installPackage(pkg npm.Package) (packageJson *npm.PackageJSO
 			return nil, fetchErr
 		}
 		if info.Deprecated != "" {
-			os.WriteFile(path.Join(installDir, "deprecated.txt"), []byte(info.Deprecated), 0644)
+			os.WriteFile(filepath.Join(installDir, "deprecated.txt"), []byte(info.Deprecated), 0644)
 		}
 		err = fetchPackageTarball(npmrc.getRegistryByPackageName(pkg.Name), installDir, info.Name, info.Dist.Tarball)
 	}
@@ -446,13 +446,13 @@ func (npmrc *NpmRC) installDependencies(wd string, pkgJson *npm.PackageJSON, npm
 				return
 			}
 			// link the installed package to the node_modules directory of current build context
-			linkDir := path.Join(wd, "node_modules", name)
+			linkDir := filepath.Join(wd, "node_modules", name)
 			_, err = os.Lstat(linkDir)
 			if err != nil && os.IsNotExist(err) {
 				if strings.ContainsRune(name, '/') {
-					ensureDir(path.Dir(linkDir))
+					ensureDir(filepath.Dir(linkDir))
 				}
-				os.Symlink(path.Join(npmrc.StoreDir(), pkg.String(), "node_modules", pkg.Name), linkDir)
+				os.Symlink(filepath.Join(npmrc.StoreDir(), pkg.String(), "node_modules", pkg.Name), linkDir)
 			}
 			// install dependencies recursively
 			if len(installed.Dependencies) > 0 || (len(installed.PeerDependencies) > 0 && npmMode) {
@@ -465,8 +465,8 @@ func (npmrc *NpmRC) installDependencies(wd string, pkgJson *npm.PackageJSON, npm
 
 // If the package is deprecated, a depreacted.txt file will be created by the `intallPackage` function
 func (npmrc *NpmRC) isDeprecated(pkgName string, pkgVersion string) (string, error) {
-	installDir := path.Join(npmrc.StoreDir(), pkgName+"@"+pkgVersion)
-	data, err := os.ReadFile(path.Join(installDir, "deprecated.txt"))
+	installDir := filepath.Join(npmrc.StoreDir(), pkgName+"@"+pkgVersion)
+	data, err := os.ReadFile(filepath.Join(installDir, "deprecated.txt"))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return "", nil
@@ -532,7 +532,7 @@ func extractPackageTarball(installDir string, pkgName string, tarball io.Reader)
 		return
 	}
 
-	pkgDir := path.Join(installDir, "node_modules", pkgName)
+	pkgDir := filepath.Join(installDir, "node_modules", pkgName)
 
 	// extract tarball
 	tr := tar.NewReader(unziped)
@@ -544,9 +544,11 @@ func extractPackageTarball(installDir string, pkgName string, tarball io.Reader)
 		if err != nil {
 			return err
 		}
-		// strip tarball root dir
-		_, name := utils.SplitByFirstByte(h.Name, '/')
-		filename := path.Join(pkgDir, path.Clean(name))
+		// strip leading `package/` (npm specific)
+		filename := strings.TrimPrefix(h.Name, "package/")
+		// normalize the filename
+		filename = utils.NormalizePathname(filename)
+		savepath := filepath.Join(pkgDir, filename)
 		if h.Typeflag != tar.TypeReg {
 			continue
 		}
@@ -554,13 +556,13 @@ func extractPackageTarball(installDir string, pkgName string, tarball io.Reader)
 		if h.Size > maxAssetFileSize {
 			continue
 		}
-		extname := path.Ext(filename)
+		extname := filepath.Ext(savepath)
 		if !(extname != "" && (assetExts[extname[1:]] || slices.Contains(moduleExts, extname) || extname == ".map" || extname == ".css" || extname == ".svelte" || extname == ".vue")) {
 			// ignore unsupported formats
 			continue
 		}
-		ensureDir(path.Dir(filename))
-		f, err := os.OpenFile(filename, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
+		ensureDir(filepath.Dir(savepath))
+		f, err := os.OpenFile(savepath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
 		if err != nil {
 			return err
 		}
@@ -570,7 +572,7 @@ func extractPackageTarball(installDir string, pkgName string, tarball io.Reader)
 			return err
 		}
 		if n != h.Size {
-			return errors.New("extractPackageTarball: incomplete file: " + name)
+			return errors.New("extractPackageTarball: incomplete file: " + savepath)
 		}
 	}
 
