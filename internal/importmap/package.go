@@ -22,12 +22,13 @@ var (
 )
 
 type PackageInfo struct {
-	Name             string            `json:"name"`
-	Version          string            `json:"version"`
-	Dependencies     map[string]string `json:"dependencies"`
-	PeerDependencies map[string]string `json:"peerDependencies"`
-	Github           bool              `json:"-"`
-	Jsr              bool              `json:"-"`
+	Name    string   `json:"name"`
+	Version string   `json:"version"`
+	Imports []string `json:"imports"`
+	Exports []string `json:"peerDependencies"`
+	Dts     string   `json:"dts,omitempty"`
+	Github  bool     `json:"-"`
+	Jsr     bool     `json:"-"`
 }
 
 type Dependency struct {
@@ -45,7 +46,7 @@ func (pkg PackageInfo) String() string {
 	} else if pkg.Jsr {
 		b.WriteString("jsr/")
 	}
-	if len(pkg.Dependencies) > 0 || len(pkg.PeerDependencies) > 0 {
+	if len(pkg.Imports) > 0 {
 		b.WriteString("*") // add external-all modifier of esm.sh
 	}
 	b.WriteString(pkg.Name)
@@ -55,7 +56,7 @@ func (pkg PackageInfo) String() string {
 }
 
 func fetchPackageInfo(cdnOrigin string, regPrefix string, pkgName string, pkgVersion string) (pkgInfo PackageInfo, err error) {
-	url := fmt.Sprintf("%s/%s%s@%s/package.json", cdnOrigin, regPrefix, pkgName, pkgVersion)
+	url := fmt.Sprintf("%s/%s%s@%s?meta", cdnOrigin, regPrefix, pkgName, pkgVersion)
 
 	// check memory cache first
 	if v, ok := fetchCache.Load(url); ok {
@@ -196,49 +197,4 @@ func GetPackageInfoFromUrl(urlRaw string) (pkgInfo PackageInfo, err error) {
 		pkgInfo.Name = strings.TrimPrefix(pkgInfo.Name, "*")
 	}
 	return
-}
-
-func resolvePackageDependencies(pkg PackageInfo) (deps map[string]Dependency, err error) {
-	peerDeps, err := resovleDependencies(pkg.PeerDependencies, true)
-	if err != nil {
-		return nil, err
-	}
-	pkgDeps, err := resovleDependencies(pkg.Dependencies, false)
-	if err != nil {
-		return nil, err
-	}
-	deps = make(map[string]Dependency, len(peerDeps)+len(pkgDeps))
-	for _, dep := range peerDeps {
-		deps[dep.Name] = dep
-	}
-	for _, dep := range pkgDeps {
-		deps[dep.Name] = dep
-	}
-	return
-}
-
-func resovleDependencies(deps map[string]string, peer bool) ([]Dependency, error) {
-	rdeps := make([]Dependency, 0, len(deps))
-	for name, version := range deps {
-		dep := Dependency{
-			Name:    name,
-			Version: version,
-			Peer:    peer,
-		}
-		pkg, err := npm.ResolveDependencyVersion(version)
-		if err != nil {
-			return nil, err
-		}
-		if pkg.Name != "" {
-			dep.Name = pkg.Name
-			dep.Version = pkg.Version
-			dep.Github = pkg.Github
-		}
-		if strings.HasPrefix(pkg.Name, "@jsr/") {
-			dep.Name = "@" + strings.Replace(dep.Name[5:], "__", "/", 1)
-			dep.Jsr = true
-		}
-		rdeps = append(rdeps, dep)
-	}
-	return rdeps, nil
 }
