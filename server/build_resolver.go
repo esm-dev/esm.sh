@@ -781,10 +781,8 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 					resolvedPath = "/" + subModule.ID() + entry.main[1:]
 				}
 			}
-			if kind == esbuild.ResolveJSDynamicImport {
-				// esbuild removes the `{ type: "json" }` when it's a dynamic import
-				resolvedPath += "?module"
-			}
+			// esbuild removes the `{ type: "json" }` when it's a dynamic import
+			resolvedPath += "?module"
 		} else {
 			resolvedPath = ctx.getImportPath(subModule, ctx.getBuildArgsPrefix(false), ctx.externalAll)
 			if ctx.bundleMode == BundleFalse {
