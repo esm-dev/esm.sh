@@ -604,14 +604,6 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 
 							modulePath := "." + strings.TrimPrefix(specifier, pkgName)
 
-							if withTypeJSON || (len(args.With) > 0 && args.With["type"] == "css") {
-								return esbuild.OnResolveResult{
-									Path:        "/" + ctx.esmPath.ID() + utils.NormalizePathname(modulePath) + "?module",
-									External:    true,
-									SideEffects: esbuild.SideEffectsFalse,
-								}, nil
-							}
-
 							if path.Ext(filename) == "" || !existsFile(filename) {
 								subPath := utils.NormalizePathname(modulePath)[1:]
 								entry := ctx.resolveEntry(EsmPath{
@@ -687,6 +679,14 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 										}
 									}
 								}
+							}
+
+							if len(args.With) > 0 && args.With["type"] == "css" {
+								return esbuild.OnResolveResult{
+									Path:        "/" + ctx.esmPath.ID() + utils.NormalizePathname(modulePath) + "?module",
+									External:    true,
+									SideEffects: esbuild.SideEffectsFalse,
+								}, nil
 							}
 
 							filename = path.Join(ctx.wd, "node_modules", ctx.esmPath.PkgName, modulePath)
