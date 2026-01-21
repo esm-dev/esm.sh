@@ -562,6 +562,9 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 						if err != nil {
 							return esbuild.OnResolveResult{}, err
 						}
+						if withTypeJSON {
+							externalPath += "?module"
+						}
 						return esbuild.OnResolveResult{
 							Path:        externalPath,
 							External:    true,
@@ -637,7 +640,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 								}
 							}
 
-							var asExport string
+							var exportAs string
 
 							// split modules based on the `exports` field of package.json
 							if exports := pkgJson.Exports; exports.Len() > 0 {
@@ -661,9 +664,9 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 											}
 										}
 										if match {
-											asExport = path.Join(pkgJson.Name, stripModuleExt(exportName))
-											if asExport != entrySpecifier && asExport != entrySpecifier+"/index" {
-												externalPath, err := ctx.resolveExternalModule(asExport, args.Kind, withTypeJSON, analyzeMode)
+											exportAs = path.Join(pkgJson.Name, stripModuleExt(exportName))
+											if exportAs != entrySpecifier && exportAs != entrySpecifier+"/index" {
+												externalPath, err := ctx.resolveExternalModule(exportAs, args.Kind, withTypeJSON, analyzeMode)
 												if err != nil {
 													return esbuild.OnResolveResult{}, err
 												}
@@ -743,7 +746,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 							// - it's the entry point
 							// - it's not a dynamic import and the `?bundle=false` flag is not present
 							// - it's not in the `splitting` list
-							if modulePath == entry.main || (asExport != "" && asExport == entrySpecifier) || (args.Kind != esbuild.ResolveJSDynamicImport && !noBundle) {
+							if modulePath == entry.main || (exportAs != "" && exportAs == entrySpecifier) || (args.Kind != esbuild.ResolveJSDynamicImport && !noBundle) {
 								if existsFile(filename) {
 									pkgDir := path.Join(ctx.wd, "node_modules", ctx.esmPath.PkgName)
 									short := strings.TrimPrefix(filename, pkgDir)[1:]
