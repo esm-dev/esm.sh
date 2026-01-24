@@ -21,46 +21,51 @@ var (
 	fetchCache sync.Map
 )
 
-type PackageInfo struct {
+type ImportMeta struct {
 	Name    string   `json:"name"`
 	Version string   `json:"version"`
+	Exports []string `json:"exports"`
 	Imports []string `json:"imports"`
-	Exports []string `json:"peerDependencies"`
-	Dts     string   `json:"dts,omitempty"`
+	SubPath string   `json:"subpath"`
 	Github  bool     `json:"-"`
 	Jsr     bool     `json:"-"`
 }
 
-type Dependency struct {
-	Name    string
-	Version string
-	Peer    bool
-	Github  bool
-	Jsr     bool
-}
-
-func (pkg PackageInfo) String() string {
+func (meta ImportMeta) Specifier() string {
 	b := strings.Builder{}
-	if pkg.Github {
-		b.WriteString("gh/")
-	} else if pkg.Jsr {
-		b.WriteString("jsr/")
+	if meta.Jsr {
+		b.WriteString("jsr:")
 	}
-	if len(pkg.Imports) > 0 {
-		b.WriteString("*") // add external-all modifier of esm.sh
+	b.WriteString(meta.Name)
+	if meta.SubPath != "" {
+		b.WriteByte('/')
+		b.WriteString(meta.SubPath)
 	}
-	b.WriteString(pkg.Name)
-	b.WriteByte('@')
-	b.WriteString(pkg.Version)
 	return b.String()
 }
 
-func fetchPackageInfo(cdnOrigin string, regPrefix string, pkgName string, pkgVersion string) (pkgInfo PackageInfo, err error) {
+func (meta ImportMeta) String() string {
+	b := strings.Builder{}
+	if meta.Github {
+		b.WriteString("gh/")
+	} else if meta.Jsr {
+		b.WriteString("jsr/")
+	}
+	if len(meta.Imports) > 0 {
+		b.WriteString("*") // add "external all" modifier of esm.sh
+	}
+	b.WriteString(meta.Name)
+	b.WriteByte('@')
+	b.WriteString(meta.Version)
+	return b.String()
+}
+
+func FetchImportMeta(cdnOrigin string, regPrefix string, pkgName string, pkgVersion string, subpath string) (meta ImportMeta, err error) {
 	url := fmt.Sprintf("%s/%s%s@%s?meta", cdnOrigin, regPrefix, pkgName, pkgVersion)
 
 	// check memory cache first
 	if v, ok := fetchCache.Load(url); ok {
-		pkgInfo, _ = v.(PackageInfo)
+		meta, _ = v.(ImportMeta)
 		return
 	}
 
@@ -70,29 +75,41 @@ func fetchPackageInfo(cdnOrigin string, regPrefix string, pkgName string, pkgVer
 
 	// check memory cache again after acquiring the lock state
 	if v, ok := fetchCache.Load(url); ok {
-		pkgInfo, _ = v.(PackageInfo)
+		meta, _ = v.(ImportMeta)
 		return
 	}
 
-	appDir, _ := app_dir.GetAppDir()
+	appDir, err := app_dir.GetAppDir()
+	if err != nil {
+		err = fmt.Errorf("could not get app directory: %s", err.Error())
+		return
+	}
 
 	// if the version is exact, check the cache on disk
 	if npm.IsExactVersion(pkgVersion) && appDir != "" {
-		cachePath := filepath.Join(appDir, "registry", regPrefix, pkgName+"@"+pkgVersion+".json")
+		name := pkgName + "@" + pkgVersion
+		if subpath != "" {
+			name += "/" + subpath
+		}
+		cachePath := filepath.Join(appDir, "meta", regPrefix, name+".json")
+		dirname := filepath.Dir(cachePath)
+		if _, err := os.Lstat(dirname); err != nil && os.IsNotExist(err) {
+			_ = os.MkdirAll(dirname, 0755)
+		}
 		f, err := os.Open(cachePath)
 		if err == nil {
 			defer f.Close()
-			err = json.NewDecoder(f).Decode(&pkgInfo)
+			err = json.NewDecoder(f).Decode(&meta)
 			if err == nil {
 				switch regPrefix {
 				case "gh/":
-					pkgInfo.Github = true
+					meta.Github = true
 				case "jsr/":
-					pkgInfo.Name = pkgName
-					pkgInfo.Jsr = true
+					meta.Name = pkgName
+					meta.Jsr = true
 				}
-				fetchCache.Store(url, pkgInfo)
-				return pkgInfo, nil
+				fetchCache.Store(url, meta)
+				return meta, nil
 			}
 			// if decode error, remove the cache file
 			// and try to fetch again
@@ -123,7 +140,7 @@ func fetchPackageInfo(cdnOrigin string, regPrefix string, pkgName string, pkgVer
 		return
 	}
 
-	err = json.Unmarshal(jsonData, &pkgInfo)
+	err = json.Unmarshal(jsonData, &meta)
 	if err != nil {
 		err = fmt.Errorf("could not decode %s@%s/package.json: %s", pkgName, pkgVersion, err.Error())
 		return
@@ -131,38 +148,28 @@ func fetchPackageInfo(cdnOrigin string, regPrefix string, pkgName string, pkgVer
 
 	switch regPrefix {
 	case "gh/":
-		pkgInfo.Github = true
+		meta.Github = true
 	case "jsr/":
-		pkgInfo.Name = pkgName
-		pkgInfo.Jsr = true
+		meta.Name = pkgName
+		meta.Jsr = true
 	}
 
 	// cache the package.json on disk
 	if appDir != "" {
-		cachePath := filepath.Join(appDir, "registry", regPrefix, pkgName+"@"+pkgInfo.Version+".json")
+		cachePath := filepath.Join(appDir, "registry", regPrefix, pkgName+"@"+meta.Version+".json")
 		_ = os.MkdirAll(filepath.Dir(cachePath), 0755)
 		_ = os.WriteFile(cachePath, jsonData, 0644)
 	}
 
 	// cache the package info in memory
-	fetchCache.Store(url, pkgInfo)
-	if pkgInfo.Version != pkgVersion {
-		fetchCache.Store(fmt.Sprintf("%s/%s%s@%s/package.json", cdnOrigin, regPrefix, pkgName, pkgInfo.Version), pkgInfo)
+	fetchCache.Store(url, meta)
+	if meta.Version != pkgVersion {
+		fetchCache.Store(fmt.Sprintf("%s/%s%s@%s/package.json", cdnOrigin, regPrefix, pkgName, meta.Version), meta)
 	}
 	return
 }
 
-func resolveDependency(cdnOrigin string, dep Dependency) (pkgInfo PackageInfo, err error) {
-	var regPrefix string
-	if dep.Github {
-		regPrefix = "gh/"
-	} else if dep.Jsr {
-		regPrefix = "jsr/"
-	}
-	return fetchPackageInfo(cdnOrigin, regPrefix, dep.Name, dep.Version)
-}
-
-func GetPackageInfoFromUrl(urlRaw string) (pkgInfo PackageInfo, err error) {
+func ParseEsmPath(urlRaw string) (pkgInfo ImportMeta, err error) {
 	u, err := url.Parse(urlRaw)
 	if err != nil {
 		err = fmt.Errorf("invalid url: %s", urlRaw)

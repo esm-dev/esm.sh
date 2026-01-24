@@ -3,7 +3,6 @@ package importmap
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"net/url"
 	"sort"
 	"strings"
@@ -91,56 +90,7 @@ func (im *ImportMap) Resolve(specifier string, referrer *url.URL) (string, bool)
 	return specifier + query + hash, false
 }
 
-func (im *ImportMap) AddPackages(packages []string) (addedPackages []PackageInfo, warnings []string, errors []error) {
-	var wg sync.WaitGroup
-	for _, specifier := range packages {
-		wg.Go(func() {
-			var scopeName string
-			var pkgName string
-			var regPrefix string
-			if strings.HasPrefix(specifier, "jsr:") {
-				regPrefix = "jsr/"
-				specifier = specifier[4:]
-			} else if strings.ContainsRune(specifier, '/') && specifier[0] != '@' {
-				regPrefix = "gh/"
-				specifier = strings.Replace(specifier, "#", "@", 1) // owner/repo#branch -> owner/repo@branch
-			}
-			if len(specifier) > 0 && (specifier[0] == '@' || regPrefix == "gh/") {
-				scopeName, pkgName = utils.SplitByFirstByte(specifier, '/')
-			} else {
-				pkgName = specifier
-			}
-			if pkgName == "" {
-				// ignore empty package name
-				return
-			}
-			pkgName, version := utils.SplitByFirstByte(pkgName, '@')
-			if pkgName == "" || !npm.Naming.Match(pkgName) || !(scopeName == "" || npm.Naming.Match(strings.TrimPrefix(scopeName, "@"))) || !(version == "" || npm.Versioning.Match(version)) {
-				errors = append(errors, fmt.Errorf("invalid package name or version: %s", specifier))
-				return
-			}
-			if scopeName != "" {
-				pkgName = scopeName + "/" + pkgName
-			}
-			pkgJson, err := fetchPackageInfo(im.cdnOrign(), regPrefix, pkgName, version)
-			if err != nil {
-				errors = append(errors, err)
-				return
-			}
-			addedPackages = append(addedPackages, pkgJson)
-		})
-	}
-	wg.Wait()
-
-	for _, pkg := range addedPackages {
-		warns, errs := im.addPackage(pkg, false, nil)
-		warnings = append(warnings, warns...)
-		errors = append(errors, errs...)
-	}
-	return
-}
-
-func (im *ImportMap) addPackage(pkg PackageInfo, indirect bool, targetImportsMap map[string]string) (warnings []string, errors []error) {
+func (im *ImportMap) AddImport(meta ImportMeta, indirect bool, targetImportsMap map[string]string) (warnings []string, errors []error) {
 	if im.Imports == nil {
 		im.Imports = map[string]string{}
 	}
@@ -148,7 +98,7 @@ func (im *ImportMap) addPackage(pkg PackageInfo, indirect bool, targetImportsMap
 		im.Scopes = map[string]map[string]string{}
 	}
 
-	cdnOrigin := im.cdnOrign()
+	cdnOrigin := im.CDNOrigin()
 	cdnScopeImportsMap, cdnScoped := im.Scopes[cdnOrigin+"/"]
 	if !cdnScoped {
 		cdnScopeImportsMap = map[string]string{}
@@ -172,78 +122,80 @@ func (im *ImportMap) addPackage(pkg PackageInfo, indirect bool, targetImportsMap
 		target = "es2022"
 	}
 
-	baseUrl := cdnOrigin + "/" + pkg.String()
-	if strings.HasSuffix(pkg.Name, "@") {
-		_, nameNoScope := utils.SplitByFirstByte(pkg.Name, '/')
-		importsMap[pkg.Name] = baseUrl + "/" + target + "/" + nameNoScope + ".mjs"
+	specifier := meta.Specifier()
+	moduleUrl := cdnOrigin + "/" + meta.String() + "/" + target + "/"
+	if strings.ContainsRune(meta.Name, '/') {
+		_, name := utils.SplitByFirstByte(meta.Name, '/')
+		moduleUrl += name + ".mjs"
 	} else {
-		importsMap[pkg.Name] = baseUrl + "/" + target + "/" + pkg.Name + ".mjs"
+		moduleUrl += meta.Name + ".mjs"
 	}
-	importsMap[pkg.Name+"/"] = baseUrl + "&target=" + target + "/"
+	importsMap[specifier] = moduleUrl
 	if !indirect {
-		delete(cdnScopeImportsMap, pkg.Name)
-		delete(cdnScopeImportsMap, pkg.Name+"/")
+		delete(cdnScopeImportsMap, specifier)
 	}
 
-	deps, err := resolvePackageDependencies(pkg)
-	if err != nil {
-		fmt.Println(term.Red("[error]"), err.Error())
-		return
-	}
-
-	wg := sync.WaitGroup{}
-	for _, dep := range deps {
-		wg.Go(func() {
-			var targetImportsMap map[string]string
-			// if the version of the dependency is not exact,
-			// check if it is satisfied with the version in the import map
-			// or create a new scope for the dependency
-			importUrl, exists := im.Imports[dep.Name]
-			if !exists {
-				importUrl, exists = cdnScopeImportsMap[dep.Name]
-			}
-			if exists && strings.HasPrefix(importUrl, cdnOrigin+"/") {
-				p, err := GetPackageInfoFromUrl(importUrl)
-				if err == nil && npm.IsExactVersion(p.Version) {
-					if dep.Version == p.Version {
-						// the version of the dependency is exact and equals to the version in the import map
-						return
-					}
-					if !npm.IsExactVersion(dep.Version) {
-						c, err := semver.NewConstraint(dep.Version)
-						if err == nil && c.Check(semver.MustParse(p.Version)) {
-							// the version of the dependency is exact and satisfied with the version in the import map
+	if len(meta.Imports) > 0 {
+		wg := sync.WaitGroup{}
+		for _, pathname := range meta.Imports {
+			wg.Go(func() {
+				dep, err := parseEsmPath(cdnOrigin + pathname)
+				if err != nil {
+					errors = append(errors, err)
+					return
+				}
+				var targetImportsMap map[string]string
+				// if the version of the dependency is not exact,
+				// check if it is satisfied with the version in the import map
+				// or create a new scope for the dependency
+				importUrl, exists := im.Imports[dep.Name]
+				if !exists {
+					importUrl, exists = cdnScopeImportsMap[dep.Name]
+				}
+				if exists && strings.HasPrefix(importUrl, cdnOrigin+"/") {
+					p, err := ParseEsmPath(importUrl)
+					if err == nil && npm.IsExactVersion(p.Version) {
+						if dep.Version == p.Version {
+							// the version of the dependency is exact and equals to the version in the import map
 							return
 						}
-						if dep.Peer {
-							warnings = append(warnings, "incorrect peer dependency "+dep.Name+"@"+p.Version+term.Dim("(unmet "+dep.Version+")"))
-							return
-						}
-						scope := cdnOrigin + "/" + pkg.String() + "/"
-						ok := false
-						targetImportsMap, ok = im.Scopes[scope]
-						if !ok {
-							targetImportsMap = map[string]string{}
-							im.Scopes[scope] = targetImportsMap
+						if !npm.IsExactVersion(dep.Version) {
+							c, err := semver.NewConstraint(dep.Version)
+							if err == nil && c.Check(semver.MustParse(p.Version)) {
+								// the version of the dependency is exact and satisfied with the version in the import map
+								return
+							}
+							if dep.Peer {
+								warnings = append(warnings, "incorrect peer dependency "+dep.Name+"@"+p.Version+term.Dim("(unmet "+dep.Version+")"))
+								return
+							}
+							scope := cdnOrigin + "/" + meta.String() + "/"
+							ok := false
+							targetImportsMap, ok = im.Scopes[scope]
+							if !ok {
+								targetImportsMap = map[string]string{}
+								im.Scopes[scope] = targetImportsMap
+							}
 						}
 					}
 				}
-			}
-			pkg, err := resolveDependency(cdnOrigin, dep)
-			if err != nil {
-				errors = append(errors, err)
-				return
-			}
-			warns, errs := im.addPackage(pkg, !dep.Peer, targetImportsMap)
-			warnings = append(warnings, warns...)
-			errors = append(errors, errs...)
-		})
+				pkg, err := resolveDependency(cdnOrigin, pathname)
+				if err != nil {
+					errors = append(errors, err)
+					return
+				}
+				warns, errs := im.addPackage(pkg, !pathname.Peer, targetImportsMap)
+				warnings = append(warnings, warns...)
+				errors = append(errors, errs...)
+			})
+		}
+		wg.Wait()
 	}
-	wg.Wait()
+
 	return
 }
 
-func (im *ImportMap) cdnOrign() string {
+func (im *ImportMap) CDNOrigin() string {
 	cdn := im.Config.CDN
 	if strings.HasPrefix(cdn, "https://") || strings.HasPrefix(cdn, "http://") {
 		return cdn

@@ -10,7 +10,7 @@ func TestAddPackages(t *testing.T) {
 	// 1. add packages
 	{
 		im := ImportMap{}
-		addedPackages, warnings, errors := im.AddPackages([]string{"react@19", "react-dom@19"})
+		addedPackages, warnings, errors := im.AddImports([]string{"react@19", "react-dom@19"})
 		if len(errors) > 0 {
 			t.Fatalf("Expected no errors, got %d", len(errors))
 		}
@@ -43,7 +43,7 @@ func TestAddPackages(t *testing.T) {
 	// 2. add peer dependencies to `imports`
 	{
 		im := ImportMap{}
-		addedPackages, warnings, errors := im.AddPackages([]string{"react-dom@19"})
+		addedPackages, warnings, errors := im.AddImports([]string{"react-dom@19"})
 		if len(errors) > 0 {
 			t.Fatalf("Expected no errors, got %d", len(errors))
 		}
@@ -76,7 +76,7 @@ func TestAddPackages(t *testing.T) {
 	// 3. resolve dependencies without conflicts
 	{
 		im := ImportMap{}
-		addedPackages, warnings, errors := im.AddPackages([]string{"loose-envify@1.1.0"})
+		addedPackages, warnings, errors := im.AddImports([]string{"loose-envify@1.1.0"})
 		if len(errors) > 0 {
 			t.Fatalf("Expected no errors, got %d", len(errors))
 		}
@@ -109,7 +109,7 @@ func TestAddPackages(t *testing.T) {
 			t.Fatalf("Expected [js-tokens js-tokens/], got %v", keys)
 		}
 
-		addedPackages, warnings, errors = im.AddPackages([]string{"react@18"})
+		addedPackages, warnings, errors = im.AddImports([]string{"react@18"})
 		if len(errors) > 0 {
 			t.Fatalf("Expected no errors, got %d", len(errors))
 		}
@@ -145,7 +145,7 @@ func TestAddPackages(t *testing.T) {
 	// 4. resolve dependencies with conflicts
 	{
 		im := ImportMap{}
-		addedPackages, warnings, errors := im.AddPackages([]string{"loose-envify@1.0.0"})
+		addedPackages, warnings, errors := im.AddImports([]string{"loose-envify@1.0.0"})
 		if len(errors) > 0 {
 			t.Fatalf("Expected no errors, got %d", len(errors))
 		}
@@ -178,7 +178,7 @@ func TestAddPackages(t *testing.T) {
 			t.Fatalf("Expected [js-tokens js-tokens/], got %v", keys)
 		}
 
-		addedPackages, warnings, errors = im.AddPackages([]string{"react@18"})
+		addedPackages, warnings, errors = im.AddImports([]string{"react@18"})
 		if len(errors) > 0 {
 			t.Fatalf("Expected no errors, got %d", len(errors))
 		}
@@ -244,7 +244,7 @@ func TestAddPackages(t *testing.T) {
 				},
 			},
 		}
-		addedPackages, warnings, errors := im.AddPackages([]string{"react@19"})
+		addedPackages, warnings, errors := im.AddImports([]string{"react@19"})
 		if len(errors) > 0 {
 			t.Fatalf("Expected no errors, got %d", len(errors))
 		}
@@ -281,8 +281,8 @@ func TestScopeKeys(t *testing.T) {
 
 func TestResolve(t *testing.T) {
 	im := ImportMap{}
-	im.AddPackages([]string{"loose-envify@1.0.0"})
-	im.AddPackages([]string{"react@18"})
+	im.AddImports([]string{"loose-envify@1.0.0"})
+	im.AddImports([]string{"react@18"})
 	referrer, _ := url.Parse("file:///main.js")
 	path, ok := im.Resolve("react", referrer)
 	if !ok {

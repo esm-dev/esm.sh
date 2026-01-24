@@ -92,14 +92,14 @@ func tidy() (err error) {
 						Imports: map[string]string{},
 						Scopes:  map[string]map[string]string{},
 					}
-					packages := make([]importmap.PackageInfo, 0, len(prevImportMap.Imports))
+					packages := make([]importmap.ImportMeta, 0, len(prevImportMap.Imports))
 					for specifier, path := range prevImportMap.Imports {
 						if strings.HasPrefix(path, "https://") || strings.HasPrefix(path, "http://") {
 							// todo: check hostname
-							pkgInfo, err := importmap.GetPackageInfoFromUrl(path)
+							meta, err := importmap.ParseEsmPath(path)
 							if err == nil {
-								if npm.IsExactVersion(pkgInfo.Version) && !strings.HasSuffix(specifier, "/") {
-									packages = append(packages, pkgInfo)
+								if npm.IsExactVersion(meta.Version) && !strings.HasSuffix(specifier, "/") {
+									packages = append(packages, meta)
 								}
 								continue
 							}
@@ -115,12 +115,12 @@ func tidy() (err error) {
 						}
 						importMap.Scopes[prefix] = imports
 					}
-					packageNames := make([]string, 0, len(packages))
+					specifiers := make([]string, 0, len(packages))
 					for _, pkg := range packages {
-						packageNames = append(packageNames, pkg.Name+"@"+pkg.Version)
+						specifiers = append(specifiers, pkg.Name+"@"+pkg.Version)
 					}
-					sort.Strings(packageNames)
-					addPackages(&importMap, packageNames)
+					sort.Strings(specifiers)
+					addImports(&importMap, specifiers)
 					buf.WriteString(importMap.FormatJSON(2))
 					buf.WriteString("\n  ")
 					if token == html.EndTagToken {

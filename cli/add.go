@@ -8,10 +8,13 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/esm-dev/esm.sh/internal/importmap"
+	"github.com/esm-dev/esm.sh/internal/npm"
 	"github.com/ije/gox/term"
+	"github.com/ije/gox/utils"
 	"golang.org/x/net/html"
 )
 
@@ -88,7 +91,7 @@ func updateImportMap(packages []string) (err error) {
 				if string(tagName) == "head" && !updated {
 					buf.WriteString("  <script type=\"importmap\">\n")
 					var importMap importmap.ImportMap
-					addPackages(&importMap, packages)
+					addImports(&importMap, packages)
 					buf.WriteString(importMap.FormatJSON(2))
 					buf.WriteString("\n  </script>\n")
 					buf.Write(tokenizer.Raw())
@@ -111,7 +114,7 @@ func updateImportMap(packages []string) (err error) {
 					if typeAttr != "importmap" && !updated {
 						buf.WriteString("<script type=\"importmap\">\n")
 						var importMap importmap.ImportMap
-						addPackages(&importMap, packages)
+						addImports(&importMap, packages)
 						buf.WriteString(importMap.FormatJSON(2))
 						buf.WriteString("\n  </script>\n  ")
 						buf.Write(tokenizer.Raw())
@@ -132,7 +135,7 @@ func updateImportMap(packages []string) (err error) {
 							}
 						}
 						buf.WriteString("\n")
-						addPackages(&importMap, packages)
+						addImports(&importMap, packages)
 						buf.WriteString(importMap.FormatJSON(2))
 						buf.WriteString("\n  ")
 						if token == html.EndTagToken {
@@ -153,7 +156,7 @@ func updateImportMap(packages []string) (err error) {
 		err = os.WriteFile(indexHtml, buf.Bytes(), fi.Mode())
 	} else {
 		var importMap importmap.ImportMap
-		addPackages(&importMap, packages)
+		addImports(&importMap, packages)
 		err = os.WriteFile(indexHtml, fmt.Appendf(nil, htmlTemplate, importMap.FormatJSON(2)), 0644)
 		if err == nil {
 			fmt.Println(term.Dim("Created index.html with importmap script."))
@@ -162,14 +165,75 @@ func updateImportMap(packages []string) (err error) {
 	return
 }
 
-func addPackages(importMap *importmap.ImportMap, packages []string) {
+func addImports(importMap *importmap.ImportMap, specifiers []string) {
 	term.HideCursor()
 	defer term.ShowCursor()
+
+	var warnings []string
+	var errors []error
 
 	startTime := time.Now()
 	spinner := term.NewSpinner(term.SpinnerConfig{})
 	spinner.Start()
-	addedPackages, warnings, errors := importMap.AddPackages(packages)
+	var wg sync.WaitGroup
+	var resovedImports []importmap.ImportMeta
+	for _, specifier := range specifiers {
+		wg.Go(func() {
+			var scopeName string
+			var pkgName string
+			var subPath string
+			var regPrefix string
+			if strings.HasPrefix(specifier, "jsr:") {
+				regPrefix = "jsr/"
+				specifier = specifier[4:]
+			} else if strings.ContainsRune(specifier, '/') && specifier[0] != '@' {
+				regPrefix = "gh/"
+				specifier = strings.Replace(specifier, "#", "@", 1) // owner/repo#branch -> owner/repo@branch
+			}
+			if len(specifier) > 0 && (specifier[0] == '@' || regPrefix == "gh/") {
+				scopeName, specifier = utils.SplitByFirstByte(specifier, '/')
+			}
+			pkgName, subPath = utils.SplitByFirstByte(specifier, '/')
+			if pkgName == "" {
+				// ignore empty package name
+				return
+			}
+			pkgName, version := utils.SplitByFirstByte(pkgName, '@')
+			if pkgName == "" || !npm.Naming.Match(pkgName) || !(scopeName == "" || npm.Naming.Match(strings.TrimPrefix(scopeName, "@"))) || !(version == "" || npm.Versioning.Match(version)) {
+				errors = append(errors, fmt.Errorf("invalid package name or version: %s", specifier))
+				return
+			}
+			if scopeName != "" {
+				pkgName = scopeName + "/" + pkgName
+			}
+			meta, err := importmap.FetchImportMeta(importMap.CDNOrigin(), regPrefix, pkgName, version, subPath)
+			if err != nil {
+				errors = append(errors, err)
+				return
+			}
+			resovedImports = append(resovedImports, meta)
+		})
+	}
+	wg.Wait()
+
+	var imports []importmap.ImportMeta
+	for _, meta := range resovedImports {
+		imports = append(imports, meta)
+		if meta.SubPath == "" && len(meta.Exports) > 0 {
+			// prompt
+		}
+	}
+
+	var wg2 sync.WaitGroup
+	for _, meta := range imports {
+		wg2.Go(func() {
+			warns, errs := importMap.AddImport(meta, false, nil)
+			warnings = append(warnings, warns...)
+			errors = append(errors, errs...)
+		})
+	}
+	wg2.Wait()
+
 	spinner.Stop()
 
 	if len(errors) > 0 {
@@ -180,9 +244,9 @@ func addPackages(importMap *importmap.ImportMap, packages []string) {
 	}
 
 	record := make(map[string]string)
-	for _, pkg := range addedPackages {
-		record[pkg.Name] = importMap.Imports[pkg.Name]
-		record[pkg.Name+"/"] = importMap.Imports[pkg.Name+"/"]
+	for _, imp := range imports {
+		specifier := imp.Specifier()
+		record[specifier] = importMap.Imports[specifier]
 	}
 	keys := make([]string, 0, len(record))
 	for key := range record {

@@ -14,11 +14,12 @@ import (
 type termRaw struct{}
 
 func (t *termRaw) Next() byte {
-	oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
+	fd := int(os.Stdin.Fd())
+	oldState, err := term.MakeRaw(fd)
 	if err != nil {
 		panic(err)
 	}
-	defer term.Restore(int(os.Stdin.Fd()), oldState)
+	defer term.Restore(fd, oldState)
 
 	buf := make([]byte, 3)
 	n, err := os.Stdin.Read(buf)
