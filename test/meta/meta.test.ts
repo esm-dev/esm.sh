@@ -38,9 +38,8 @@ Deno.test("?meta query", async () => {
     assertEquals(meta.subpath, "client");
 
     assert(!meta.exports);
-    assertEquals(meta.imports?.length, 2);
-    assert(meta.imports?.[0].startsWith("/react-dom@19.2.3/"));
-    assert(meta.imports?.[1].startsWith("/scheduler@^0.27.0?"));
+    assertEquals(meta.imports?.length, 1);
+    assert(meta.imports?.[0].startsWith("/scheduler@^0.27.0?"));
     assertEquals(meta.peerImports?.length, 1);
     assert(meta.peerImports?.[0].startsWith("/react@19.2."));
   }
