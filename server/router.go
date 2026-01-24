@@ -1663,18 +1663,18 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 				ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", config.NpmQueryCacheTTL))
 			}
 
-			metaMap := map[string]any{
+			metaJson := map[string]any{
 				"name":    esmPath.PkgName,
 				"version": esmPath.PkgVersion,
 			}
 			if esmPath.GhPrefix {
-				metaMap["gh"] = true
+				metaJson["gh"] = true
 			}
 			if esmPath.PrPrefix {
-				metaMap["pr"] = true
+				metaJson["pr"] = true
 			}
 			if esmPath.SubPath != "" {
-				metaMap["subpath"] = esmPath.SubPath
+				metaJson["subpath"] = esmPath.SubPath
 			} else {
 				packageJson, err := npmrc.getPackageInfo(esmPath.PkgName, esmPath.PkgVersion)
 				if err != nil {
@@ -1686,21 +1686,45 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 						exports = append(exports, key)
 					}
 				}
-				metaMap["exports"] = exports
+				metaJson["exports"] = exports
 			}
 			if buildMeta.Dts != "" {
-				metaMap["dts"] = buildMeta.Dts
+				metaJson["dts"] = buildMeta.Dts
 			}
 			if buildMeta.Imports != nil {
-				metaMap["imports"] = buildMeta.Imports
+				packageJson, err := npmrc.getPackageInfo(esmPath.PkgName, esmPath.PkgVersion)
+				if err != nil {
+					return rex.Status(500, err.Error())
+				}
+				var imports []string
+				var peerImports []string
+				for _, p := range buildMeta.Imports {
+					esm, _, _, _, err := parseEsmPath(npmrc, p)
+					if err != nil {
+						return rex.Status(500, err.Error())
+					}
+					if esm.PkgName != esmPath.PkgName {
+						if _, ok := packageJson.PeerDependencies[esm.PkgName]; ok {
+							peerImports = append(peerImports, p)
+						} else {
+							imports = append(imports, p)
+						}
+					}
+				}
+				if len(imports) > 0 {
+					metaJson["imports"] = imports
+				}
+				if len(peerImports) > 0 {
+					metaJson["peerImports"] = peerImports
+				}
 			}
 			if buildMeta.CSSInJS {
-				metaMap["cssInJS"] = true
+				metaJson["cssInJS"] = true
 			}
 			if buildMeta.TypesOnly {
-				metaMap["typesOnly"] = true
+				metaJson["typesOnly"] = true
 			}
-			return metaMap
+			return metaJson
 		}
 
 		// check `?exports` query
