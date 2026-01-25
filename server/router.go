@@ -148,9 +148,9 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 					return output
 				}
 
-				importMap := importmap.ImportMap{Imports: map[string]string{}}
+				var importMap *importmap.ImportMap
 				if len(options.ImportMap) > 0 {
-					err = json.Unmarshal(options.ImportMap, &importMap)
+					importMap, err = importmap.Parse(nil, options.ImportMap)
 					if err != nil {
 						return rex.Err(400, "Invalid ImportMap")
 					}
@@ -615,7 +615,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 				tokenizer := html.NewTokenizer(io.LimitReader(res.Body, 5*MB))
 				content := []string{}
 				jsEntries := map[string]struct{}{}
-				importMap := importmap.ImportMap{}
+				var importMap *importmap.ImportMap
 				for {
 					tt := tokenizer.Next()
 					if tt == html.ErrorToken {
@@ -742,7 +742,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 				}
 				var body io.Reader = content
 				if err == storage.ErrNotFound {
-					importMap := importmap.ImportMap{}
+					var importMap *importmap.ImportMap
 					res, err := fetchClient.Fetch(baseUrl, nil)
 					if err != nil {
 						return rex.Status(500, "Failed to fetch import map")
@@ -1656,13 +1656,6 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 		}
 
 		if query.Has("meta") {
-			ctx.SetHeader("Content-Type", ctJSON)
-			if isExactVersion {
-				ctx.SetHeader("Cache-Control", ccImmutable)
-			} else {
-				ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", config.NpmQueryCacheTTL))
-			}
-
 			metaJson := map[string]any{
 				"name":    esmPath.PkgName,
 				"version": esmPath.PkgVersion,
@@ -1723,6 +1716,12 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 			}
 			if buildMeta.TypesOnly {
 				metaJson["typesOnly"] = true
+			}
+			ctx.SetHeader("Content-Type", ctJSON)
+			if isExactVersion {
+				ctx.SetHeader("Cache-Control", ccImmutable)
+			} else {
+				ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", config.NpmQueryCacheTTL))
 			}
 			return metaJson
 		}

@@ -29,7 +29,7 @@ type TransformOptions struct {
 
 type ResolvedTransformOptions struct {
 	TransformOptions
-	importMap     importmap.ImportMap
+	importMap     *importmap.ImportMap
 	globalVersion string
 }
 
@@ -168,7 +168,7 @@ func transform(options *ResolvedTransformOptions) (out *TransformOutput, err err
 }
 
 // bundleHttpModule bundles the http module and it's submodules.
-func bundleHttpModule(npmrc *NpmRC, entry string, importMap importmap.ImportMap, collectDependencies bool, fetchClient *fetch.FetchClient) (js []byte, jsx bool, css []byte, dependencyTree map[string][]byte, err error) {
+func bundleHttpModule(npmrc *NpmRC, entry string, importMap *importmap.ImportMap, collectDependencies bool, fetchClient *fetch.FetchClient) (js []byte, jsx bool, css []byte, dependencyTree map[string][]byte, err error) {
 	if !isHttpSpecifier(entry) {
 		err = errors.New("require a http module")
 		return
@@ -194,10 +194,14 @@ func bundleHttpModule(npmrc *NpmRC, entry string, importMap importmap.ImportMap,
 				Setup: func(build esbuild.PluginBuild) {
 					build.OnResolve(esbuild.OnResolveOptions{Filter: ".*"}, func(args esbuild.OnResolveArgs) (esbuild.OnResolveResult, error) {
 						importerUrl, _ := url.Parse(args.Importer)
-						path, ok := importMap.Resolve(args.Path, importerUrl)
-						if ok && isHttpSpecifier(path) {
-							// ignore external modules in the import map
-							return esbuild.OnResolveResult{Path: args.Path, External: true}, nil
+						path := args.Path
+						if importMap != nil {
+							var ok bool
+							path, ok = importMap.Resolve(args.Path, importerUrl)
+							if ok && isHttpSpecifier(path) {
+								// ignore external modules in the import map
+								return esbuild.OnResolveResult{Path: args.Path, External: true}, nil
+							}
 						}
 						if isHttpSpecifier(args.Importer) && (isRelPathSpecifier(path) || isAbsPathSpecifier(path)) {
 							u, e := url.Parse(args.Importer)

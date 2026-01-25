@@ -2,33 +2,32 @@ package cli
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/esm-dev/esm.sh/internal/importmap"
-	"github.com/esm-dev/esm.sh/internal/npm"
+	"github.com/ije/gox/set"
 	"github.com/ije/gox/term"
-	"github.com/ije/gox/utils"
 	"golang.org/x/net/html"
 )
 
-const addHelpMessage = `Add packages to the "importmap" in index.html
+const addHelpMessage = `Add imports to the "importmap" in index.html
 
-Usage: esm.sh add [...packages] [options]
+Usage: esm.sh add [...imports] [options]
 
 Examples:
   esm.sh add react             ` + "\033[30m # latest \033[0m" + `
   esm.sh add react@19          ` + "\033[30m # semver range \033[0m" + `
   esm.sh add react@19.0.0      ` + "\033[30m # exact version \033[0m" + `
+  esm.sh add react/jsx-runtime ` + "\033[30m # sub-module \033[0m" + `
+  esm.sh add react/            ` + "\033[30m # include all sub-modules \033[0m" + `
 
 Arguments:
-  ...packages    Packages to add
+  ...imports     Imports to add
 
 Options:
   --help, -h     Show help message
@@ -49,24 +48,24 @@ const htmlTemplate = `<!DOCTYPE html>
 </html>
 `
 
-// Add adds packages to "importmap" script
+// Add adds imports to "importmap" script
 func Add() {
-	packages, help := parseCommandFlags()
+	specifiers, help := parseCommandFlags()
 
 	if help {
 		fmt.Print(addHelpMessage)
 		return
 	}
 
-	if len(packages) > 0 {
-		err := updateImportMap(packages)
+	if len(specifiers) > 0 {
+		err := updateImportMap(set.New(specifiers...).Values())
 		if err != nil {
 			fmt.Println(term.Red("✖︎"), "Failed to add packages: "+err.Error())
 		}
 	}
 }
 
-func updateImportMap(packages []string) (err error) {
+func updateImportMap(specifiers []string) (err error) {
 	indexHtml, exists, err := lookupClosestFile("index.html")
 	if err != nil {
 		return
@@ -91,7 +90,7 @@ func updateImportMap(packages []string) (err error) {
 				if string(tagName) == "head" && !updated {
 					buf.WriteString("  <script type=\"importmap\">\n")
 					var importMap importmap.ImportMap
-					addImports(&importMap, packages)
+					addImports(&importMap, specifiers, true)
 					buf.WriteString(importMap.FormatJSON(2))
 					buf.WriteString("\n  </script>\n")
 					buf.Write(tokenizer.Raw())
@@ -113,8 +112,8 @@ func updateImportMap(packages []string) (err error) {
 					}
 					if typeAttr != "importmap" && !updated {
 						buf.WriteString("<script type=\"importmap\">\n")
-						var importMap importmap.ImportMap
-						addImports(&importMap, packages)
+						importMap := importmap.Blank()
+						addImports(importMap, specifiers, true)
 						buf.WriteString(importMap.FormatJSON(2))
 						buf.WriteString("\n  </script>\n  ")
 						buf.Write(tokenizer.Raw())
@@ -124,18 +123,19 @@ func updateImportMap(packages []string) (err error) {
 					if typeAttr == "importmap" && !updated {
 						buf.Write(tokenizer.Raw())
 						token := tokenizer.Next()
-						var importMap importmap.ImportMap
+						importMap := importmap.Blank()
 						if token == html.TextToken {
 							importMapRaw := bytes.TrimSpace(tokenizer.Text())
 							if len(importMapRaw) > 0 {
-								if json.Unmarshal(importMapRaw, &importMap) != nil {
-									err = fmt.Errorf("invalid importmap script")
+								importMap, err = importmap.Parse(nil, importMapRaw)
+								if err != nil {
+									err = fmt.Errorf("invalid importmap script: %w", err)
 									return
 								}
 							}
 						}
 						buf.WriteString("\n")
-						addImports(&importMap, packages)
+						addImports(importMap, specifiers, true)
 						buf.WriteString(importMap.FormatJSON(2))
 						buf.WriteString("\n  ")
 						if token == html.EndTagToken {
@@ -155,8 +155,8 @@ func updateImportMap(packages []string) (err error) {
 		}
 		err = os.WriteFile(indexHtml, buf.Bytes(), fi.Mode())
 	} else {
-		var importMap importmap.ImportMap
-		addImports(&importMap, packages)
+		importMap := importmap.Blank()
+		addImports(importMap, specifiers, true)
 		err = os.WriteFile(indexHtml, fmt.Appendf(nil, htmlTemplate, importMap.FormatJSON(2)), 0644)
 		if err == nil {
 			fmt.Println(term.Dim("Created index.html with importmap script."))
@@ -165,7 +165,7 @@ func updateImportMap(packages []string) (err error) {
 	return
 }
 
-func addImports(importMap *importmap.ImportMap, specifiers []string) {
+func addImports(importMap *importmap.ImportMap, specifiers []string, prompt bool) {
 	term.HideCursor()
 	defer term.ShowCursor()
 
@@ -175,38 +175,12 @@ func addImports(importMap *importmap.ImportMap, specifiers []string) {
 	startTime := time.Now()
 	spinner := term.NewSpinner(term.SpinnerConfig{})
 	spinner.Start()
+
 	var wg sync.WaitGroup
 	var resovedImports []importmap.ImportMeta
 	for _, specifier := range specifiers {
 		wg.Go(func() {
-			var scopeName string
-			var pkgName string
-			var subPath string
-			var regPrefix string
-			if strings.HasPrefix(specifier, "jsr:") {
-				regPrefix = "jsr/"
-				specifier = specifier[4:]
-			} else if strings.ContainsRune(specifier, '/') && specifier[0] != '@' {
-				regPrefix = "gh/"
-				specifier = strings.Replace(specifier, "#", "@", 1) // owner/repo#branch -> owner/repo@branch
-			}
-			if len(specifier) > 0 && (specifier[0] == '@' || regPrefix == "gh/") {
-				scopeName, specifier = utils.SplitByFirstByte(specifier, '/')
-			}
-			pkgName, subPath = utils.SplitByFirstByte(specifier, '/')
-			if pkgName == "" {
-				// ignore empty package name
-				return
-			}
-			pkgName, version := utils.SplitByFirstByte(pkgName, '@')
-			if pkgName == "" || !npm.Naming.Match(pkgName) || !(scopeName == "" || npm.Naming.Match(strings.TrimPrefix(scopeName, "@"))) || !(version == "" || npm.Versioning.Match(version)) {
-				errors = append(errors, fmt.Errorf("invalid package name or version: %s", specifier))
-				return
-			}
-			if scopeName != "" {
-				pkgName = scopeName + "/" + pkgName
-			}
-			meta, err := importmap.FetchImportMeta(importMap.CDNOrigin(), regPrefix, pkgName, version, subPath)
+			meta, err := importMap.ParseImport(specifier)
 			if err != nil {
 				errors = append(errors, err)
 				return
@@ -216,18 +190,18 @@ func addImports(importMap *importmap.ImportMap, specifiers []string) {
 	}
 	wg.Wait()
 
-	var imports []importmap.ImportMeta
-	for _, meta := range resovedImports {
-		imports = append(imports, meta)
-		if meta.SubPath == "" && len(meta.Exports) > 0 {
-			// prompt
+	if len(errors) > 0 {
+		for _, err := range errors {
+			fmt.Println(term.Red("[error]"), err.Error())
 		}
+		spinner.Stop()
+		return
 	}
 
 	var wg2 sync.WaitGroup
-	for _, meta := range imports {
+	for _, imp := range resovedImports {
 		wg2.Go(func() {
-			warns, errs := importMap.AddImport(meta, false, nil)
+			warns, errs := importMap.AddImport(imp, false, nil)
 			warnings = append(warnings, warns...)
 			errors = append(errors, errs...)
 		})
@@ -243,10 +217,18 @@ func addImports(importMap *importmap.ImportMap, specifiers []string) {
 		return
 	}
 
+	for _, imp := range resovedImports {
+		if imp.SubPath == "" && len(imp.Exports) > 0 && prompt {
+			// prompt
+			// selected := multiSelect(&termRaw{}, "Select the export to use", imp.Exports)
+			// fmt.Println(selected)
+		}
+	}
+
 	record := make(map[string]string)
-	for _, imp := range imports {
-		specifier := imp.Specifier()
-		record[specifier] = importMap.Imports[specifier]
+	for _, imp := range resovedImports {
+		specifier := imp.Specifier(false)
+		record[specifier], _ = importMap.Imports.Get(specifier)
 	}
 	keys := make([]string, 0, len(record))
 	for key := range record {
@@ -254,11 +236,7 @@ func addImports(importMap *importmap.ImportMap, specifiers []string) {
 	}
 	sort.Strings(keys)
 	for _, key := range keys {
-		k := key
-		if !strings.HasSuffix(k, "/") {
-			k += " " // align with the next line
-		}
-		fmt.Println(term.Green("✔"), k, term.Dim("→"), term.Dim(record[key]))
+		fmt.Println(term.Green("✔"), key, term.Dim("→"), term.Dim(record[key]))
 	}
 
 	if len(warnings) > 0 {
@@ -268,4 +246,76 @@ func addImports(importMap *importmap.ImportMap, specifiers []string) {
 	}
 
 	fmt.Println(term.Green("✦"), "Done in", term.Dim(time.Since(startTime).String()))
+}
+
+// Select asks the user to select an item from a list.
+func multiSelect(raw term.Raw, prompt string, items []string) (selected []string) {
+	fmt.Print(term.Cyan("? "))
+	fmt.Println(prompt)
+
+	defer func() {
+		lines := len(items) + 1
+		term.MoveCursorUp(lines)
+		for range lines {
+			term.ClearLine()
+			os.Stdout.Write([]byte("\n")) // move to the next line
+		}
+		term.MoveCursorUp(lines)
+	}()
+
+	cursor := 0
+	selectState := set.New[string]()
+	printMultiSelectItems(items, selectState, cursor, false)
+
+	for {
+		key := raw.Next()
+		switch key {
+		case 3, 27: // Ctrl+C, Escape
+			fmt.Print(term.Dim("Aborted."))
+			fmt.Print("\n")
+			os.Exit(0)
+		case 13: // Enter
+			selected = selectState.Values()
+			return
+		case 32: // Space
+			item := items[cursor]
+			if !selectState.Has(item) {
+				selectState.Add(item)
+			} else {
+				selectState.Remove(item)
+			}
+			printMultiSelectItems(items, selectState, cursor, true)
+		case 65, 16, 'p': // Up, ctrl+p, p
+			if cursor > 0 {
+				cursor--
+				printMultiSelectItems(items, selectState, cursor, true)
+			}
+		case 66, 14, 'n': // Down, ctrl+n, n
+			if cursor < len(items)-1 {
+				cursor++
+				printMultiSelectItems(items, selectState, cursor, true)
+			}
+		}
+	}
+}
+
+func printMultiSelectItems(items []string, selectState *set.Set[string], cursor int, resetCursor bool) {
+	if resetCursor {
+		term.MoveCursorUp(len(items))
+	}
+	for i, name := range items {
+		os.Stdout.Write([]byte("\r"))
+		if selectState.Has(name) {
+			os.Stdout.WriteString(term.Green("•"))
+		} else {
+			os.Stdout.WriteString(term.Dim("•"))
+		}
+		os.Stdout.Write([]byte(" "))
+		if i == cursor {
+			os.Stdout.WriteString(name)
+		} else {
+			os.Stdout.WriteString(term.Dim(name))
+		}
+		os.Stdout.Write([]byte("\n"))
+	}
 }

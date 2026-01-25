@@ -2,7 +2,6 @@ package cli
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -76,51 +75,51 @@ func tidy() (err error) {
 				if typeAttr == "importmap" {
 					buf.Write(tokenizer.Raw())
 					token := tokenizer.Next()
-					var prevImportMap importmap.ImportMap
+					var prevImportMap *importmap.ImportMap
 					if token == html.TextToken {
-						importMapRaw := bytes.TrimSpace(tokenizer.Text())
-						if len(importMapRaw) > 0 {
-							if json.Unmarshal(importMapRaw, &prevImportMap) != nil {
-								err = fmt.Errorf("invalid importmap script")
+						importMapJson := bytes.TrimSpace(tokenizer.Text())
+						if len(importMapJson) > 0 {
+							prevImportMap, err = importmap.Parse(nil, importMapJson)
+							if err != nil {
+								err = fmt.Errorf("invalid importmap script: %w", err)
 								return
 							}
 						}
 					}
 					buf.WriteString("\n")
-					importMap := importmap.ImportMap{
-						Config:  prevImportMap.Config,
-						Imports: map[string]string{},
-						Scopes:  map[string]map[string]string{},
-					}
-					packages := make([]importmap.ImportMeta, 0, len(prevImportMap.Imports))
-					for specifier, path := range prevImportMap.Imports {
-						if strings.HasPrefix(path, "https://") || strings.HasPrefix(path, "http://") {
+					importMap := importmap.Blank()
+					importMap.SetConfig(prevImportMap.Config())
+					imports := make([]importmap.Import, 0, prevImportMap.Imports.Len())
+					prevImportMap.Imports.Range(func(specifier string, url string) bool {
+						if strings.HasPrefix(url, "https://") || strings.HasPrefix(url, "http://") {
 							// todo: check hostname
-							meta, err := importmap.ParseEsmPath(path)
+							imp, err := importmap.ParseEsmPath(url)
 							if err == nil {
-								if npm.IsExactVersion(meta.Version) && !strings.HasSuffix(specifier, "/") {
-									packages = append(packages, meta)
+								if npm.IsExactVersion(imp.Version) {
+									imports = append(imports, imp)
 								}
-								continue
+								return true // continue
 							}
 						}
-						importMap.Imports[specifier] = path
-					}
-					for prefix, imports := range prevImportMap.Scopes {
-						if strings.HasPrefix(prefix, "https://") || strings.HasPrefix(prefix, "http://") {
+						importMap.Imports.Set(specifier, url)
+						return true
+					})
+					prevImportMap.RangeScopes(func(scope string, imports *importmap.Imports) bool {
+						if strings.HasPrefix(scope, "https://") || strings.HasPrefix(scope, "http://") {
 							// todo: check hostname
-							if strings.HasSuffix(prefix, "/") {
-								continue
+							if strings.HasSuffix(scope, "/") {
+								return true // continue
 							}
 						}
-						importMap.Scopes[prefix] = imports
-					}
-					specifiers := make([]string, 0, len(packages))
-					for _, pkg := range packages {
-						specifiers = append(specifiers, pkg.Name+"@"+pkg.Version)
+						importMap.SetScopeImports(scope, imports)
+						return true
+					})
+					specifiers := make([]string, 0, len(imports))
+					for _, imp := range imports {
+						specifiers = append(specifiers, imp.Specifier(true))
 					}
 					sort.Strings(specifiers)
-					addImports(&importMap, specifiers)
+					addImports(importMap, specifiers, false)
 					buf.WriteString(importMap.FormatJSON(2))
 					buf.WriteString("\n  ")
 					if token == html.EndTagToken {
