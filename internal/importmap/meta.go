@@ -23,12 +23,11 @@ var (
 
 // Import represents an import from esm.sh CDN.
 type Import struct {
-	Name         string `json:"name"`
-	Version      string `json:"version"`
-	SubPath      string `json:"subpath"`
-	Github       bool   `json:"-"`
-	Jsr          bool   `json:"-"`
-	TailingSlash bool   `json:"-"`
+	Name    string `json:"name"`
+	Version string `json:"version"`
+	SubPath string `json:"subpath"`
+	Github  bool   `json:"-"`
+	Jsr     bool   `json:"-"`
 }
 
 func (im Import) Specifier(withVersion bool) string {
@@ -46,9 +45,6 @@ func (im Import) Specifier(withVersion bool) string {
 	if im.SubPath != "" {
 		b.WriteByte('/')
 		b.WriteString(im.SubPath)
-	}
-	if im.TailingSlash {
-		b.WriteByte('/')
 	}
 	return b.String()
 }
@@ -153,7 +149,7 @@ func fetchImportMeta(cdnOrigin string, im Import) (meta ImportMeta, err error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 404 {
-		err = fmt.Errorf("import not found: %s", im.Specifier(true))
+		err = fmt.Errorf("package not found: %s", im.Specifier(true))
 		return
 	}
 
@@ -223,11 +219,7 @@ func ParseEsmPath(pathnameOrUrl string) (imp Import, err error) {
 		imp.Jsr = true
 		pathname = pathname[4:]
 	}
-	imp.TailingSlash = strings.HasSuffix(pathname, "/")
-	if imp.TailingSlash {
-		pathname = pathname[0 : len(pathname)-1]
-	}
-	segs := strings.Split(pathname[1:], "/")
+	segs := strings.Split(utils.NormalizePathname(pathname)[1:], "/")
 	if len(segs) == 0 {
 		err = fmt.Errorf("invalid pathname: %s", pathname)
 		return

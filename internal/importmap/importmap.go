@@ -11,6 +11,7 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/esm-dev/esm.sh/internal/npm"
+	"github.com/ije/gox/set"
 	"github.com/ije/gox/term"
 	"github.com/ije/gox/utils"
 )
@@ -248,10 +249,6 @@ func (im *ImportMap) ParseImport(specifier string) (meta ImportMeta, err error) 
 	if len(specifier) > 0 && (specifier[0] == '@' || imp.Github) {
 		scopeName, specifier = utils.SplitByFirstByte(specifier, '/')
 	}
-	tailingSlash := strings.HasSuffix(specifier, "/")
-	if tailingSlash {
-		specifier = specifier[:len(specifier)-1]
-	}
 	imp.Name, imp.SubPath = utils.SplitByFirstByte(specifier, '/')
 	if imp.Name == "" {
 		// ignore empty package name
@@ -265,26 +262,36 @@ func (im *ImportMap) ParseImport(specifier string) (meta ImportMeta, err error) 
 	if scopeName != "" {
 		imp.Name = scopeName + "/" + imp.Name
 	}
-	meta, err = fetchImportMeta(im.cdnOrigin(), imp)
-	if err != nil {
-		return
-	}
-	meta.TailingSlash = tailingSlash
-	return meta, err
+	return fetchImportMeta(im.cdnOrigin(), imp)
+}
+
+func (im *ImportMap) FetchImportMeta(i Import) (meta ImportMeta, err error) {
+	return fetchImportMeta(im.cdnOrigin(), i)
 }
 
 // AddImportFromSpecifier adds an import from a specifier to the import map.
 func (im *ImportMap) AddImportFromSpecifier(specifier string) (warnings []string, errors []error) {
-	meta, err := im.ParseImport(specifier)
+	imp, err := im.ParseImport(specifier)
 	if err != nil {
 		errors = append(errors, err)
 		return
 	}
-	return im.AddImport(meta, false, nil)
+	return im.AddImport(imp)
 }
 
 // AddImport adds an import to the import map.
-func (im *ImportMap) AddImport(meta ImportMeta, indirect bool, targetImportsMap *Imports) (warnings []string, errors []error) {
+func (im *ImportMap) AddImport(imp ImportMeta) (warnings []string, errors []error) {
+	return im.addImport(imp, false, nil, set.New[string]())
+}
+
+// addImport adds an import to the import map.
+func (im *ImportMap) addImport(imp ImportMeta, indirect bool, targetImports *Imports, mark *set.Set[string]) (warnings []string, errors []error) {
+	specifier := imp.Specifier(false)
+	if mark.Has(specifier) {
+		return
+	}
+	mark.Add(specifier)
+
 	cdnOrigin := im.cdnOrigin()
 	cdnScopeImportsMap, cdnScoped := im.GetScopeImports(cdnOrigin + "/")
 	if !cdnScoped {
@@ -292,12 +299,12 @@ func (im *ImportMap) AddImport(meta ImportMeta, indirect bool, targetImportsMap 
 		im.SetScopeImports(cdnOrigin+"/", cdnScopeImportsMap)
 	}
 
-	importsMap := im.Imports
+	imports := im.Imports
 	if indirect {
-		if targetImportsMap != nil {
-			importsMap = targetImportsMap
+		if targetImports != nil {
+			imports = targetImports
 		} else {
-			importsMap = cdnScopeImportsMap
+			imports = cdnScopeImportsMap
 		}
 	}
 
@@ -309,94 +316,101 @@ func (im *ImportMap) AddImport(meta ImportMeta, indirect bool, targetImportsMap 
 		target = "es2022"
 	}
 
-	specifier := meta.Specifier(false)
-	moduleUrl := cdnOrigin + "/" + meta.EsmSpecifier() + "/"
-	if meta.TailingSlash {
-		if meta.SubPath != "" {
-			moduleUrl += meta.SubPath + "/"
+	moduleUrl := cdnOrigin + "/" + imp.EsmSpecifier() + "/"
+	moduleUrl += target + "/"
+	if imp.SubPath != "" {
+		if imp.SubPath == "jsx-dev-runtime" {
+			moduleUrl += imp.SubPath + ".development.mjs"
+		} else {
+			moduleUrl += imp.SubPath + ".mjs"
 		}
 	} else {
-		moduleUrl += target + "/"
-		if meta.SubPath != "" {
-			moduleUrl += meta.SubPath + ".mjs"
+		if strings.ContainsRune(imp.Name, '/') {
+			_, name := utils.SplitByFirstByte(imp.Name, '/')
+			moduleUrl += name + ".mjs"
 		} else {
-			if strings.ContainsRune(meta.Name, '/') {
-				_, name := utils.SplitByFirstByte(meta.Name, '/')
-				moduleUrl += name + ".mjs"
-			} else {
-				moduleUrl += meta.Name + ".mjs"
-			}
+			moduleUrl += imp.Name + ".mjs"
 		}
 	}
 
 	im.lock.Lock()
-	importsMap.Set(specifier, moduleUrl)
+	imports.Set(specifier, moduleUrl)
 	if !indirect {
 		cdnScopeImportsMap.Delete(specifier)
 	}
 	im.lock.Unlock()
 
-	if len(meta.Imports) > 0 {
+	peerImportsLen := len(imp.PeerImports)
+	importsLen := len(imp.Imports)
+	allImports := make([]string, peerImportsLen+importsLen)
+	if peerImportsLen > 0 {
+		copy(allImports, imp.PeerImports)
+	}
+	if importsLen > 0 {
+		copy(allImports[peerImportsLen:], imp.Imports)
+	}
+	fmt.Println("allImports", allImports)
+	if peerImportsLen > 0 || importsLen > 0 {
 		wg := sync.WaitGroup{}
-		peerImportsLen := len(meta.PeerImports)
-		allImports := make([]string, peerImportsLen+len(meta.Imports))
-		if peerImportsLen > 0 {
-			copy(allImports, meta.PeerImports)
-		}
-		if len(meta.Imports) > 0 {
-			copy(allImports[peerImportsLen:], meta.Imports)
-		}
 		for i, pathname := range allImports {
 			isPeer := i < peerImportsLen
 			wg.Go(func() {
-				imp, err := ParseEsmPath(pathname)
+				if strings.HasPrefix(pathname, "/node/") {
+					// ignore node built-in modules
+					return
+				}
+				depImport, err := ParseEsmPath(pathname)
 				if err != nil {
 					errors = append(errors, err)
 					return
 				}
-				var targetImportsMap *Imports
-				// if the version of the dependency is not exact,
-				// check if it is satisfied with the version in the import map
-				// or create a new scope for the dependency
-				importUrl, exists := im.Imports.Get(imp.Name)
-				if !exists {
-					importUrl, exists = cdnScopeImportsMap.Get(imp.Name)
+				// if the dependency is the same as the current import, use the version of the current import
+				if depImport.Name == imp.Name {
+					depImport.Version = imp.Version
 				}
-				if exists && strings.HasPrefix(importUrl, cdnOrigin+"/") {
-					p, err := ParseEsmPath(importUrl)
-					if err == nil && npm.IsExactVersion(p.Version) {
-						if imp.Version == p.Version {
+				fmt.Println("depImport", depImport.Name, depImport.SubPath)
+				depImportSpecifier := depImport.Specifier(false)
+				addedUrl, exists := im.Imports.Get(depImportSpecifier)
+				if !exists {
+					addedUrl, exists = cdnScopeImportsMap.Get(depImportSpecifier)
+				}
+				var targetImports *Imports
+				if exists && strings.HasPrefix(addedUrl, cdnOrigin+"/") {
+					addedImport, err := ParseEsmPath(addedUrl)
+					if err == nil && npm.IsExactVersion(addedImport.Version) {
+						if depImport.Version == addedImport.Version {
 							// the version of the dependency is exact and equals to the version in the import map
 							return
 						}
-						if !npm.IsExactVersion(imp.Version) {
-							c, err := semver.NewConstraint(imp.Version)
-							if err == nil && c.Check(semver.MustParse(p.Version)) {
+						// if the version of the dependency is not exact,
+						// check if it is satisfied with the version in the import map
+						// or create a new scope for the dependency
+						if !npm.IsExactVersion(depImport.Version) {
+							c, err := semver.NewConstraint(depImport.Version)
+							if err == nil && c.Check(semver.MustParse(addedImport.Version)) {
 								// the version of the dependency is exact and satisfied with the version in the import map
 								return
 							}
 							if isPeer {
-								warnings = append(warnings, "incorrect peer dependency "+imp.Name+"@"+p.Version+term.Dim("(unmet "+imp.Version+")"))
+								warnings = append(warnings, "incorrect peer dependency "+depImport.Name+"@"+addedImport.Version+term.Dim("(unmet "+depImport.Version+")"))
 								return
 							}
-							scope := cdnOrigin + "/" + meta.EsmSpecifier() + "/"
-							ok := false
-							targetImportsMap, ok = im.GetScopeImports(scope)
+							var ok bool
+							scope := cdnOrigin + "/" + imp.EsmSpecifier() + "/"
+							targetImports, ok = im.GetScopeImports(scope)
 							if !ok {
-								targetImportsMap = &Imports{
-									imports: map[string]string{},
-								}
-								im.SetScopeImports(scope, targetImportsMap)
+								targetImports = newImports(nil)
+								im.SetScopeImports(scope, targetImports)
 							}
 						}
 					}
 				}
-				meta, err := fetchImportMeta(im.cdnOrigin(), imp)
+				meta, err := fetchImportMeta(im.cdnOrigin(), depImport)
 				if err != nil {
 					errors = append(errors, err)
 					return
 				}
-				warns, errs := im.AddImport(meta, !isPeer, targetImportsMap)
+				warns, errs := im.addImport(meta, !isPeer, targetImports, mark)
 				warnings = append(warnings, warns...)
 				errors = append(errors, errs...)
 			})

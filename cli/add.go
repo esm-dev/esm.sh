@@ -2,10 +2,12 @@ package cli
 
 import (
 	"bytes"
+	"flag"
 	"fmt"
 	"io"
 	"os"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -17,19 +19,20 @@ import (
 
 const addHelpMessage = `Add imports to the "importmap" in index.html
 
-Usage: esm.sh add [...imports] [options]
+Usage: esm.sh add [options] [...imports]
 
 Examples:
-  esm.sh add react             ` + "\033[30m # latest \033[0m" + `
-  esm.sh add react@19          ` + "\033[30m # semver range \033[0m" + `
-  esm.sh add react@19.0.0      ` + "\033[30m # exact version \033[0m" + `
-  esm.sh add react/jsx-runtime ` + "\033[30m # sub-module \033[0m" + `
-  esm.sh add react/            ` + "\033[30m # include all sub-modules \033[0m" + `
+  esm.sh add react             ` + "\033[30m # use latest \033[0m" + `
+  esm.sh add react@19          ` + "\033[30m # use semver range \033[0m" + `
+  esm.sh add react@19.0.0      ` + "\033[30m # use exact version \033[0m" + `
+  esm.sh add react/jsx-runtime ` + "\033[30m # specifiy a sub-module \033[0m" + `
+  esm.sh add --all react       ` + "\033[30m # include all sub-modules of the import\033[0m" + `
 
 Arguments:
   ...imports     Imports to add
 
 Options:
+  --all, -a      Add all modules of the import without prompt
   --help, -h     Show help message
 `
 
@@ -41,31 +44,37 @@ const htmlTemplate = `<!DOCTYPE html>
   <script type="importmap">
 %s
   </script>
+	<script type="module">
+		import * as mod from "%s";
+		console.log(mod);
+	</script>
 </head>
 <body>
-  <h1>Hello, world!</h1>
+  <p>Build with <a href="https://esm.sh">esm.sh</a> 💚</p>
 </body>
 </html>
 `
 
 // Add adds imports to "importmap" script
 func Add() {
+	all := flag.Bool("all", false, "add all modules of the import")
+	a := flag.Bool("a", false, "add all modules of the import")
 	specifiers, help := parseCommandFlags()
 
-	if help {
+	if help || len(specifiers) == 0 {
 		fmt.Print(addHelpMessage)
 		return
 	}
 
 	if len(specifiers) > 0 {
-		err := updateImportMap(set.New(specifiers...).Values())
+		err := updateImportMap(set.New(specifiers...).Values(), *all || *a)
 		if err != nil {
 			fmt.Println(term.Red("✖︎"), "Failed to add packages: "+err.Error())
 		}
 	}
 }
 
-func updateImportMap(specifiers []string) (err error) {
+func updateImportMap(specifiers []string, all bool) (err error) {
 	indexHtml, exists, err := lookupClosestFile("index.html")
 	if err != nil {
 		return
@@ -90,9 +99,10 @@ func updateImportMap(specifiers []string) (err error) {
 				if string(tagName) == "head" && !updated {
 					buf.WriteString("  <script type=\"importmap\">\n")
 					var importMap importmap.ImportMap
-					addImports(&importMap, specifiers, true)
-					buf.WriteString(importMap.FormatJSON(2))
-					buf.WriteString("\n  </script>\n")
+					if addImports(&importMap, specifiers, true, all) {
+						buf.WriteString(importMap.FormatJSON(2))
+						buf.WriteString("\n  </script>\n")
+					}
 					buf.Write(tokenizer.Raw())
 					updated = true
 					continue
@@ -113,9 +123,10 @@ func updateImportMap(specifiers []string) (err error) {
 					if typeAttr != "importmap" && !updated {
 						buf.WriteString("<script type=\"importmap\">\n")
 						importMap := importmap.Blank()
-						addImports(importMap, specifiers, true)
-						buf.WriteString(importMap.FormatJSON(2))
-						buf.WriteString("\n  </script>\n  ")
+						if addImports(importMap, specifiers, true, all) {
+							buf.WriteString(importMap.FormatJSON(2))
+							buf.WriteString("\n  </script>\n  ")
+						}
 						buf.Write(tokenizer.Raw())
 						updated = true
 						continue
@@ -124,8 +135,9 @@ func updateImportMap(specifiers []string) (err error) {
 						buf.Write(tokenizer.Raw())
 						token := tokenizer.Next()
 						importMap := importmap.Blank()
+						tagContent := tokenizer.Raw()
 						if token == html.TextToken {
-							importMapRaw := bytes.TrimSpace(tokenizer.Text())
+							importMapRaw := bytes.TrimSpace(tagContent)
 							if len(importMapRaw) > 0 {
 								importMap, err = importmap.Parse(nil, importMapRaw)
 								if err != nil {
@@ -134,10 +146,13 @@ func updateImportMap(specifiers []string) (err error) {
 								}
 							}
 						}
-						buf.WriteString("\n")
-						addImports(importMap, specifiers, true)
-						buf.WriteString(importMap.FormatJSON(2))
-						buf.WriteString("\n  ")
+						if addImports(importMap, specifiers, true, all) {
+							buf.WriteString("\n")
+							buf.WriteString(importMap.FormatJSON(2))
+							buf.WriteString("\n  ")
+						} else {
+							buf.Write(tagContent)
+						}
 						if token == html.EndTagToken {
 							buf.Write(tokenizer.Raw())
 						}
@@ -156,68 +171,96 @@ func updateImportMap(specifiers []string) (err error) {
 		err = os.WriteFile(indexHtml, buf.Bytes(), fi.Mode())
 	} else {
 		importMap := importmap.Blank()
-		addImports(importMap, specifiers, true)
-		err = os.WriteFile(indexHtml, fmt.Appendf(nil, htmlTemplate, importMap.FormatJSON(2)), 0644)
-		if err == nil {
-			fmt.Println(term.Dim("Created index.html with importmap script."))
+		if addImports(importMap, specifiers, true, all) {
+			err = os.WriteFile(indexHtml, fmt.Appendf(nil, htmlTemplate, importMap.FormatJSON(2), specifiers[0]), 0644)
+			if err == nil {
+				fmt.Println(term.Dim("Created index.html with importmap script."))
+			}
 		}
 	}
 	return
 }
 
-func addImports(importMap *importmap.ImportMap, specifiers []string, prompt bool) {
+func addImports(im *importmap.ImportMap, specifiers []string, prompt bool, all bool) bool {
+	// debug(skip term spinner and prompt)
+	im.AddImportFromSpecifier(specifiers[0])
+	return true
+
 	term.HideCursor()
 	defer term.ShowCursor()
-
-	var warnings []string
-	var errors []error
 
 	startTime := time.Now()
 	spinner := term.NewSpinner(term.SpinnerConfig{})
 	spinner.Start()
 
+	// stop spinner and print errors
+	onErrors := func(errors []error) {
+		spinner.Stop()
+		for _, err := range errors {
+			fmt.Println(term.Red("[error]"), err.Error())
+		}
+	}
+
 	var wg sync.WaitGroup
-	var resovedImports []importmap.ImportMeta
+	var resolvedImports []importmap.ImportMeta
+	var warnings []string
+	var errors []error
 	for _, specifier := range specifiers {
 		wg.Go(func() {
-			meta, err := importMap.ParseImport(specifier)
+			imp, err := im.ParseImport(specifier)
 			if err != nil {
 				errors = append(errors, err)
 				return
 			}
-			resovedImports = append(resovedImports, meta)
+			resolvedImports = append(resolvedImports, imp)
 		})
 	}
 	wg.Wait()
 
-	if len(errors) > 0 {
-		for _, err := range errors {
-			fmt.Println(term.Red("[error]"), err.Error())
-		}
-		spinner.Stop()
-		return
-	}
-
 	var wg2 sync.WaitGroup
-	for _, imp := range resovedImports {
-		wg2.Go(func() {
-			warns, errs := importMap.AddImport(imp, false, nil)
-			warnings = append(warnings, warns...)
-			errors = append(errors, errs...)
-		})
+	if all && len(resolvedImports) > 0 {
+		for _, imp := range resolvedImports {
+			if len(imp.Exports) > 0 {
+				for _, exportPath := range imp.Exports {
+					if strings.HasPrefix(exportPath, "./") && !strings.HasSuffix(exportPath, ".css") && !strings.HasSuffix(exportPath, ".json") && !strings.ContainsRune(exportPath, '*') {
+						wg2.Go(func() {
+							meta, err := im.FetchImportMeta(importmap.Import{
+								Name:    imp.Name,
+								Version: imp.Version,
+								SubPath: exportPath[2:],
+								Github:  imp.Github,
+								Jsr:     imp.Jsr,
+							})
+							if err != nil {
+								errors = append(errors, err)
+								return
+							}
+							resolvedImports = append(resolvedImports, meta)
+						})
+					}
+				}
+			}
+		}
 	}
 	wg2.Wait()
 
-	spinner.Stop()
-
 	if len(errors) > 0 {
-		for _, err := range errors {
-			fmt.Println(term.Red("[error]"), err.Error())
-		}
-		return
+		onErrors(errors)
+		return false
 	}
 
-	for _, imp := range resovedImports {
+	for _, imp := range resolvedImports {
+		warns, errors := im.AddImport(imp)
+		if len(errors) > 0 {
+			onErrors(errors)
+			return false
+		}
+		warnings = append(warnings, warns...)
+	}
+
+	spinner.Stop()
+
+	for _, imp := range resolvedImports {
 		if imp.SubPath == "" && len(imp.Exports) > 0 && prompt {
 			// prompt
 			// selected := multiSelect(&termRaw{}, "Select the export to use", imp.Exports)
@@ -226,9 +269,9 @@ func addImports(importMap *importmap.ImportMap, specifiers []string, prompt bool
 	}
 
 	record := make(map[string]string)
-	for _, imp := range resovedImports {
+	for _, imp := range resolvedImports {
 		specifier := imp.Specifier(false)
-		record[specifier], _ = importMap.Imports.Get(specifier)
+		record[specifier], _ = im.Imports.Get(specifier)
 	}
 	keys := make([]string, 0, len(record))
 	for key := range record {
@@ -246,6 +289,7 @@ func addImports(importMap *importmap.ImportMap, specifiers []string, prompt bool
 	}
 
 	fmt.Println(term.Green("✦"), "Done in", term.Dim(time.Since(startTime).String()))
+	return true
 }
 
 // Select asks the user to select an item from a list.

@@ -5,7 +5,6 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"golang.org/x/term"
 )
@@ -38,29 +37,10 @@ func (t *termRaw) Next() byte {
 
 // parseCommandFlags parses the command flags
 func parseCommandFlags() (args []string, helpFlag bool) {
-	rawArgs := make([]string, 0, len(os.Args)-2)
-	for _, arg := range os.Args[2:] {
-		if arg == "-h" || arg == "--help" {
-			helpFlag = true
-		} else {
-			rawArgs = append(rawArgs, arg)
-		}
-	}
-	flag.CommandLine.Parse(rawArgs)
-	args = make([]string, 0, len(rawArgs))
-	nextVaule := false
-	for _, arg := range rawArgs {
-		if !strings.HasPrefix(arg, "-") {
-			if !nextVaule {
-				args = append(args, arg)
-			} else {
-				nextVaule = false
-			}
-		} else if !strings.Contains(arg, "=") {
-			nextVaule = true
-		}
-	}
-	return
+	help := flag.Bool("help", false, "Print help message")
+	h := flag.Bool("h", false, "Print help message")
+	flag.CommandLine.Parse(os.Args[2:])
+	return flag.CommandLine.Args(), *help || *h
 }
 
 func lookupClosestFile(name string) (filename string, exists bool, err error) {

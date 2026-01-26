@@ -119,7 +119,7 @@ func tidy() (err error) {
 						specifiers = append(specifiers, imp.Specifier(true))
 					}
 					sort.Strings(specifiers)
-					addImports(importMap, specifiers, false)
+					addImports(importMap, specifiers, false, false)
 					buf.WriteString(importMap.FormatJSON(2))
 					buf.WriteString("\n  ")
 					if token == html.EndTagToken {
