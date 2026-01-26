@@ -1703,7 +1703,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 					if err != nil {
 						return rex.Status(500, err.Error())
 					}
-					if _, ok := packageJson.PeerDependencies[esm.PkgName]; ok || esm.PkgName == esmPath.PkgName {
+					if _, ok := packageJson.PeerDependencies[esm.PkgName]; ok {
 						peerImports = append(peerImports, p)
 					} else {
 						imports = append(imports, p)
