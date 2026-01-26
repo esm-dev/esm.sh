@@ -32,7 +32,8 @@ Arguments:
   ...imports     Imports to add
 
 Options:
-  --all, -a      Add all modules of the import without prompt
+	--all, -a      Add all modules of the import without prompt
+	--no-prompt    Add imports without prompt
   --help, -h     Show help message
 `
 
@@ -59,6 +60,7 @@ const htmlTemplate = `<!DOCTYPE html>
 func Add() {
 	all := flag.Bool("all", false, "add all modules of the import")
 	a := flag.Bool("a", false, "add all modules of the import")
+	noPrompt := flag.Bool("no-prompt", false, "add imports without prompt")
 	specifiers, help := parseCommandFlags()
 
 	if help || len(specifiers) == 0 {
@@ -67,14 +69,14 @@ func Add() {
 	}
 
 	if len(specifiers) > 0 {
-		err := updateImportMap(set.New(specifiers...).Values(), *all || *a)
+		err := updateImportMap(set.New(specifiers...).Values(), *all || *a, *noPrompt)
 		if err != nil {
 			fmt.Println(term.Red("✖︎"), "Failed to add packages: "+err.Error())
 		}
 	}
 }
 
-func updateImportMap(specifiers []string, all bool) (err error) {
+func updateImportMap(specifiers []string, all bool, noPrompt bool) (err error) {
 	indexHtml, exists, err := lookupClosestFile("index.html")
 	if err != nil {
 		return
@@ -99,7 +101,7 @@ func updateImportMap(specifiers []string, all bool) (err error) {
 				if string(tagName) == "head" && !updated {
 					buf.WriteString("  <script type=\"importmap\">\n")
 					var importMap importmap.ImportMap
-					if addImports(&importMap, specifiers, true, all) {
+					if addImports(&importMap, specifiers, !noPrompt, all) {
 						buf.WriteString(importMap.FormatJSON(2))
 						buf.WriteString("\n  </script>\n")
 					}
@@ -123,7 +125,7 @@ func updateImportMap(specifiers []string, all bool) (err error) {
 					if typeAttr != "importmap" && !updated {
 						buf.WriteString("<script type=\"importmap\">\n")
 						importMap := importmap.Blank()
-						if addImports(importMap, specifiers, true, all) {
+						if addImports(importMap, specifiers, !noPrompt, all) {
 							buf.WriteString(importMap.FormatJSON(2))
 							buf.WriteString("\n  </script>\n  ")
 						}
@@ -146,7 +148,7 @@ func updateImportMap(specifiers []string, all bool) (err error) {
 								}
 							}
 						}
-						if addImports(importMap, specifiers, true, all) {
+						if addImports(importMap, specifiers, !noPrompt, all) {
 							buf.WriteString("\n")
 							buf.WriteString(importMap.FormatJSON(2))
 							buf.WriteString("\n  ")
@@ -171,7 +173,7 @@ func updateImportMap(specifiers []string, all bool) (err error) {
 		err = os.WriteFile(indexHtml, buf.Bytes(), fi.Mode())
 	} else {
 		importMap := importmap.Blank()
-		if addImports(importMap, specifiers, true, all) {
+		if addImports(importMap, specifiers, !noPrompt, all) {
 			err = os.WriteFile(indexHtml, fmt.Appendf(nil, htmlTemplate, importMap.FormatJSON(2), specifiers[0]), 0644)
 			if err == nil {
 				fmt.Println(term.Dim("Created index.html with importmap script."))
