@@ -1263,7 +1263,7 @@ REBUILD:
 				}
 			}
 
-			// apply cjs requires
+			// check cjs requires
 			if len(ctx.cjsRequires) > 0 {
 				requires := make([][3]string, 0, len(ctx.cjsRequires))
 				set := set.New[string]()
@@ -1352,10 +1352,10 @@ REBUILD:
 				header.WriteByte('\n')
 			}
 
-			// apply esm imports
+			// check esm imports
 			for _, a := range ctx.esmImports {
 				resolvedPathFull, resolvedPath := a[0], a[1]
-				if bytes.Contains(jsContent, []byte(fmt.Sprintf(`"%s"`, resolvedPath))) {
+				if bytes.Contains(jsContent, fmt.Appendf(nil, `"%s"`, resolvedPath)) {
 					imports.Add(resolvedPathFull)
 				}
 			}

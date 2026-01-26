@@ -1381,7 +1381,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 		// check `?alias` query
 		alias := map[string]string{}
 		if query.Has("alias") {
-			for _, p := range strings.Split(query.Get("alias"), ",") {
+			for p := range strings.SplitSeq(query.Get("alias"), ",") {
 				p = strings.TrimSpace(p)
 				if p != "" {
 					name, to := utils.SplitByFirstByte(p, ':')
@@ -1397,7 +1397,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 		// check `?deps` query
 		deps := map[string]string{}
 		if query.Has("deps") {
-			for _, v := range strings.Split(query.Get("deps"), ",") {
+			for v := range strings.SplitSeq(query.Get("deps"), ",") {
 				v = strings.TrimSpace(v)
 				if v != "" {
 					m, _, _, _, err := parseEsmPath(npmrc, v)
@@ -1415,7 +1415,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 		var conditions []string
 		conditionsSet := set.New[string]()
 		if query.Has("conditions") {
-			for _, p := range strings.Split(query.Get("conditions"), ",") {
+			for p := range strings.SplitSeq(query.Get("conditions"), ",") {
 				p = strings.TrimSpace(p)
 				if p != "" && !strings.ContainsRune(p, ' ') && !conditionsSet.Has(p) {
 					conditionsSet.Add(p)
@@ -1428,7 +1428,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 		external := set.New[string]()
 		externalAll := asteriskPrefix
 		if !asteriskPrefix && query.Has("external") {
-			for _, p := range strings.Split(query.Get("external"), ",") {
+			for p := range strings.SplitSeq(query.Get("external"), ",") {
 				p = strings.TrimSpace(p)
 				if p == "*" {
 					external.Reset()
