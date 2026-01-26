@@ -340,17 +340,16 @@ func (im *ImportMap) addImport(imp ImportMeta, indirect bool, targetImports *Imp
 	}
 	im.lock.Unlock()
 
-	peerImportsLen := len(imp.PeerImports)
-	importsLen := len(imp.Imports)
-	allImports := make([]string, peerImportsLen+importsLen)
-	if peerImportsLen > 0 {
-		copy(allImports, imp.PeerImports)
-	}
-	if importsLen > 0 {
-		copy(allImports[peerImportsLen:], imp.Imports)
-	}
-	fmt.Println("allImports", allImports)
-	if peerImportsLen > 0 || importsLen > 0 {
+	if imp.HasExternalImports() {
+		peerImportsLen := len(imp.PeerImports)
+		importsLen := len(imp.Imports)
+		allImports := make([]string, len(imp.PeerImports)+len(imp.Imports))
+		if peerImportsLen > 0 {
+			copy(allImports, imp.PeerImports)
+		}
+		if importsLen > 0 {
+			copy(allImports[peerImportsLen:], imp.Imports)
+		}
 		wg := sync.WaitGroup{}
 		for i, pathname := range allImports {
 			isPeer := i < peerImportsLen
@@ -368,7 +367,6 @@ func (im *ImportMap) addImport(imp ImportMeta, indirect bool, targetImports *Imp
 				if depImport.Name == imp.Name {
 					depImport.Version = imp.Version
 				}
-				fmt.Println("depImport", depImport.Name, depImport.SubPath)
 				depImportSpecifier := depImport.Specifier(false)
 				addedUrl, exists := im.Imports.Get(depImportSpecifier)
 				if !exists {

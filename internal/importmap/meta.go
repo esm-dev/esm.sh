@@ -67,6 +67,19 @@ type ImportMeta struct {
 	PeerImports []string `json:"peerImports"`
 }
 
+// HasExternalImports returns true if the import has external imports.
+func (imp ImportMeta) HasExternalImports() bool {
+	if len(imp.PeerImports) > 0 {
+		return true
+	}
+	for _, importPath := range imp.Imports {
+		if !strings.HasPrefix(importPath, "/node/") && !strings.HasPrefix(importPath, "/"+imp.Name+"@") {
+			return true
+		}
+	}
+	return false
+}
+
 // EsmSpecifier returns the esm specifier of the import meta.
 func (imp ImportMeta) EsmSpecifier() string {
 	b := strings.Builder{}
@@ -75,7 +88,7 @@ func (imp ImportMeta) EsmSpecifier() string {
 	} else if imp.Jsr {
 		b.WriteString("jsr/")
 	}
-	if len(imp.Imports) > 0 || len(imp.PeerImports) > 0 {
+	if imp.HasExternalImports() {
 		b.WriteString("*") // add "external all" modifier of esm.sh
 	}
 	b.WriteString(imp.Name)
@@ -84,6 +97,7 @@ func (imp ImportMeta) EsmSpecifier() string {
 	return b.String()
 }
 
+// FetchImportMeta fetches the import metadata from the esm.sh CDN.
 func fetchImportMeta(cdnOrigin string, im Import) (meta ImportMeta, err error) {
 	regPrefix := im.RegistryPrefix()
 	subPath := ""
