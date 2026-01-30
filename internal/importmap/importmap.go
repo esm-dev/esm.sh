@@ -187,7 +187,7 @@ func (im *ImportMap) addPackage(pkg PackageInfo, indirect bool, targetImportsMap
 
 	deps, err := resolvePackageDependencies(pkg)
 	if err != nil {
-		fmt.Println(term.Red("[error]"), err.Error())
+		errors = append(errors, err)
 		return
 	}
 

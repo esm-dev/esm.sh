@@ -50,11 +50,7 @@ func isNodeBuiltinSpecifier(specifier string) bool {
 
 // isJsonModuleSpecifier returns true if the specifier is a json module.
 func isJsonModuleSpecifier(specifier string) bool {
-	if !strings.HasSuffix(specifier, ".json") {
-		return false
-	}
-	_, _, subpath, _ := splitEsmPath(specifier)
-	return subpath != "" && strings.HasSuffix(subpath, ".json")
+	return strings.HasSuffix(specifier, ".json")
 }
 
 // isHttpSpecifier returns true if the specifier is a remote URL.
