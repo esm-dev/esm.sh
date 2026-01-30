@@ -25,32 +25,41 @@ var (
 
 // Config represents the configuration of esm.sh server.
 type Config struct {
-	Port                uint16                 `json:"port"`
-	TlsPort             uint16                 `json:"tlsPort"`
-	CustomLandingPage   LandingPageOptions     `json:"customLandingPage"`
-	WorkDir             string                 `json:"workDir"`
-	CorsAllowOrigins    []string               `json:"corsAllowOrigins"`
-	AllowList           AllowList              `json:"allowList"`
-	BanList             BanList                `json:"banList"`
-	BuildConcurrency    uint16                 `json:"buildConcurrency"`
-	BuildWaitTime       uint16                 `json:"buildWaitTime"`
-	Storage             storage.StorageOptions `json:"storage"`
-	LogDir              string                 `json:"logDir"`
-	LogLevel            string                 `json:"logLevel"`
-	AccessLog           bool                   `json:"accessLog"`
-	NpmRegistry         string                 `json:"npmRegistry"`
-	NpmToken            string                 `json:"npmToken"`
-	NpmUser             string                 `json:"npmUser"`
-	NpmPassword         string                 `json:"npmPassword"`
-	NpmScopedRegistries map[string]NpmRegistry `json:"npmScopedRegistries"`
-	NpmQueryCacheTTL    uint32                 `json:"npmQueryCacheTTL"`
-	MinifyRaw           json.RawMessage        `json:"minify"`
-	SourceMapRaw        json.RawMessage        `json:"sourceMap"`
-	CompressRaw         json.RawMessage        `json:"compress"`
-	LegacyServer        string                 `json:"legacyServer"`
-	Minify              bool                   `json:"-"`
-	SourceMap           bool                   `json:"-"`
-	Compress            bool                   `json:"-"`
+	Port                uint16                       `json:"port"`
+	TlsPort             uint16                       `json:"tlsPort"`
+	CustomLandingPage   LandingPageOptions           `json:"customLandingPage"`
+	WorkDir             string                       `json:"workDir"`
+	CorsAllowOrigins    []string                     `json:"corsAllowOrigins"`
+	AllowList           AllowList                    `json:"allowList"`
+	BanList             BanList                      `json:"banList"`
+	BuildConcurrency    uint16                       `json:"buildConcurrency"`
+	BuildWaitTime       uint16                       `json:"buildWaitTime"`
+	Storage             storage.StorageOptions       `json:"storage"`
+	LogDir              string                       `json:"logDir"`
+	LogLevel            string                       `json:"logLevel"`
+	AccessLog           bool                         `json:"accessLog"`
+	NpmRegistry         string                       `json:"npmRegistry"`
+	NpmBackupRegistry   string                       `json:"npmBackupRegistry"`
+	NpmToken            string                       `json:"npmToken"`
+	NpmUser             string                       `json:"npmUser"`
+	NpmPassword         string                       `json:"npmPassword"`
+	NpmScopedRegistries map[string]NpmRegistryConfig `json:"npmScopedRegistries"`
+	NpmQueryCacheTTL    uint32                       `json:"npmQueryCacheTTL"`
+	MinifyRaw           json.RawMessage              `json:"minify"`
+	SourceMapRaw        json.RawMessage              `json:"sourceMap"`
+	CompressRaw         json.RawMessage              `json:"compress"`
+	LegacyServer        string                       `json:"legacyServer"`
+	Minify              bool                         `json:"-"`
+	SourceMap           bool                         `json:"-"`
+	Compress            bool                         `json:"-"`
+}
+
+type NpmRegistryConfig struct {
+	Registry       string `json:"registry"`
+	BackupRegistry string `json:"backupRegistry"`
+	Token          string `json:"token"`
+	User           string `json:"user"`
+	Password       string `json:"password"`
 }
 
 type LandingPageOptions struct {
@@ -205,6 +214,10 @@ func normalizeConfig(config *Config) {
 			config.NpmRegistry = npmRegistry
 		}
 	}
+	if config.NpmBackupRegistry != "" && config.NpmBackupRegistry == config.NpmRegistry {
+		fmt.Println(term.Red("[error] npm backup registry cannot be the same as the npm registry"))
+		config.NpmBackupRegistry = ""
+	}
 	if config.NpmToken == "" {
 		config.NpmToken = os.Getenv("NPM_TOKEN")
 	}
@@ -215,7 +228,7 @@ func normalizeConfig(config *Config) {
 		config.NpmPassword = os.Getenv("NPM_PASSWORD")
 	}
 	if len(config.NpmScopedRegistries) > 0 {
-		regs := make(map[string]NpmRegistry)
+		regs := make(map[string]NpmRegistryConfig)
 		for scope, rc := range config.NpmScopedRegistries {
 			if strings.HasPrefix(scope, "@") && isHttpSpecifier(rc.Registry) {
 				rc.Registry = strings.TrimRight(rc.Registry, "/") + "/"
