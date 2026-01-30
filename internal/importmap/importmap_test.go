@@ -240,8 +240,8 @@ func TestAddPackages(t *testing.T) {
 		if keys[0] != "react" || keys[1] != "react/" {
 			t.Fatalf("Expected [react react/], got %v", keys)
 		}
-		if !strings.HasPrefix(im.Imports["react"], "https://next.esm.sh/react@19.") || !strings.HasSuffix(im.Imports["react"], "/esnext/react.mjs") {
-			t.Fatalf("Expected react to be resolved to https://next.esm.sh/react@19.x.x/esnext/react.mjs, got %s", im.Imports["react"])
+		if url, ok := im.Imports.Get("react"); !ok || !strings.HasPrefix(url, "https://next.esm.sh/react@19.") || !strings.HasSuffix(url, "/esnext/react.mjs") {
+			t.Fatalf("Expected react to be resolved to https://next.esm.sh/react@19.x.x/esnext/react.mjs, got %s", url)
 		}
 	}
 }
