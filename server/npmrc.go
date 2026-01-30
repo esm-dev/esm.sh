@@ -18,6 +18,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Masterminds/semver/v3"
@@ -40,72 +41,47 @@ var (
 )
 
 type NpmRegistry struct {
-	Registry string `json:"registry"`
-	Token    string `json:"token"`
-	User     string `json:"user"`
-	Password string `json:"password"`
+	NpmRegistryConfig
+	versionRouteSupported atomic.Uint32
+	rateLimited           atomic.Uint32
 }
 
 type NpmRC struct {
-	NpmRegistry
-	ScopedRegistries map[string]NpmRegistry `json:"scopedRegistries"`
+	globalRegistry   *NpmRegistry
+	scopedRegistries map[string]*NpmRegistry
 }
 
 func DefaultNpmRC() *NpmRC {
 	if defaultNpmRC != nil {
 		return defaultNpmRC
 	}
-	defaultNpmRC = &NpmRC{
-		NpmRegistry: NpmRegistry{
-			Registry: config.NpmRegistry,
-			Token:    config.NpmToken,
-			User:     config.NpmUser,
-			Password: config.NpmPassword,
+	globalRegistry := &NpmRegistry{
+		NpmRegistryConfig: NpmRegistryConfig{
+			Registry:       config.NpmRegistry,
+			BackupRegistry: config.NpmBackupRegistry,
+			Token:          config.NpmToken,
+			User:           config.NpmUser,
+			Password:       config.NpmPassword,
 		},
-		ScopedRegistries: map[string]NpmRegistry{
-			"@jsr": {
-				Registry: jsrRegistry,
+	}
+	defaultNpmRC = &NpmRC{
+		globalRegistry: globalRegistry,
+		scopedRegistries: map[string]*NpmRegistry{
+			"@jsr": &NpmRegistry{
+				NpmRegistryConfig: NpmRegistryConfig{
+					Registry: jsrRegistry,
+				},
 			},
 		},
 	}
 	if len(config.NpmScopedRegistries) > 0 {
 		for scope, reg := range config.NpmScopedRegistries {
-			defaultNpmRC.ScopedRegistries[scope] = NpmRegistry{
-				Registry: reg.Registry,
-				Token:    reg.Token,
-				User:     reg.User,
-				Password: reg.Password,
+			defaultNpmRC.scopedRegistries[scope] = &NpmRegistry{
+				NpmRegistryConfig: reg,
 			}
 		}
 	}
 	return defaultNpmRC
-}
-
-func NewNpmRcFromJSON(jsonData []byte) (npmrc *NpmRC, err error) {
-	var rc NpmRC
-	err = json.Unmarshal(jsonData, &rc)
-	if err != nil {
-		return nil, err
-	}
-	if rc.Registry == "" {
-		rc.Registry = config.NpmRegistry
-	} else if !strings.HasSuffix(rc.Registry, "/") {
-		rc.Registry += "/"
-	}
-	if rc.ScopedRegistries == nil {
-		rc.ScopedRegistries = map[string]NpmRegistry{}
-	}
-	if _, ok := rc.ScopedRegistries["@jsr"]; !ok {
-		rc.ScopedRegistries["@jsr"] = NpmRegistry{
-			Registry: jsrRegistry,
-		}
-	}
-	for _, reg := range rc.ScopedRegistries {
-		if reg.Registry != "" && !strings.HasSuffix(reg.Registry, "/") {
-			reg.Registry += "/"
-		}
-	}
-	return &rc, nil
 }
 
 func (rc *NpmRC) StoreDir() string {
@@ -115,23 +91,32 @@ func (rc *NpmRC) StoreDir() string {
 func (npmrc *NpmRC) getRegistryByPackageName(packageName string) *NpmRegistry {
 	if strings.HasPrefix(packageName, "@") {
 		scope, _ := utils.SplitByFirstByte(packageName, '/')
-		reg, ok := npmrc.ScopedRegistries[scope]
+		reg, ok := npmrc.scopedRegistries[scope]
 		if ok {
-			return &reg
+			return reg
 		}
 	}
-	return &npmrc.NpmRegistry
+	return npmrc.globalRegistry
 }
 
-func (npmrc *NpmRC) fetchPackageMetadata(pkgName string, version string, useVersionSpecificEndpoint bool) (*npm.PackageMetadata, *npm.PackageJSONRaw, error) {
+func (npmrc *NpmRC) fetchPackageMetadata(pkgName string, version string, isWellknownVersion bool) (*npm.PackageMetadata, *npm.PackageJSONRaw, error) {
 	reg := npmrc.getRegistryByPackageName(pkgName)
-	regUrl := reg.Registry + pkgName
+	regUrlStr := reg.Registry
+	if reg.isRateLimited() && reg.BackupRegistry != "" {
+		// use backup registry if the global registry is rate limited
+		regUrlStr = reg.BackupRegistry
+	}
+	regUrlStr += pkgName
 
-	if useVersionSpecificEndpoint && strings.HasPrefix(regUrl, npmRegistry) {
-		regUrl += "/" + version
+	var useVersionRoute bool
+	if isWellknownVersion {
+		useVersionRoute = reg.isSupportVersionRoute(regUrlStr)
+		if useVersionRoute {
+			regUrlStr += "/" + version
+		}
 	}
 
-	u, err := url.Parse(regUrl)
+	regUrl, err := url.Parse(regUrlStr)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -148,7 +133,7 @@ func (npmrc *NpmRC) fetchPackageMetadata(pkgName string, version string, useVers
 
 	retryTimes := 0
 RETRY:
-	res, err := fetchClient.Fetch(u, header)
+	res, err := fetchClient.Fetch(regUrl, header)
 	if err != nil {
 		if retryTimes < 3 {
 			retryTimes++
@@ -160,18 +145,23 @@ RETRY:
 	defer res.Body.Close()
 
 	if res.StatusCode == 404 || res.StatusCode == 401 {
-		if useVersionSpecificEndpoint {
+		if isWellknownVersion {
 			return nil, nil, fmt.Errorf("version %s of '%s' not found", version, pkgName)
 		} else {
 			return nil, nil, fmt.Errorf("package '%s' not found", pkgName)
 		}
 	}
 
-	if res.StatusCode != 200 {
-		return nil, nil, fmt.Errorf("npm registry returned %d for package '%s'", res.StatusCode, pkgName)
+	if res.StatusCode == 429 && reg.BackupRegistry != "" && !reg.isRateLimited() {
+		reg.hitRateLimit()
+		return npmrc.fetchPackageMetadata(pkgName, version, isWellknownVersion)
 	}
 
-	if useVersionSpecificEndpoint {
+	if res.StatusCode != 200 {
+		return nil, nil, fmt.Errorf("%s: %s", regUrl.Hostname(), res.Status)
+	}
+
+	if isWellknownVersion && useVersionRoute {
 		var raw npm.PackageJSONRaw
 		err = json.NewDecoder(res.Body).Decode(&raw)
 		if err != nil {
@@ -249,7 +239,7 @@ func (npmrc *NpmRC) getPackageInfo(pkgName string, version string) (packageJson 
 			}
 		}
 
-		isWellknownVersion := (npm.IsExactVersion(version) || npm.IsDistTag(version)) && strings.HasPrefix(reg.Registry, npmRegistry)
+		isWellknownVersion := npm.IsExactVersion(version) || npm.IsDistTag(version)
 		metadata, raw, err := npmrc.fetchPackageMetadata(pkgName, version, isWellknownVersion)
 		if err != nil {
 			return nil, "", err
@@ -476,10 +466,66 @@ func (npmrc *NpmRC) isDeprecated(pkgName string, pkgVersion string) (string, err
 	return string(data), nil
 }
 
-func fetchPackageTarball(reg *NpmRegistry, installDir string, pkgName string, tarballUrl string) (err error) {
-	u, err := url.Parse(tarballUrl)
+func (reg *NpmRegistry) isRateLimited() bool {
+	return reg.rateLimited.Load() == 1
+}
+
+func (reg *NpmRegistry) hitRateLimit() {
+	reg.rateLimited.Store(1)
+	time.AfterFunc(30*time.Second, func() {
+		reg.rateLimited.Store(0)
+	})
+}
+
+// check if the registry supports the version route
+// example: https://registry.npmjs.org/react/19.0.0
+func (reg *NpmRegistry) isSupportVersionRoute(urlStr string) bool {
+	if strings.HasPrefix(urlStr, npmRegistry) {
+		return true
+	}
+
+	u, err := url.Parse(urlStr)
+	if err != nil {
+		return false
+	}
+
+	if reg.versionRouteSupported.Load() == 1 {
+		return true
+	}
+
+	fetchClient, recycle := fetch.NewClient("esmd/"+VERSION, 15, false, nil)
+	defer recycle()
+
+	u.Path = "/react/19.0.0"
+	res, err := fetchClient.Fetch(u, nil)
+	if err != nil {
+		return false
+	}
+
+	defer res.Body.Close()
+	if res.StatusCode == 200 {
+		reg.versionRouteSupported.Store(1)
+		return true
+	}
+	return false
+}
+
+func fetchPackageTarball(reg *NpmRegistry, installDir string, pkgName string, tarballUrlStr string) (err error) {
+	tarballUrl, err := url.Parse(tarballUrlStr)
 	if err != nil {
 		return
+	}
+
+	if reg.isRateLimited() && reg.BackupRegistry != "" && strings.HasPrefix(tarballUrlStr, reg.Registry) {
+		var backupUrl *url.URL
+		backupUrl, err = url.Parse(reg.BackupRegistry)
+		if err != nil {
+			return
+		}
+		backupUrl.Path = tarballUrl.Path
+		backupUrl.RawQuery = tarballUrl.RawQuery
+		tarballUrl = backupUrl
+		tarballUrlStr = backupUrl.String()
 	}
 
 	header := http.Header{}
@@ -494,7 +540,7 @@ func fetchPackageTarball(reg *NpmRegistry, installDir string, pkgName string, ta
 
 	retryTimes := 0
 RETRY:
-	res, err := fetchClient.Fetch(u, header)
+	res, err := fetchClient.Fetch(tarballUrl, header)
 	if err != nil {
 		if retryTimes < 3 {
 			retryTimes++
@@ -511,9 +557,22 @@ RETRY:
 		return
 	}
 
+	if res.StatusCode == 429 && reg.isRateLimited() && reg.BackupRegistry != "" && strings.HasPrefix(tarballUrlStr, reg.Registry) {
+		var backupUrl *url.URL
+		backupUrl, err = url.Parse(reg.BackupRegistry)
+		if err != nil {
+			return
+		}
+		backupUrl.Path = tarballUrl.Path
+		backupUrl.RawQuery = tarballUrl.RawQuery
+		tarballUrl = backupUrl
+		tarballUrlStr = backupUrl.String()
+		reg.hitRateLimit()
+		goto RETRY
+	}
+
 	if res.StatusCode != 200 {
-		msg, _ := io.ReadAll(res.Body)
-		err = fmt.Errorf("could not download tarball of package '%s' (%s: %s)", pkgName, res.Status, string(msg))
+		err = fmt.Errorf("could not download tarball of package '%s': %s", pkgName, res.Status)
 		return
 	}
 
