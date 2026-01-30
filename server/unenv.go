@@ -71,14 +71,12 @@ func buildUnenvNodeRuntime() (err error) {
 		return err
 	}
 
-	rc := &NpmRC{
-		NpmRegistry: NpmRegistry{Registry: "https://registry.npmjs.org/"},
-	}
-	pkgJson, err := rc.installPackage(unenvPkg)
+	npmrc := &NpmRC{globalRegistry: &NpmRegistry{NpmRegistryConfig: NpmRegistryConfig{Registry: npmRegistry}}}
+	pkgJson, err := npmrc.installPackage(unenvPkg)
 	if err != nil {
 		return
 	}
-	rc.installDependencies(wd, pkgJson, false, nil)
+	npmrc.installDependencies(wd, pkgJson, false, nil)
 
 	endpoints := make([]esbuild.EntryPoint, 0, len(nodeBuiltinModules))
 	for name := range nodeBuiltinModules {

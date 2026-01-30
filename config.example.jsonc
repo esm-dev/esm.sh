@@ -87,6 +87,9 @@
   // The global npm registry, default is "https://registry.npmjs.org/".
   "npmRegistry": "https://registry.npmjs.org/",
 
+  // When the global npm registry is not available, the server will try to use the backup registry to download the package.
+  "npmBackupRegistry": "",
+
   // The npm access token for the global npm registry, default is empty.
   "npmToken": "",
 

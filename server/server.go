@@ -68,7 +68,7 @@ func Start() {
 	logger.Debugf("storage initialized, type: %s, endpoint: %s", config.Storage.Type, config.Storage.Endpoint)
 
 	// pre-compile uno generator in background
-	npmrc := &NpmRC{NpmRegistry: NpmRegistry{Registry: "https://registry.npmjs.org/"}}
+	npmrc := &NpmRC{globalRegistry: &NpmRegistry{NpmRegistryConfig: NpmRegistryConfig{Registry: npmRegistry}}}
 	go generateTailwindCSS(npmrc, `@import "tailwindcss";`, "flex")
 	go generateUnoCSS(npmrc, `@import "@unocss/preset-wind4";`, "flex")
 	go getNodeRuntimeJS("fs")
