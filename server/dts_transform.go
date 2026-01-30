@@ -136,9 +136,9 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 			return specifier, nil
 		}
 
-		depPkgName, _, subPath, _ := splitEsmPath(specifier)
+		depPkgName, _, subPath := splitEsmPath(specifier)
 		specifier = depPkgName
-		if subPath != "" {
+		if len(subPath) > 0 {
 			specifier += "/" + subPath
 		}
 
@@ -152,10 +152,9 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 				), nil
 			} else {
 				entry := ctx.resolveEntry(EsmPath{
-					PkgName:       depPkgName,
-					PkgVersion:    ctx.esmPath.PkgVersion,
-					SubPath:       subPath,
-					SubModuleName: subPath,
+					PkgName:    depPkgName,
+					PkgVersion: ctx.esmPath.PkgVersion,
+					SubPath:    stripEntryModuleExt(subPath),
 				})
 				if entry.types != "" {
 					return fmt.Sprintf(
@@ -173,17 +172,17 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 		// respect `?alias` query
 		alias, ok := ctx.args.Alias[depPkgName]
 		if ok {
-			aliasPkgName, _, aliasSubPath, _ := splitEsmPath(alias)
+			aliasPkgName, _, aliasSubPath := splitEsmPath(alias)
 			depPkgName = aliasPkgName
-			if aliasSubPath != "" {
-				if subPath != "" {
+			if len(aliasSubPath) > 0 {
+				if len(subPath) > 0 {
 					subPath = aliasSubPath + "/" + subPath
 				} else {
 					subPath = aliasSubPath
 				}
 			}
 			specifier = depPkgName
-			if subPath != "" {
+			if len(subPath) > 0 {
 				specifier += "/" + subPath
 			}
 		}
@@ -209,10 +208,9 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 		}
 
 		dtsModule := EsmPath{
-			PkgName:       p.Name,
-			PkgVersion:    p.Version,
-			SubPath:       subPath,
-			SubModuleName: subPath,
+			PkgName:    p.Name,
+			PkgVersion: p.Version,
+			SubPath:    stripEntryModuleExt(subPath),
 		}
 		args := BuildArgs{
 			Alias:      ctx.args.Alias,

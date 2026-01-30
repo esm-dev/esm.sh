@@ -23,7 +23,7 @@ type BuildArgs struct {
 }
 
 func decodeBuildArgs(argsString string) (args BuildArgs, err error) {
-	s, err := atobUrl(argsString)
+	s, err := atobUrl(strings.TrimPrefix(argsString, "X-"))
 	if err == nil {
 		args = BuildArgs{}
 		for _, p := range strings.Split(s, "\n") {
@@ -39,8 +39,8 @@ func decodeBuildArgs(argsString string) (args BuildArgs, err error) {
 				}
 			} else if strings.HasPrefix(p, "d") {
 				deps := map[string]string{}
-				for _, p := range strings.Split(p[1:], ",") {
-					pkgName, pkgVersion, _, _ := splitEsmPath(p)
+				for p := range strings.SplitSeq(p[1:], ",") {
+					pkgName, pkgVersion, _ := splitEsmPath(p)
 					deps[pkgName] = pkgVersion
 				}
 				args.Deps = deps
@@ -192,7 +192,7 @@ func resolveBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esm EsmP
 				}
 			}
 			for from, to := range alias {
-				pkgName, _, _, _ := splitEsmPath(to)
+				pkgName := toPackageName(to)
 				if pkgName == esm.PkgName {
 					delete(alias, from)
 				} else {
@@ -211,7 +211,7 @@ func resolveBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esm EsmP
 				// fix some edge cases
 				// for example, the package "htm" doesn't declare 'preact' as a dependency explicitly
 				// as a workaround, we check if the package name is in the subPath of the package
-				if esm.SubModuleName != "" && slices.Contains(strings.Split(esm.SubModuleName, "/"), name) {
+				if esm.SubPath != "" && slices.Contains(strings.Split(esm.SubPath, "/"), name) {
 					depsArg[name] = version
 				}
 			}

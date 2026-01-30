@@ -127,7 +127,8 @@ func legacyESM(ctx *rex.Context, fs storage.Storage, buildVersionPrefix string) 
 			// add a leading `@` to the package name
 			pathname = "/@" + pathname[4:]
 		}
-		pkgName, pkgVersion, subPath, hasTargetSegment := splitEsmPath(pathname)
+		pkgName, pkgVersion, subPath := splitEsmPath(pathname)
+		_, target, _ := parseSubPath(subPath)
 		var asteriskFlag bool
 		if len(pkgName) > 1 && pkgName[0] == '*' {
 			asteriskFlag = true
@@ -169,14 +170,14 @@ func legacyESM(ctx *rex.Context, fs storage.Storage, buildVersionPrefix string) 
 				b.WriteByte('&')
 				b.WriteString(extraQuery)
 			}
-			if subPath != "" {
+			if len(subPath) > 0 {
 				b.WriteByte('/')
 				b.WriteString(subPath)
 			}
 			b.WriteString(query)
 			return redirect(ctx, b.String(), false)
 		}
-		isStatic = hasTargetSegment
+		isStatic = target != ""
 	}
 	savePath := "legacy/" + normalizeSavePath(ctx.R.URL.Path[1:])
 	if (buildVersionPrefix != "" && isStatic) || endsWith(pathname, ".d.ts", ".d.mts") {
