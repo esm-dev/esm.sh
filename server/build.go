@@ -191,12 +191,12 @@ func (ctx *BuildContext) buildPath() {
 	}
 
 	name := strings.TrimSuffix(path.Base(esm.PkgName), ".js")
-	if esm.SubModuleName != "" {
-		if esm.SubModuleName == name {
+	if esm.SubPath != "" {
+		if esm.SubPath == name {
 			// if the sub-module name is same as the package name
-			name = "__" + esm.SubModuleName
+			name = "__" + esm.SubPath
 		} else {
-			name = esm.SubModuleName
+			name = esm.SubPath
 		}
 		// workaround for es5-ext "../#/.." path
 		if esm.PkgName == "es5-ext" {
@@ -339,10 +339,10 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 		return
 	}
 
-	entryModuleFilename := path.Join(ctx.wd, "node_modules", ctx.esmPath.PkgName, entry.main)
+	entryModuleFilename := ctx.getPkgFullPath(entry.main)
 	entrySpecifier := ctx.esmPath.PkgName
-	if ctx.esmPath.SubModuleName != "" {
-		entrySpecifier += "/" + ctx.esmPath.SubModuleName
+	if ctx.esmPath.SubPath != "" {
+		entrySpecifier += "/" + ctx.esmPath.SubPath
 	}
 
 	var (
@@ -452,11 +452,11 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 
 					// check `?alias` option
 					if len(ctx.args.Alias) > 0 && !isRelPathSpecifier(specifier) {
-						pkgName, _, subpath, _ := splitEsmPath(specifier)
+						pkgName, _, subPath := splitEsmPath(specifier)
 						if name, ok := ctx.args.Alias[pkgName]; ok {
 							specifier = name
-							if subpath != "" {
-								specifier += "/" + subpath
+							if len(subPath) > 0 {
+								specifier += "/" + subPath
 							}
 						}
 					}
@@ -466,14 +466,14 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 						var v any
 						var ok bool
 						v, ok = pkgJson.Imports[specifier]
-						if !ok {
+						if !ok && !isRelPathSpecifier(specifier) {
 							// check tailing slash
-							pkgName, _, subPath, _ := splitEsmPath(specifier)
+							pkgName, _, subPath := splitEsmPath(specifier)
 							v, ok = pkgJson.Imports[pkgName]
 							if !ok {
 								v, ok = pkgJson.Imports[pkgName+"/"]
 							}
-							if ok && subPath != "" {
+							if ok && len(subPath) > 0 {
 								if s, ok := v.(string); ok {
 									v = strings.TrimSuffix(s, "/") + "/" + subPath
 								}
@@ -557,7 +557,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 
 					// externalize top-level module
 					// e.g. "react/jsx-runtime" imports "react"
-					if ctx.esmPath.SubModuleName != "" && specifier == ctx.esmPath.PkgName && ctx.bundleMode != BundleDeps {
+					if ctx.esmPath.SubPath != "" && specifier == ctx.esmPath.PkgName && ctx.bundleMode != BundleDeps {
 						externalPath, err := ctx.resolveExternalModule(ctx.esmPath.PkgName, args.Kind, withTypeJSON, analyzeMode)
 						if err != nil {
 							return esbuild.OnResolveResult{}, err
@@ -573,11 +573,13 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 					}
 
 					// bundles all dependencies in `bundle` mode, apart from peerDependencies and `?external` flag
-					pkgName := toPackageName(specifier)
-					if ctx.bundleMode == BundleDeps && !ctx.args.External.Has(pkgName) && !isPackageInExternalNamespace(pkgName, ctx.args.External) && !implicitExternal.Has(specifier) {
-						_, ok := pkgJson.PeerDependencies[pkgName]
-						if !ok {
-							return esbuild.OnResolveResult{}, nil
+					if !isRelPathSpecifier(specifier) {
+						pkgName := toPackageName(specifier)
+						if ctx.bundleMode == BundleDeps && !ctx.args.External.Has(pkgName) && !isPackageInExternalNamespace(pkgName, ctx.args.External) && !implicitExternal.Has(specifier) {
+							_, ok := pkgJson.PeerDependencies[pkgName]
+							if !ok {
+								return esbuild.OnResolveResult{}, nil
+							}
 						}
 					}
 
@@ -607,10 +609,9 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 							if path.Ext(filename) == "" || !existsFile(filename) {
 								subPath := utils.NormalizePathname(modulePath)[1:]
 								entry := ctx.resolveEntry(EsmPath{
-									PkgName:       ctx.esmPath.PkgName,
-									PkgVersion:    ctx.esmPath.PkgVersion,
-									SubModuleName: stripEntryModuleExt(subPath),
-									SubPath:       subPath,
+									PkgName:    ctx.esmPath.PkgName,
+									PkgVersion: ctx.esmPath.PkgVersion,
+									SubPath:    stripEntryModuleExt(subPath),
 								})
 								if entry.main != "" {
 									modulePath = entry.main
@@ -797,7 +798,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 					// use `npm:` specifier for `denonext` target if the specifier is in the `forceNpmSpecifiers` list
 					if forceNpmSpecifiers[specifier] && ctx.target == "denonext" {
 						version := ""
-						pkgName, _, subPath, _ := splitEsmPath(specifier)
+						pkgName, _, subPath := splitEsmPath(specifier)
 						if pkgName == ctx.esmPath.PkgName {
 							version = ctx.esmPath.PkgVersion
 						} else if v, ok := pkgJson.Dependencies[pkgName]; ok && npm.IsExactVersion(v) {
@@ -809,7 +810,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 						if version != "" {
 							p += "@" + version
 						}
-						if subPath != "" {
+						if len(subPath) > 0 {
 							p += "/" + subPath
 						}
 						return esbuild.OnResolveResult{
@@ -1167,9 +1168,9 @@ REBUILD:
 				header.WriteByte('@')
 			}
 			header.WriteString(ctx.esmPath.PkgVersion)
-			if ctx.esmPath.SubModuleName != "" {
+			if ctx.esmPath.SubPath != "" {
 				header.WriteByte('/')
-				header.WriteString(ctx.esmPath.SubModuleName)
+				header.WriteString(ctx.esmPath.SubPath)
 			}
 			header.WriteString(" */\n")
 
@@ -1505,10 +1506,10 @@ func (ctx *BuildContext) install() (err error) {
 		}
 
 		// Check if the `SubPath` is the same as the `main` or `module` field of the package.json
-		if subModule := ctx.esmPath.SubModuleName; subModule != "" && ctx.target != "types" {
+		if subPath := ctx.esmPath.SubPath; subPath != "" && ctx.target != "types" {
 			isMainModule := false
 			check := func(s string) bool {
-				return isMainModule || (s != "" && subModule == utils.NormalizePathname(stripModuleExt(s))[1:])
+				return isMainModule || (s != "" && subPath == utils.NormalizePathname(stripModuleExt(s))[1:])
 			}
 			if p.Exports.Len() > 0 {
 				if v, ok := p.Exports.Get("."); ok {
@@ -1528,7 +1529,6 @@ func (ctx *BuildContext) install() (err error) {
 				isMainModule = (p.Module != "" && check(p.Module)) || (p.Main != "" && check(p.Main))
 			}
 			if isMainModule {
-				ctx.esmPath.SubModuleName = ""
 				ctx.esmPath.SubPath = ""
 				ctx.rawPath = ctx.path
 				ctx.path = ""

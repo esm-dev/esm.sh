@@ -129,7 +129,6 @@ func (ctx *BuildContext) analyzeSplitting() (err error) {
 		for _, exportName := range exportNames.Values() {
 			esmPath := ctx.esmPath
 			esmPath.SubPath = exportName
-			esmPath.SubModuleName = stripEntryModuleExt(exportName)
 			b := &BuildContext{
 				npmrc:       ctx.npmrc,
 				logger:      ctx.logger,

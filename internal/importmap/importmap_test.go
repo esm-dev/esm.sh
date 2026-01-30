@@ -3,6 +3,7 @@ package importmap
 import (
 	"net/url"
 	"sort"
+	"strings"
 	"testing"
 )
 
@@ -239,8 +240,8 @@ func TestAddPackages(t *testing.T) {
 		if keys[0] != "react" || keys[1] != "react/" {
 			t.Fatalf("Expected [react react/], got %v", keys)
 		}
-		if v, ok := im.Imports.Get("react"); !ok || v != "https://next.esm.sh/react@19.2.3/esnext/react.mjs" {
-			t.Fatalf("Expected react to be resolved to https://next.esm.sh/react@19.2.3/esnext/react.mjs, got %s", v)
+		if !strings.HasPrefix(im.Imports["react"], "https://next.esm.sh/react@19.") || !strings.HasSuffix(im.Imports["react"], "/esnext/react.mjs") {
+			t.Fatalf("Expected react to be resolved to https://next.esm.sh/react@19.x.x/esnext/react.mjs, got %s", im.Imports["react"])
 		}
 	}
 }

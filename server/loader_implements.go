@@ -73,7 +73,7 @@ func resolveSvelteVersion(npmrc *NpmRC, importMap *importmap.ImportMap) (svelteV
 		if ok && isHttpSpecifier(svelteUrl) {
 			u, e := url.Parse(svelteUrl)
 			if e == nil {
-				_, v, _, _ := splitEsmPath(u.Path)
+				_, v, _ := splitEsmPath(u.Path)
 				if len(v) > 0 {
 					svelteVersion = v
 				}
@@ -153,7 +153,7 @@ func resolveVueVersion(npmrc *NpmRC, importMap *importmap.ImportMap) (vueVersion
 		if ok && isHttpSpecifier(vueUrl) {
 			u, e := url.Parse(vueUrl)
 			if e == nil {
-				_, v, _, _ := splitEsmPath(u.Path)
+				_, v, _ := splitEsmPath(u.Path)
 				if len(v) > 0 {
 					vueVersion = v
 				}

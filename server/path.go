@@ -18,12 +18,11 @@ import (
 )
 
 type EsmPath struct {
-	GhPrefix      bool
-	PrPrefix      bool
-	PkgName       string
-	PkgVersion    string
-	SubPath       string
-	SubModuleName string
+	GhPrefix   bool
+	PrPrefix   bool
+	PkgName    string
+	PkgVersion string
+	SubPath    string
 }
 
 func (p EsmPath) Package() npm.Package {
@@ -50,13 +49,13 @@ func (p EsmPath) ID() string {
 }
 
 func (p EsmPath) String() string {
-	if p.SubModuleName != "" {
-		return p.ID() + "/" + p.SubModuleName
+	if p.SubPath != "" {
+		return p.ID() + "/" + p.SubPath
 	}
 	return p.ID()
 }
 
-func parseEsmPath(npmrc *NpmRC, pathname string) (esm EsmPath, extraQuery string, exactVersion bool, hasTargetSegment bool, err error) {
+func parseEsmPath(npmrc *NpmRC, pathname string) (esm EsmPath, extraQuery string, exactVersion bool, target string, xArgs *BuildArgs, err error) {
 	// see https://pkg.pr.new
 	if strings.HasPrefix(pathname, "/pr/") || strings.HasPrefix(pathname, "/pkg.pr.new/") {
 		if strings.HasPrefix(pathname, "/pr/") {
@@ -74,13 +73,14 @@ func parseEsmPath(npmrc *NpmRC, pathname string) (esm EsmPath, extraQuery string
 			err = errors.New("invalid path")
 			return
 		}
-		hasTargetSegment = validateTargetSegment(strings.Split(subPath, "/"))
+		if subPath != "" {
+			subPath, target, xArgs = parseSubPath(subPath)
+		}
 		esm = EsmPath{
-			PkgName:       pkgName,
-			PkgVersion:    version,
-			SubPath:       subPath,
-			SubModuleName: stripEntryModuleExt(subPath),
-			PrPrefix:      true,
+			PkgName:    pkgName,
+			PkgVersion: version,
+			SubPath:    stripEntryModuleExt(subPath),
+			PrPrefix:   true,
 		}
 		if isCommitish(esm.PkgVersion) {
 			exactVersion = true
@@ -135,11 +135,14 @@ func parseEsmPath(npmrc *NpmRC, pathname string) (esm EsmPath, extraQuery string
 		}
 	}
 
-	pkgName, maybeVersion, subPath, hasTargetSegment := splitEsmPath(pathname)
+	pkgName, maybeVersion, subPathRaw := splitEsmPath(pathname)
 	if !npm.ValidatePackageName(pkgName) {
 		err = fmt.Errorf("invalid package name '%s'", pkgName)
 		return
 	}
+
+	var subPath string
+	subPath, target, xArgs = parseSubPath(subPathRaw)
 
 	// strip the leading `@` added before
 	if ghPrefix {
@@ -151,17 +154,16 @@ func parseEsmPath(npmrc *NpmRC, pathname string) (esm EsmPath, extraQuery string
 		version = v
 	}
 
-	esm = EsmPath{
-		PkgName:       pkgName,
-		PkgVersion:    version,
-		SubPath:       subPath,
-		SubModuleName: stripEntryModuleExt(subPath),
-		GhPrefix:      ghPrefix,
+	// workaround for es5-ext "../#/.." path
+	if subPath != "" && pkgName == "es5-ext" {
+		subPath = strings.ReplaceAll(subPath, "/%23/", "/#/")
 	}
 
-	// workaround for es5-ext "../#/.." path
-	if esm.SubModuleName != "" && esm.PkgName == "es5-ext" {
-		esm.SubModuleName = strings.ReplaceAll(esm.SubModuleName, "/%23/", "/#/")
+	esm = EsmPath{
+		PkgName:    pkgName,
+		PkgVersion: version,
+		SubPath:    stripEntryModuleExt(subPath),
+		GhPrefix:   ghPrefix,
 	}
 
 	if ghPrefix {
@@ -204,44 +206,51 @@ func parseEsmPath(npmrc *NpmRC, pathname string) (esm EsmPath, extraQuery string
 	return
 }
 
-func splitEsmPath(pathname string) (pkgName string, version string, subPath string, hasTargetSegment bool) {
-	a := strings.Split(strings.TrimPrefix(pathname, "/"), "/")
-	nameAndVersion := ""
-	if strings.HasPrefix(a[0], "@") && len(a) > 1 {
-		nameAndVersion = a[0] + "/" + a[1]
-		subPath = strings.Join(a[2:], "/")
-		hasTargetSegment = validateTargetSegment(a[2:])
+func splitEsmPath(pathname string) (pkgName string, pkgVersion string, subPath string) {
+	pathname = strings.TrimPrefix(pathname, "/")
+	if strings.HasPrefix(pathname, "@") {
+		scopeName, rest := utils.SplitByFirstByte(pathname, '/')
+		pkgName, subPath = utils.SplitByFirstByte(rest, '/')
+		pkgName = scopeName + "/" + pkgName
 	} else {
-		nameAndVersion = a[0]
-		subPath = strings.Join(a[1:], "/")
-		hasTargetSegment = validateTargetSegment(a[1:])
+		pkgName, subPath = utils.SplitByFirstByte(pathname, '/')
 	}
-	if len(nameAndVersion) > 0 && nameAndVersion[0] == '@' {
-		pkgName, version = utils.SplitByFirstByte(nameAndVersion[1:], '@')
+	if len(pkgName) > 0 && pkgName[0] == '@' {
+		pkgName, pkgVersion = utils.SplitByFirstByte(pkgName[1:], '@')
 		pkgName = "@" + pkgName
 	} else {
-		pkgName, version = utils.SplitByFirstByte(nameAndVersion, '@')
+		pkgName, pkgVersion = utils.SplitByFirstByte(pkgName, '@')
 	}
-	if version != "" {
-		version = strings.TrimSpace(version)
+	if pkgVersion != "" {
+		pkgVersion = strings.TrimSpace(pkgVersion)
 	}
 	return
 }
 
-func validateTargetSegment(segments []string) bool {
-	if len(segments) < 2 {
-		return false
+func parseSubPath(subPathRaw string) (subPath string, target string, xArgs *BuildArgs) {
+	segments := strings.Split(subPathRaw, "/")
+	if l := len(segments); l >= 2 {
+		el0 := segments[0]
+		el1 := segments[1]
+		if strings.HasPrefix(el0, "X-") {
+			args, err := decodeBuildArgs(el0)
+			if err == nil {
+				if _, ok := targets[el1]; ok {
+					return strings.Join(segments[2:], "/"), el1, &args
+				}
+				return strings.Join(segments[1:], "/"), "", &args
+			}
+		}
+		_, ok := targets[el0]
+		if ok {
+			return strings.Join(segments[1:], "/"), el0, nil
+		}
 	}
-	if strings.HasPrefix(segments[0], "X-") && len(segments) > 2 {
-		_, ok := targets[segments[1]]
-		return ok
-	}
-	_, ok := targets[segments[0]]
-	return ok
+	return strings.Join(segments, "/"), "", nil
 }
 
 func toPackageName(specifier string) string {
-	name, _, _, _ := splitEsmPath(specifier)
+	name, _, _ := splitEsmPath(specifier)
 	return name
 }
 
