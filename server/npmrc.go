@@ -233,12 +233,6 @@ func (npmrc *NpmRC) getPackageInfo(pkgName string, version string) (packageJson 
 		return nil, fmt.Errorf("package name is empty")
 	}
 
-	isDistTag := npm.IsDistTag(version)
-	isExactVersion := npm.IsExactVersion(version)
-	if !isDistTag && !isExactVersion {
-		return nil, fmt.Errorf("version %s is not a valid version", version)
-	}
-
 	version = npm.NormalizePackageVersion(version)
 
 	if msg, ok := getCacheItem("404:" + pkgName + "@" + version); ok {
@@ -247,7 +241,7 @@ func (npmrc *NpmRC) getPackageInfo(pkgName string, version string) (packageJson 
 
 	ttl := time.Duration(config.NpmQueryCacheTTL) * time.Second
 	return withCache("npm:"+pkgName+"@"+version, ttl, func() (*npm.PackageJSON, string, error) {
-		if isExactVersion {
+		if npm.IsExactVersion(version) {
 			var raw npm.PackageJSONRaw
 			pkgJsonPath := filepath.Join(npmrc.StoreDir(), pkgName+"@"+version, "node_modules", pkgName, "package.json")
 			if utils.ParseJSONFile(pkgJsonPath, &raw) == nil {
@@ -255,7 +249,7 @@ func (npmrc *NpmRC) getPackageInfo(pkgName string, version string) (packageJson 
 			}
 		}
 
-		metadata, raw, err := npmrc.fetchPackageMetadata(pkgName, version, isExactVersion || isDistTag)
+		metadata, raw, err := npmrc.fetchPackageMetadata(pkgName, version, npm.IsExactVersion(version) || npm.IsDistTag(version))
 		if err != nil {
 			if msg := err.Error(); strings.HasSuffix(msg, "not found") {
 				setCacheItem("404:"+pkgName+"@"+version, msg, ttl)
