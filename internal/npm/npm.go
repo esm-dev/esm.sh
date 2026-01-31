@@ -23,6 +23,9 @@ func ValidatePackageName(pkgName string) bool {
 	if l := len(pkgName); l == 0 || l > 214 {
 		return false
 	}
+	if strings.HasSuffix(pkgName, ".d.ts.map") {
+		return false
+	}
 	if strings.HasPrefix(pkgName, "@") {
 		scope, name := utils.SplitByFirstByte(pkgName, '/')
 		return Naming.Match(scope[1:]) && Naming.Match(name)

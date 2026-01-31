@@ -70,12 +70,13 @@ func Render(input []byte, kind RenderFormat) (code []byte, err error) {
 			break
 		}
 		if skipTag != nil {
-			if tt == html.StartTagToken {
+			switch tt {
+			case html.StartTagToken:
 				tagName, _ := tokenizer.TagName()
 				if bytes.Equal(tagName, skipTag) {
 					skipTagDepth++
 				}
-			} else if tt == html.EndTagToken {
+			case html.EndTagToken:
 				tagName, _ := tokenizer.TagName()
 				if bytes.Equal(tagName, skipTag) {
 					skipTagDepth--
@@ -86,7 +87,8 @@ func Render(input []byte, kind RenderFormat) (code []byte, err error) {
 			}
 			continue
 		}
-		if tt == html.StartTagToken || tt == html.SelfClosingTagToken || tt == html.EndTagToken {
+		switch tt {
+		case html.StartTagToken, html.SelfClosingTagToken, html.EndTagToken:
 			tagName, moreAttr := tokenizer.TagName()
 			switch string(tagName) {
 			case "a", "h1", "h2", "h3", "h4", "h5", "h6", "p", "br", "hr", "img", "strong", "em", "del", "sub", "sup", "code", "pre", "blockquote", "ol", "ul", "li", "table", "thead", "tbody", "tfoot", "tr", "th", "td", "caption", "details", "summary", "figure", "figcaption", "audio", "video", "source", "track":
@@ -132,7 +134,7 @@ func Render(input []byte, kind RenderFormat) (code []byte, err error) {
 					skipTagDepth = 1
 				}
 			}
-		} else if tt == html.TextToken {
+		case html.TextToken:
 			for _, b := range tokenizer.Text() {
 				switch b {
 				case '&':

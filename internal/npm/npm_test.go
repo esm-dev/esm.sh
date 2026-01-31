@@ -5,53 +5,48 @@ import (
 	"time"
 )
 
-func TestIsStableVersion(t *testing.T) {
+func TestIsExactVersion(t *testing.T) {
 	tests := []struct {
 		name    string
 		version string
-		want    bool
 	}{
-		// Stable versions
-		{"Simple stable version", "1.0.0", true},
-		{"Stable version with patch", "1.2.3", true},
-		{"Stable version with build metadata", "1.0.0+build.1", true},
+		// exact versions
+		{"Simple exact version", "1.0.0"},
+		{"exact version with patch", "1.2.3"},
+		{"exact version with build metadata", "1.0.0-1"},
+		{"exact version with build metadata", "1.0.0+build.1"},
 
 		// Experimental versions
-		{"Experimental version", "0.0.0-experimental-c5b937576-20231219", false},
-		{"Experimental with caps", "1.0.0-EXPERIMENTAL", false},
-		{"Experimental in middle", "1.0.0-experimental.1", false},
+		{"Experimental version", "0.0.0-experimental-c5b937576-20231219"},
+		{"Experimental with caps", "1.0.0-EXPERIMENTAL"},
+		{"Experimental in middle", "1.0.0-experimental.1"},
 
 		// Beta versions
-		{"Beta version", "1.0.0-beta", false},
-		{"Beta with number", "1.0.0-beta.1", false},
-		{"Beta with caps", "1.0.0-BETA", false},
+		{"Beta version", "1.0.0-beta"},
+		{"Beta with number", "1.0.0-beta.1"},
+		{"Beta with caps", "1.0.0-BETA"},
 
 		// Alpha versions
-		{"Alpha version", "1.0.0-alpha", false},
-		{"Alpha with number", "1.0.0-alpha.1", false},
+		{"Alpha version", "1.0.0-alpha"},
+		{"Alpha with number", "1.0.0-alpha.1"},
 
 		// RC versions
-		{"Release candidate", "1.0.0-rc", false},
-		{"Release candidate with number", "1.0.0-rc.1", false},
+		{"Release candidate", "1.0.0-rc"},
+		{"Release candidate with number", "1.0.0-rc.1"},
 
 		// Other prerelease versions
-		{"Preview version", "1.0.0-preview", false},
-		{"Canary version", "1.0.0-canary", false},
-		{"Dev version", "1.0.0-dev", false},
-		{"Nightly version", "1.0.0-nightly", false},
-		{"Next version", "1.0.0-next", false},
-		{"Edge version", "1.0.0-edge", false},
-
-		// Version with prerelease in name but not in prerelease position
-		{"Version with stable name", "1.0.0", true},
-		{"Version with normal dash", "1.0.0-1", true}, // This should be stable as it's just a build number
+		{"Preview version", "1.0.0-preview"},
+		{"Canary version", "1.0.0-canary"},
+		{"Dev version", "1.0.0-dev"},
+		{"Nightly version", "1.0.0-nightly"},
+		{"Next version", "1.0.0-next"},
+		{"Edge version", "1.0.0-edge"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := IsStableVersion(tt.version)
-			if got != tt.want {
-				t.Errorf("IsStableVersion(%q) = %v, want %v", tt.version, got, tt.want)
+			if !IsExactVersion(tt.version) {
+				t.Errorf("IsExactVersion(%q) = false, want true", tt.version)
 			}
 		})
 	}
@@ -100,7 +95,7 @@ func TestResolveVersionByTime(t *testing.T) {
 			wantVersion: "1.0.0",
 		},
 		{
-			name:        "Skip experimental version, return stable",
+			name:        "Skip experimental version, return exact",
 			targetTime:  time.Unix(1608336000, 0), // 2020-12-19 00:00:00 UTC (exact time of experimental version)
 			wantVersion: "1.0.0",                  // Should return 1.0.0, not the experimental version
 		},
@@ -110,7 +105,7 @@ func TestResolveVersionByTime(t *testing.T) {
 			wantVersion: "1.1.0",
 		},
 		{
-			name:        "Skip beta version, return stable",
+			name:        "Skip beta version, return exact",
 			targetTime:  time.Unix(1622505600, 0), // 2021-06-01 00:00:00 UTC (exact time of beta version)
 			wantVersion: "1.1.0",                  // Should return 1.1.0, not the beta version
 		},
