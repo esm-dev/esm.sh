@@ -11,6 +11,6 @@ Deno.test("ban bad urls", async () => {
   for (const url of badUrls) {
     const res = await fetch(url);
     await res.body?.cancel();
-    assertEquals(res.status, 404);
+    assertEquals(res.status, 404, url);
   }
 });

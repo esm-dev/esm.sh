@@ -87,6 +87,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 
 		// ban malicious requests
 		if strings.HasSuffix(pathname, ".env") || strings.HasSuffix(pathname, ".php") || strings.Contains(pathname, "/.") {
+			ctx.SetHeader("Cache-Control", ccImmutable)
 			return rex.Status(404, "not found")
 		}
 
@@ -184,21 +185,16 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 		}
 
 		// strip loc suffix
-		// e.g. https://esm.sh/react/es2022/react.mjs:2:3
+		// e.g. https://esm.sh/react@19.0.0/es2022/react.mjs:2:3
 		{
-			i := len(pathname) - 1
-			j := 0
-			for {
-				if i < 0 || pathname[i] == '/' {
-					break
+			p, loc := utils.SplitByLastByte(pathname, ':')
+			if loc != "" && valid.IsDigtalOnlyString(loc) {
+				p2, loc2 := utils.SplitByLastByte(p, ':')
+				if loc2 != "" && valid.IsDigtalOnlyString(loc2) {
+					pathname = p2
+				} else {
+					pathname = p
 				}
-				if pathname[i] == ':' {
-					j = i
-				}
-				i--
-			}
-			if j > 0 {
-				pathname = pathname[:j]
 			}
 		}
 
@@ -867,17 +863,21 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 			message := err.Error()
 			if strings.HasPrefix(message, "invalid") {
 				status = 400
+				ctx.SetHeader("Cache-Control", ccImmutable)
 			} else if strings.HasSuffix(message, " not found") {
 				status = 404
+				ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d, must-revalidate", config.NpmQueryCacheTTL))
 			}
 			return rex.Status(status, message)
 		}
 
 		if !config.AllowList.IsEmpty() && !config.AllowList.IsPackageAllowed(esmPath.ID()) {
+			ctx.SetHeader("Cache-Control", "public, max-age=600, must-revalidate")
 			return rex.Status(403, "forbidden")
 		}
 
 		if !config.BanList.IsEmpty() && config.BanList.IsPackageBanned(esmPath.ID()) {
+			ctx.SetHeader("Cache-Control", "public, max-age=600, must-revalidate")
 			return rex.Status(403, "forbidden")
 		}
 
