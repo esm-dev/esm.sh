@@ -3,6 +3,7 @@ package npm
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"path"
@@ -255,7 +256,7 @@ func (obj *JSONObject) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	if delim, ok := t.(json.Delim); !ok || delim != '{' {
-		return fmt.Errorf("expect JSON object open with '{'")
+		return errors.New("expect JSON object open with '{'")
 	}
 
 	err = obj.parse(dec)
@@ -336,7 +337,7 @@ func parseArray(dec *json.Decoder) (arr []any, err error) {
 		return
 	}
 	if delim, ok := t.(json.Delim); !ok || delim != ']' {
-		err = fmt.Errorf("expect JSON array close with ']'")
+		err = errors.New("expect JSON array close with ']'")
 		return
 	}
 

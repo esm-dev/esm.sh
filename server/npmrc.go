@@ -230,13 +230,13 @@ CHECK:
 
 func (npmrc *NpmRC) getPackageInfo(pkgName string, version string) (packageJson *npm.PackageJSON, err error) {
 	if pkgName == "" {
-		return nil, fmt.Errorf("package name is empty")
+		return nil, errors.New("package name is empty")
 	}
 
 	version = npm.NormalizePackageVersion(version)
 
 	if msg, ok := getCacheItem("404:" + pkgName + "@" + version); ok {
-		return nil, fmt.Errorf(msg.(string))
+		return nil, errors.New(msg.(string))
 	}
 
 	ttl := time.Duration(config.NpmQueryCacheTTL) * time.Second
