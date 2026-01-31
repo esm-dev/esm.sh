@@ -27,6 +27,7 @@ import (
 	"github.com/esm-dev/esm.sh/internal/npm"
 	"github.com/ije/gox/set"
 	syncx "github.com/ije/gox/sync"
+	"github.com/ije/gox/term"
 	"github.com/ije/gox/utils"
 )
 
@@ -128,6 +129,10 @@ func (npmrc *NpmRC) fetchPackageMetadata(pkgName string, version string, isWellk
 		header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(reg.User+":"+reg.Password)))
 	}
 
+	if DEBUG {
+		fmt.Println(term.Dim(fmt.Sprintf("Fetching %s...", regUrl.String())))
+	}
+
 	fetchClient, recycle := fetch.NewClient("esmd/"+VERSION, 15, false, nil)
 	defer recycle()
 
@@ -145,7 +150,7 @@ RETRY:
 	defer res.Body.Close()
 
 	if res.StatusCode == 404 || res.StatusCode == 401 {
-		if isWellknownVersion {
+		if isWellknownVersion && version != "latest" {
 			return nil, nil, fmt.Errorf("version %s of '%s' not found", version, pkgName)
 		} else {
 			return nil, nil, fmt.Errorf("package '%s' not found", pkgName)
@@ -177,7 +182,7 @@ RETRY:
 	}
 
 	if len(metadata.Versions) == 0 {
-		return nil, nil, fmt.Errorf("no versions found for package '%s'", pkgName)
+		return nil, nil, fmt.Errorf("version %s of '%s' not found", version, pkgName)
 	}
 
 	return &metadata, nil, nil
@@ -224,14 +229,25 @@ CHECK:
 }
 
 func (npmrc *NpmRC) getPackageInfo(pkgName string, version string) (packageJson *npm.PackageJSON, err error) {
-	reg := npmrc.getRegistryByPackageName(pkgName)
-	getCacheKey := func(pkgName string, pkgVersion string) string {
-		return reg.Registry + pkgName + "@" + pkgVersion
+	if pkgName == "" {
+		return nil, fmt.Errorf("package name is empty")
+	}
+
+	isDistTag := npm.IsDistTag(version)
+	isExactVersion := npm.IsExactVersion(version)
+	if !isDistTag && !isExactVersion {
+		return nil, fmt.Errorf("version %s is not a valid version", version)
 	}
 
 	version = npm.NormalizePackageVersion(version)
-	return withCache(getCacheKey(pkgName, version), time.Duration(config.NpmQueryCacheTTL)*time.Second, func() (*npm.PackageJSON, string, error) {
-		if !npm.IsDistTag(version) && npm.IsExactVersion(version) {
+
+	if msg, ok := getCacheItem("404:" + pkgName + "@" + version); ok {
+		return nil, fmt.Errorf(msg.(string))
+	}
+
+	ttl := time.Duration(config.NpmQueryCacheTTL) * time.Second
+	return withCache("npm:"+pkgName+"@"+version, ttl, func() (*npm.PackageJSON, string, error) {
+		if isExactVersion {
 			var raw npm.PackageJSONRaw
 			pkgJsonPath := filepath.Join(npmrc.StoreDir(), pkgName+"@"+version, "node_modules", pkgName, "package.json")
 			if utils.ParseJSONFile(pkgJsonPath, &raw) == nil {
@@ -239,14 +255,16 @@ func (npmrc *NpmRC) getPackageInfo(pkgName string, version string) (packageJson 
 			}
 		}
 
-		isWellknownVersion := npm.IsExactVersion(version) || npm.IsDistTag(version)
-		metadata, raw, err := npmrc.fetchPackageMetadata(pkgName, version, isWellknownVersion)
+		metadata, raw, err := npmrc.fetchPackageMetadata(pkgName, version, isExactVersion || isDistTag)
 		if err != nil {
+			if msg := err.Error(); strings.HasSuffix(msg, "not found") {
+				setCacheItem("404:"+pkgName+"@"+version, msg, ttl)
+			}
 			return nil, "", err
 		}
 
 		if raw != nil {
-			return raw.ToNpmPackage(), getCacheKey(pkgName, raw.Version), nil
+			return raw.ToNpmPackage(), "npm:" + pkgName + "@" + raw.Version, nil
 		}
 
 		resolvedVersion, err := resolveSemverVersion(metadata, version)
@@ -259,7 +277,7 @@ func (npmrc *NpmRC) getPackageInfo(pkgName string, version string) (packageJson 
 			return nil, "", fmt.Errorf("version %s of '%s' not found", version, pkgName)
 		}
 
-		return rawData.ToNpmPackage(), getCacheKey(pkgName, rawData.Version), nil
+		return rawData.ToNpmPackage(), "npm:" + pkgName + "@" + rawData.Version, nil
 	})
 }
 
