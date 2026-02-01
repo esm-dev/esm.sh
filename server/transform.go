@@ -75,7 +75,7 @@ func transform(options *ResolvedTransformOptions) (out *TransformOutput, err err
 		return
 	}
 
-	if jsxImportSource == "" && (loader == esbuild.LoaderJSX || loader == esbuild.LoaderTSX) {
+	if jsxImportSource == "" && (loader == esbuild.LoaderJSX || loader == esbuild.LoaderTSX) && options.importMap != nil {
 		var ok bool
 		for _, key := range []string{"@jsxRuntime", "@jsxImportSource"} {
 			path, resolved := options.importMap.Resolve(key, nil)
@@ -137,11 +137,13 @@ func transform(options *ResolvedTransformOptions) (out *TransformOutput, err err
 				Setup: func(build esbuild.PluginBuild) {
 					build.OnResolve(esbuild.OnResolveOptions{Filter: ".*"}, func(args esbuild.OnResolveArgs) (esbuild.OnResolveResult, error) {
 						importerUrl, _ := url.Parse(args.Importer)
-						path, ok := options.importMap.Resolve(args.Path, importerUrl)
-						if ok && isHttpSpecifier(path) {
-							return esbuild.OnResolveResult{Path: args.Path, External: true}, nil
+						if options.importMap != nil {
+							path, ok := options.importMap.Resolve(args.Path, importerUrl)
+							if ok && isHttpSpecifier(path) {
+								return esbuild.OnResolveResult{Path: args.Path, External: true}, nil
+							}
 						}
-						return esbuild.OnResolveResult{Path: path, External: true}, nil
+						return esbuild.OnResolveResult{Path: args.Path, External: true}, nil
 					})
 				},
 			},
