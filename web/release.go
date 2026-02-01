@@ -2,5 +2,5 @@
 
 package web
 
-const VERSION = "v136"
+const VERSION = "v0.1.0"
 const DEBUG = false

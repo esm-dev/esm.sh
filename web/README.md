@@ -7,8 +7,8 @@ A golang `http.Handler` that serves _nobuild_ web applications.
 
 - Web applications are served _as-is_ without any build step.
 - Transpiles TypeScript, JSX, Vue, Svelte _on-the-fly_.
-- Built-in [UnoCSS](https://unocss.dev) generator.
-- Staic files are served from the application directory.
+- Built-in [TailwindCSS](https://tailwindcss.com) and [UnoCSS](https://unocss.dev) generator.
+- Static files are served from the application directory.
 - Support Hot Module Replacement (HMR) for development
 
 ## Installation
@@ -48,12 +48,14 @@ Create a `index.html` file in the web application directory:
 <html>
 <head>
   <title>My Web Application</title>
-  <link rel="stylesheet" href="/uno.css">
+  <link rel="stylesheet" href="/tailwind.css">
   <script type="importmap">
     {
       "imports": {
-        "react": "https://esm.sh/react@19.0.0",
-        "react-dom/client": "https://esm.sh/react-dom@19.0.0/client"
+        "react": "https://esm.sh/react@19.2.3/es2022/react.mjs",
+        "react/": "https://esm.sh/react@19.2.3/",
+        "react-dom": "https://esm.sh/*react-dom@19.2.3/es2022/react-dom.mjs",
+        "react-dom/": "https://esm.sh/*react-dom@19.2.3/"
       }
     }
   </script>
@@ -77,11 +79,10 @@ function App() {
 createRoot(document.getElementById("app")).render(<App />)
 ```
 
-Create a `uno.css` file in the web application directory:
+Create a `tailwind.css` file in the web application directory:
 
 ```css
-@import "@unocss/reset/tailwind.css";
-@import "@unocss/preset-wind3";
+@import "tailwindcss";
 ```
 
 Run the web server:
