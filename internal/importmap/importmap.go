@@ -174,11 +174,6 @@ func (im *ImportMap) RangeScopes(fn func(scope string, imports *Imports) bool) {
 // This function follows the import maps specification:
 // https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/script/type/importmap
 func (im *ImportMap) Resolve(specifier string, referrer *url.URL) (string, bool) {
-	imports := im.Imports
-	if imports == nil {
-		return specifier, false
-	}
-
 	if im.baseUrl == nil {
 		im.baseUrl, _ = url.Parse("file:///")
 	}
@@ -203,32 +198,45 @@ func (im *ImportMap) Resolve(specifier string, referrer *url.URL) (string, bool)
 		sort.Sort(scopeKeys)
 		for _, scopeKey := range scopeKeys {
 			if strings.HasPrefix(referrer.String(), scopeKey) {
-				imports, _ = im.GetScopeImports(scopeKey)
-				break
+				imports, _ := im.GetScopeImports(scopeKey)
+				ret, ok := im.resolveWith(specifier, imports)
+				if ok {
+					return ret + query + hash, true
+				}
 			}
 		}
 	}
 
-	if imports.Len() > 0 {
-		if url, ok := imports.Get(specifier); ok {
-			return normalizeUrl(im.baseUrl, url) + query, true
-		}
-		if strings.ContainsRune(specifier, '/') {
-			var match string
-			imports.Range(func(k string, v string) bool {
-				if strings.HasSuffix(k, "/") && strings.HasPrefix(specifier, k) {
-					match = normalizeUrl(im.baseUrl, v+specifier[len(k):]) + query
-					return false
-				}
-				return true
-			})
-			if match != "" {
-				return match, true
-			}
-		}
+	ret, ok := im.resolveWith(specifier, im.Imports)
+	if ok {
+		return ret + query + hash, true
 	}
 
 	return specifier + query + hash, false
+}
+
+func (im *ImportMap) resolveWith(specifier string, imports *Imports) (string, bool) {
+	if len(imports.imports) == 0 {
+		return "", false
+	}
+	if url, ok := imports.Get(specifier); ok {
+		return normalizeUrl(im.baseUrl, url), true
+	}
+	// try to match tailing slash specifier
+	if strings.ContainsRune(specifier, '/') {
+		var matchedUrl string
+		imports.Range(func(k string, v string) bool {
+			if strings.HasSuffix(k, "/") && strings.HasPrefix(specifier, k) {
+				matchedUrl = normalizeUrl(im.baseUrl, v+specifier[len(k):])
+				return false
+			}
+			return true
+		})
+		if matchedUrl != "" {
+			return matchedUrl, true
+		}
+	}
+	return "", false
 }
 
 // ParseImport gets the import metadata from a specifier.
