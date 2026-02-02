@@ -28,6 +28,7 @@ type Import struct {
 	SubPath string `json:"subpath"`
 	Github  bool   `json:"-"`
 	Jsr     bool   `json:"-"`
+	Dev     bool   `json:"-"`
 }
 
 func (im Import) Specifier(withVersion bool) string {
@@ -263,8 +264,11 @@ func ParseEsmPath(pathnameOrUrl string) (imp Import, err error) {
 		}
 		if len(segs) > 0 {
 			if hasTargetSegment && strings.HasSuffix(pathname, ".mjs") {
-				subPath := strings.Join(segs, "/")
-				subPath = strings.TrimSuffix(strings.TrimSuffix(subPath, ".mjs"), ".development")
+				subPath := strings.TrimSuffix(strings.Join(segs, "/"), ".mjs")
+				if strings.HasSuffix(subPath, ".development") {
+					subPath = strings.TrimSuffix(subPath, ".development")
+					imp.Dev = true
+				}
 				if strings.ContainsRune(subPath, '/') || (subPath != imp.Name && !strings.HasSuffix(imp.Name, "/"+subPath)) {
 					imp.SubPath = subPath
 				}

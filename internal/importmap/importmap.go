@@ -327,7 +327,7 @@ func (im *ImportMap) addImport(imp ImportMeta, indirect bool, targetImports *Imp
 	moduleUrl := cdnOrigin + "/" + imp.EsmSpecifier() + "/"
 	moduleUrl += target + "/"
 	if imp.SubPath != "" {
-		if imp.SubPath == "jsx-dev-runtime" {
+		if imp.Dev || imp.SubPath == "jsx-dev-runtime" {
 			moduleUrl += imp.SubPath + ".development.mjs"
 		} else {
 			moduleUrl += imp.SubPath + ".mjs"
