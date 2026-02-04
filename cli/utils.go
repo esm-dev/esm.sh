@@ -35,6 +35,14 @@ func (t *termRaw) Next() byte {
 	return buf[0]
 }
 
+func (t *termRaw) GetSize() (width int, height int, err error) {
+	return term.GetSize(int(os.Stdin.Fd()))
+}
+
+func (t *termRaw) isTTY() bool {
+	return term.IsTerminal(int(os.Stdin.Fd()))
+}
+
 // parseCommandFlags parses the command flags
 func parseCommandFlags() (args []string, helpFlag bool) {
 	help := flag.Bool("help", false, "Print help message")

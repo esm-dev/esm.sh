@@ -68,11 +68,9 @@ func Add() {
 		return
 	}
 
-	if len(specifiers) > 0 {
-		err := updateImportMap(set.New(specifiers...).Values(), *all || *a, *noPrompt)
-		if err != nil {
-			fmt.Println(term.Red("✖︎"), "Failed to add packages: "+err.Error())
-		}
+	err := updateImportMap(set.New(specifiers...).Values(), *all || *a, *noPrompt)
+	if err != nil {
+		fmt.Println(term.Red("✖︎"), "Failed to add packages: "+err.Error())
 	}
 }
 
@@ -184,10 +182,6 @@ func updateImportMap(specifiers []string, all bool, noPrompt bool) (err error) {
 }
 
 func addImports(im *importmap.ImportMap, specifiers []string, prompt bool, all bool) bool {
-	// debug(skip term spinner and prompt)
-	im.AddImportFromSpecifier(specifiers[0])
-	return true
-
 	term.HideCursor()
 	defer term.ShowCursor()
 
@@ -224,7 +218,7 @@ func addImports(im *importmap.ImportMap, specifiers []string, prompt bool, all b
 		for _, imp := range resolvedImports {
 			if len(imp.Exports) > 0 {
 				for _, exportPath := range imp.Exports {
-					if strings.HasPrefix(exportPath, "./") && !strings.HasSuffix(exportPath, ".css") && !strings.HasSuffix(exportPath, ".json") && !strings.ContainsRune(exportPath, '*') {
+					if validateExportPath(exportPath) {
 						wg2.Go(func() {
 							meta, err := im.FetchImportMeta(importmap.Import{
 								Name:    imp.Name,
@@ -262,11 +256,24 @@ func addImports(im *importmap.ImportMap, specifiers []string, prompt bool, all b
 
 	spinner.Stop()
 
-	for _, imp := range resolvedImports {
-		if imp.SubPath == "" && len(imp.Exports) > 0 && prompt {
-			// prompt
-			// selected := multiSelect(&termRaw{}, "Select the export to use", imp.Exports)
-			// fmt.Println(selected)
+	if prompt {
+		term := &termRaw{}
+		if term.isTTY() {
+			for _, imp := range resolvedImports {
+				if imp.SubPath == "" && len(imp.Exports) > 0 {
+					var subModules = make([]string, 0, len(imp.Exports))
+					for _, exportPath := range imp.Exports {
+						if validateExportPath(exportPath) {
+							subModules = append(subModules, exportPath[2:])
+						}
+					}
+					if len(subModules) > 0 {
+						ui := &subModuleSelectUI{term: term, im: im, mainImport: &imp}
+						ui.init(subModules)
+						ui.show()
+					}
+				}
+			}
 		}
 	}
 
@@ -294,74 +301,133 @@ func addImports(im *importmap.ImportMap, specifiers []string, prompt bool, all b
 	return true
 }
 
-// Select asks the user to select an item from a list.
-func multiSelect(raw term.Raw, prompt string, items []string) (selected []string) {
-	fmt.Print(term.Cyan("? "))
-	fmt.Println(prompt)
+type subModuleSelectUI struct {
+	term         *termRaw
+	im           *importmap.ImportMap
+	mainImport   *importmap.ImportMeta
+	cursor       int
+	subModules   []string
+	state        []uint8 // 0 - not added, 1 - added, 2 - loading...
+	spinnerIndex int
+	spinnerChars []string
+	spinnerTimer *time.Timer
+}
+
+func (ui *subModuleSelectUI) init(subModules []string) {
+	ui.subModules = subModules
+	ui.state = make([]uint8, len(subModules))
+	ui.spinnerChars = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+}
+
+func (ui *subModuleSelectUI) show() {
+	fmt.Println(term.Cyan("Select sub-modules of " + ui.mainImport.Specifier(true) + ":"))
 
 	defer func() {
-		lines := len(items) + 1
+		lines := len(ui.subModules) + 1
 		term.MoveCursorUp(lines)
 		for range lines {
 			term.ClearLine()
-			os.Stdout.Write([]byte("\n")) // move to the next line
+			os.Stdout.Write([]byte{'\n'}) // move to the next line
 		}
 		term.MoveCursorUp(lines)
 	}()
 
-	cursor := 0
-	selectState := set.New[string]()
-	printMultiSelectItems(items, selectState, cursor, false)
+	ui.render(false)
+
+	defer func() {
+		if ui.spinnerTimer != nil {
+			ui.spinnerTimer.Stop()
+			ui.spinnerTimer = nil
+		}
+	}()
 
 	for {
-		key := raw.Next()
+		key := ui.term.Next()
 		switch key {
 		case 3, 27: // Ctrl+C, Escape
-			fmt.Print(term.Dim("Aborted."))
-			fmt.Print("\n")
-			os.Exit(0)
-		case 13: // Enter
-			selected = selectState.Values()
 			return
-		case 32: // Space
-			item := items[cursor]
-			if !selectState.Has(item) {
-				selectState.Add(item)
-			} else {
-				selectState.Remove(item)
+		case 13, 32: // Space, Enter
+			if ui.cursor == len(ui.subModules) {
+				return
 			}
-			printMultiSelectItems(items, selectState, cursor, true)
+			state := ui.state[ui.cursor]
+			switch state {
+			case 0:
+				// add
+				cur := ui.cursor
+				ui.state[cur] = 2
+				ui.startSpinner()
+				go func() {
+					ui.im.AddImportFromSpecifier(ui.mainImport.Specifier(true) + "/" + ui.subModules[cur])
+					ui.state[cur] = 1
+				}()
+			case 1:
+				// remove
+				ui.state[ui.cursor] = 0
+			}
+			ui.render(true)
 		case 65, 16, 'p': // Up, ctrl+p, p
-			if cursor > 0 {
-				cursor--
-				printMultiSelectItems(items, selectState, cursor, true)
+			if ui.cursor > 0 {
+				ui.cursor--
+				ui.render(true)
 			}
 		case 66, 14, 'n': // Down, ctrl+n, n
-			if cursor < len(items)-1 {
-				cursor++
-				printMultiSelectItems(items, selectState, cursor, true)
+			if ui.cursor < len(ui.subModules) {
+				ui.cursor++
+				ui.render(true)
 			}
 		}
 	}
 }
 
-func printMultiSelectItems(items []string, selectState *set.Set[string], cursor int, resetCursor bool) {
+func (ui *subModuleSelectUI) render(resetCursor bool) {
 	if resetCursor {
-		term.MoveCursorUp(len(items))
+		term.MoveCursorUp(len(ui.subModules))
 	}
-	for i, name := range items {
-		os.Stdout.Write([]byte("\r"))
-		if selectState.Has(name) {
-			os.Stdout.WriteString(term.Green("•"))
-		} else {
-			os.Stdout.WriteString(term.Dim("•"))
+	for i, exportPath := range ui.subModules {
+		os.Stdout.Write([]byte{'\r'})
+		switch ui.state[i] {
+		case 0:
+			if i == ui.cursor {
+				os.Stdout.WriteString("○")
+			} else {
+				os.Stdout.WriteString(term.Dim("○"))
+			}
+		case 1:
+			os.Stdout.WriteString(term.Green("✔"))
+		case 2:
+			os.Stdout.WriteString(term.Dim(ui.spinnerChars[ui.spinnerIndex]))
 		}
-		os.Stdout.Write([]byte(" "))
-		if i == cursor {
-			os.Stdout.WriteString(name)
+		os.Stdout.Write([]byte{' '})
+		specifier := ui.mainImport.Specifier(false) + "/" + exportPath
+		if i == ui.cursor {
+			os.Stdout.WriteString(specifier)
 		} else {
-			os.Stdout.WriteString(term.Dim(name))
+			os.Stdout.WriteString(term.Dim(specifier))
 		}
-		os.Stdout.Write([]byte("\n"))
+		os.Stdout.Write([]byte{'\n'})
 	}
+	os.Stdout.Write([]byte{'\r'})
+	if ui.cursor == len(ui.subModules) {
+		os.Stdout.WriteString(term.Bold("(Done)"))
+	} else {
+		os.Stdout.WriteString(term.Dim("(Done)"))
+	}
+}
+
+func (ui *subModuleSelectUI) startSpinner() {
+	if ui.spinnerTimer != nil {
+		ui.spinnerTimer.Stop()
+	}
+	fps := 5
+	ui.spinnerTimer = time.AfterFunc(time.Second/time.Duration(fps), ui.startSpinner)
+	ui.spinnerIndex++
+	if ui.spinnerIndex >= len(ui.spinnerChars) {
+		ui.spinnerIndex = 0
+	}
+	ui.render(true)
+}
+
+func validateExportPath(exportPath string) bool {
+	return strings.HasPrefix(exportPath, "./") && !strings.HasSuffix(exportPath, ".css") && !strings.HasSuffix(exportPath, ".json") && !strings.ContainsRune(exportPath, '*')
 }
