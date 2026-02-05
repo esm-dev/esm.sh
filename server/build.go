@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"crypto/sha3"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -274,9 +275,9 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 		defer recycle()
 		buffer.WriteString("export default ")
 		buffer.Write(jsonData)
-		err = ctx.storage.Put(ctx.getSavepath(), buffer)
+		err = ctx.storage.Put(ctx.getSavePath(), buffer)
 		if err != nil {
-			ctx.logger.Errorf("storage.put(%s): %v", ctx.getSavepath(), err)
+			ctx.logger.Errorf("storage.put(%s): %v", ctx.getSavePath(), err)
 			err = errors.New("storage: " + err.Error())
 			return
 		}
@@ -329,9 +330,9 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 		if meta.ExportDefault {
 			fmt.Fprintf(buf, `export { default } from "%s";`, importUrl)
 		}
-		err = ctx.storage.Put(ctx.getSavepath(), buf)
+		err = ctx.storage.Put(ctx.getSavePath(), buf)
 		if err != nil {
-			ctx.logger.Errorf("storage.put(%s): %v", ctx.getSavepath(), err)
+			ctx.logger.Errorf("storage.put(%s): %v", ctx.getSavePath(), err)
 			err = errors.New("storage: " + err.Error())
 			return
 		}
@@ -1389,28 +1390,31 @@ REBUILD:
 			}
 
 			var stat storage.Stat
-			stat, err = ctx.storage.Stat(ctx.getSavepath())
+			stat, err = ctx.storage.Stat(ctx.getSavePath())
 			if err == nil && stat.Size() > 0 {
 				ctx.logger.Infof("build(%s): file already exists in the storage, skip it", ctx.Path())
 				continue
 			}
 			if err != storage.ErrNotFound {
-				ctx.logger.Errorf("storage.stat(%s): %v", ctx.getSavepath(), err)
+				ctx.logger.Errorf("storage.stat(%s): %v", ctx.getSavePath(), err)
 				err = errors.New("storage: " + err.Error())
 				return
 			}
-			err = ctx.storage.Put(ctx.getSavepath(), finalJS)
+			sha := sha3.New384()
+			r := io.TeeReader(finalJS, sha)
+			err = ctx.storage.Put(ctx.getSavePath(), r)
 			if err != nil {
-				ctx.logger.Errorf("storage.put(%s): %v", ctx.getSavepath(), err)
+				ctx.logger.Errorf("storage.put(%s): %v", ctx.getSavePath(), err)
 				err = errors.New("storage: " + err.Error())
 				return
 			}
+			meta.Integrity = sha.Sum(nil)
 		}
 	}
 
 	for _, file := range res.OutputFiles {
 		if strings.HasSuffix(file.Path, ".css") {
-			savePath := ctx.getSavepath()
+			savePath := ctx.getSavePath()
 			savePath = strings.TrimSuffix(savePath, path.Ext(savePath)) + ".css"
 			err = ctx.storage.Put(savePath, bytes.NewReader(file.Contents))
 			if err != nil {
@@ -1433,9 +1437,9 @@ REBUILD:
 				buf, recycle := newBuffer()
 				defer recycle()
 				if json.NewEncoder(buf).Encode(sourceMap) == nil {
-					err = ctx.storage.Put(ctx.getSavepath()+".map", buf)
+					err = ctx.storage.Put(ctx.getSavePath()+".map", buf)
 					if err != nil {
-						ctx.logger.Errorf("storage.put(%s): %v", ctx.getSavepath()+".map", err)
+						ctx.logger.Errorf("storage.put(%s): %v", ctx.getSavePath()+".map", err)
 						err = errors.New("storage: " + err.Error())
 						return
 					}
