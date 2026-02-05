@@ -11,6 +11,7 @@ Deno.test("?meta query", async () => {
     assert(meta.version.startsWith("19."));
     assert(meta.exports.includes("./jsx-runtime"));
     assert(!meta.imports);
+    assert(meta.integrity.startsWith("sha384-"));
   }
   {
     const res = await fetch("http://localhost:8080/react-dom@19.2.3?meta", { headers: { "User-Agent": "i'm a browser" } });

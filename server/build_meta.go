@@ -21,6 +21,7 @@ type BuildMeta struct {
 	CSSEntry      string
 	Dts           string
 	Imports       []string
+	Integrity     []byte
 }
 
 func encodeBuildMeta(meta *BuildMeta) []byte {
@@ -54,6 +55,11 @@ func encodeBuildMeta(meta *BuildMeta) []byte {
 			buf.WriteString(path)
 			buf.WriteByte('\n')
 		}
+	}
+	if len(meta.Integrity) > 0 {
+		buf.Write([]byte{'~', ':'})
+		buf.Write(meta.Integrity)
+		buf.WriteByte('\n')
 	}
 	return buf.Bytes()
 }
@@ -101,6 +107,8 @@ func decodeBuildMeta(data []byte) (*BuildMeta, error) {
 				}
 			}
 			meta.Imports = append(meta.Imports, importSepcifier)
+		case ll > 2 && line[0] == '~' && line[1] == ':':
+			meta.Integrity = line[2:]
 		default:
 			return nil, errors.New("invalid build meta")
 		}

@@ -1077,7 +1077,7 @@ func (ctx *BuildContext) getImportPath(esm EsmPath, buildArgsPrefix string, exte
 	)
 }
 
-func (ctx *BuildContext) getSavepath() string {
+func (ctx *BuildContext) getSavePath() string {
 	return normalizeSavePath(path.Join("modules", ctx.Path()))
 }
 
