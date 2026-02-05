@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"crypto/sha1"
+	"crypto/sha3"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -1749,6 +1750,27 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 			if buildMeta.TypesOnly {
 				metaJson["typesOnly"] = true
 			}
+			integrity := buildMeta.Integrity
+			// compute the integrity from the original js if it's not set in the build meta
+			if len(buildMeta.Integrity) == 0 {
+				savePath := build.getSavePath()
+				f, _, err := esmStorage.Get(savePath)
+				if err != nil {
+					return rex.Status(500, err.Error())
+				}
+				sha := sha3.New384()
+				_, err = io.Copy(sha, f)
+				if err != nil {
+					return rex.Status(500, err.Error())
+				}
+				integrity = sha.Sum(nil)
+				buildMeta.Integrity = integrity
+				err = metaDB.Put(build.Path(), encodeBuildMeta(buildMeta))
+				if err != nil {
+					return rex.Status(500, err.Error())
+				}
+			}
+			metaJson["integrity"] = "sha384-" + base64.RawStdEncoding.EncodeToString(integrity)
 			ctx.SetHeader("Content-Type", ctJSON)
 			if isExactVersion {
 				ctx.SetHeader("Cache-Control", ccImmutable)
@@ -1784,7 +1806,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 				ctx.SetHeader("Cache-Control", ccImmutable)
 				return buf.Bytes()
 			}
-			savePath := build.getSavepath()
+			savePath := build.getSavePath()
 			if strings.HasSuffix(esmPath.SubPath, ".css") && buildMeta.CSSInJS {
 				path, _ := utils.SplitByLastByte(savePath, '.')
 				savePath = path + ".css"
