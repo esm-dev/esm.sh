@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -32,7 +33,8 @@ Arguments:
   ...imports     Imports to add
 
 Options:
-	--all, -a      Add all modules of the import without prompt
+	--all, -a      Add all sub-modules of the import without prompt
+	--no-sri       No "integrity" attribute added
 	--no-prompt    Add imports without prompt
   --help, -h     Show help message
 `
@@ -61,6 +63,7 @@ func Add() {
 	all := flag.Bool("all", false, "add all modules of the import")
 	a := flag.Bool("a", false, "add all modules of the import")
 	noPrompt := flag.Bool("no-prompt", false, "add imports without prompt")
+	noSRI := flag.Bool("no-sri", false, "do not generate SRI for the import")
 	specifiers, help := parseCommandFlags()
 
 	if help || len(specifiers) == 0 {
@@ -68,13 +71,13 @@ func Add() {
 		return
 	}
 
-	err := updateImportMap(set.New(specifiers...).Values(), *all || *a, *noPrompt)
+	err := updateImportMap(set.New(specifiers...).Values(), *all || *a, *noPrompt, *noSRI)
 	if err != nil {
 		fmt.Println(term.Red("✖︎"), "Failed to add packages: "+err.Error())
 	}
 }
 
-func updateImportMap(specifiers []string, all bool, noPrompt bool) (err error) {
+func updateImportMap(specifiers []string, all bool, noPrompt bool, noSRI bool) (err error) {
 	indexHtml, exists, err := lookupClosestFile("index.html")
 	if err != nil {
 		return
@@ -99,7 +102,7 @@ func updateImportMap(specifiers []string, all bool, noPrompt bool) (err error) {
 				if string(tagName) == "head" && !updated {
 					buf.WriteString("  <script type=\"importmap\">\n")
 					var importMap importmap.ImportMap
-					if addImports(&importMap, specifiers, !noPrompt, all) {
+					if addImports(&importMap, specifiers, !noPrompt, all, noSRI) {
 						buf.WriteString(importMap.FormatJSON(2))
 						buf.WriteString("\n  </script>\n")
 					}
@@ -123,7 +126,7 @@ func updateImportMap(specifiers []string, all bool, noPrompt bool) (err error) {
 					if typeAttr != "importmap" && !updated {
 						buf.WriteString("<script type=\"importmap\">\n")
 						importMap := importmap.Blank()
-						if addImports(importMap, specifiers, !noPrompt, all) {
+						if addImports(importMap, specifiers, !noPrompt, all, noSRI) {
 							buf.WriteString(importMap.FormatJSON(2))
 							buf.WriteString("\n  </script>\n  ")
 						}
@@ -146,7 +149,7 @@ func updateImportMap(specifiers []string, all bool, noPrompt bool) (err error) {
 								}
 							}
 						}
-						if addImports(importMap, specifiers, !noPrompt, all) {
+						if addImports(importMap, specifiers, !noPrompt, all, noSRI) {
 							buf.WriteString("\n")
 							buf.WriteString(importMap.FormatJSON(2))
 							buf.WriteString("\n  ")
@@ -171,7 +174,7 @@ func updateImportMap(specifiers []string, all bool, noPrompt bool) (err error) {
 		err = os.WriteFile(indexHtml, buf.Bytes(), fi.Mode())
 	} else {
 		importMap := importmap.Blank()
-		if addImports(importMap, specifiers, !noPrompt, all) {
+		if addImports(importMap, specifiers, !noPrompt, all, noSRI) {
 			err = os.WriteFile(indexHtml, fmt.Appendf(nil, htmlTemplate, importMap.FormatJSON(2), specifiers[0]), 0644)
 			if err == nil {
 				fmt.Println(term.Dim("Created index.html with importmap script."))
@@ -181,7 +184,7 @@ func updateImportMap(specifiers []string, all bool, noPrompt bool) (err error) {
 	return
 }
 
-func addImports(im *importmap.ImportMap, specifiers []string, prompt bool, all bool) bool {
+func addImports(im *importmap.ImportMap, specifiers []string, prompt bool, all bool, noSRI bool) bool {
 	term.HideCursor()
 	defer term.ShowCursor()
 
@@ -246,7 +249,7 @@ func addImports(im *importmap.ImportMap, specifiers []string, prompt bool, all b
 	}
 
 	for _, imp := range resolvedImports {
-		warns, errors := im.AddImport(imp)
+		warns, errors := im.AddImport(imp, noSRI)
 		if len(errors) > 0 {
 			onErrors(errors)
 			return false
@@ -305,6 +308,7 @@ type subModuleSelectUI struct {
 	term         *termRaw
 	im           *importmap.ImportMap
 	mainImport   *importmap.ImportMeta
+	noSRI        bool
 	cursor       int
 	subModules   []string
 	state        []uint8 // 0 - not added, 1 - added, 2 - loading...
@@ -321,20 +325,10 @@ func (ui *subModuleSelectUI) init(subModules []string) {
 
 func (ui *subModuleSelectUI) show() {
 	fmt.Println(term.Cyan("Select sub-modules of " + ui.mainImport.Specifier(true) + ":"))
-
-	defer func() {
-		lines := len(ui.subModules) + 1
-		term.MoveCursorUp(lines)
-		for range lines {
-			term.ClearLine()
-			os.Stdout.Write([]byte{'\n'}) // move to the next line
-		}
-		term.MoveCursorUp(lines)
-	}()
-
 	ui.render(false)
 
 	defer func() {
+		ui.clearLines()
 		if ui.spinnerTimer != nil {
 			ui.spinnerTimer.Stop()
 			ui.spinnerTimer = nil
@@ -345,11 +339,16 @@ func (ui *subModuleSelectUI) show() {
 		key := ui.term.Next()
 		switch key {
 		case 3, 27: // Ctrl+C, Escape
+			ui.clearLines()
+			os.Stdout.WriteString(term.Dim("Aborted.\n"))
+			term.ShowCursor()
+			os.Exit(0)
 			return
-		case 13, 32: // Space, Enter
-			if ui.cursor == len(ui.subModules) {
+		case 13: // Enter
+			if !ui.isPending() {
 				return
 			}
+		case 32: // Space
 			state := ui.state[ui.cursor]
 			switch state {
 			case 0:
@@ -358,11 +357,12 @@ func (ui *subModuleSelectUI) show() {
 				ui.state[cur] = 2
 				ui.startSpinner()
 				go func() {
-					ui.im.AddImportFromSpecifier(ui.mainImport.Specifier(true) + "/" + ui.subModules[cur])
+					ui.im.AddImportFromSpecifier(ui.mainImport.Specifier(true)+"/"+ui.subModules[cur], ui.noSRI)
 					ui.state[cur] = 1
 				}()
 			case 1:
 				// remove
+				ui.im.Imports.Delete(ui.mainImport.Specifier(false) + "/" + ui.subModules[ui.cursor])
 				ui.state[ui.cursor] = 0
 			}
 			ui.render(true)
@@ -372,7 +372,7 @@ func (ui *subModuleSelectUI) show() {
 				ui.render(true)
 			}
 		case 66, 14, 'n': // Down, ctrl+n, n
-			if ui.cursor < len(ui.subModules) {
+			if ui.cursor < len(ui.subModules)-1 {
 				ui.cursor++
 				ui.render(true)
 			}
@@ -380,12 +380,38 @@ func (ui *subModuleSelectUI) show() {
 	}
 }
 
-func (ui *subModuleSelectUI) render(resetCursor bool) {
-	if resetCursor {
-		term.MoveCursorUp(len(ui.subModules))
+func (ui *subModuleSelectUI) isPending() bool {
+	return slices.Contains(ui.state, 2)
+}
+
+func (ui *subModuleSelectUI) clearLines() {
+	func() {
+		lines := ui.getVisibleHeight()
+		term.MoveCursorUp(lines)
+		for range lines {
+			term.ClearLine()
+			os.Stdout.Write([]byte{'\n'}) // move to the next line
+		}
+		term.MoveCursorUp(lines)
+	}()
+}
+
+func (ui *subModuleSelectUI) getVisibleHeight() int {
+	lines := len(ui.subModules)
+	if _, height, err := ui.term.GetSize(); err == nil && height < lines {
+		return max(height-1, 2)
 	}
-	for i, exportPath := range ui.subModules {
-		os.Stdout.Write([]byte{'\r'})
+	return lines
+}
+
+func (ui *subModuleSelectUI) render(resetCursor bool) {
+	visibleOptions := ui.subModules[:ui.getVisibleHeight()]
+	if resetCursor {
+		term.MoveCursorUp(len(visibleOptions) - 1)
+	}
+	for i, exportPath := range visibleOptions {
+		os.Stdout.WriteString("\r")
+		term.ClearLineRight()
 		switch ui.state[i] {
 		case 0:
 			if i == ui.cursor {
@@ -401,17 +427,21 @@ func (ui *subModuleSelectUI) render(resetCursor bool) {
 		os.Stdout.Write([]byte{' '})
 		specifier := ui.mainImport.Specifier(false) + "/" + exportPath
 		if i == ui.cursor {
-			os.Stdout.WriteString(specifier)
+			os.Stdout.WriteString(term.Bold(specifier))
+			switch ui.state[i] {
+			case 0:
+				os.Stdout.WriteString(term.Dim(" space to add, enter to confirm"))
+			case 1:
+				os.Stdout.WriteString(term.Dim(" space to remove, enter to confirm"))
+			case 2:
+				os.Stdout.WriteString(term.Dim(" ..."))
+			}
 		} else {
 			os.Stdout.WriteString(term.Dim(specifier))
 		}
-		os.Stdout.Write([]byte{'\n'})
-	}
-	os.Stdout.Write([]byte{'\r'})
-	if ui.cursor == len(ui.subModules) {
-		os.Stdout.WriteString(term.Bold("(Done)"))
-	} else {
-		os.Stdout.WriteString(term.Dim("(Done)"))
+		if i < len(visibleOptions)-1 {
+			os.Stdout.Write([]byte{'\n'})
+		}
 	}
 }
 

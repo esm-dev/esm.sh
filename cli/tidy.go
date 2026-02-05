@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -19,24 +20,26 @@ const tidyHelpMessage = `Clean up and optimize the "importmap" in index.html
 Usage: esm.sh tidy [options]
 
 Options:
+	--no-sri    No "integrity" attribute for the import map
   --help, -h  Show help message
 `
 
 // Tidy tidies up "importmap" script
 func Tidy() {
+	noSRI := flag.Bool("no-sri", false, "do not generate SRI for the import")
 	_, help := parseCommandFlags()
 	if help {
 		fmt.Print(tidyHelpMessage)
 		return
 	}
 
-	err := tidy()
+	err := tidy(*noSRI)
 	if err != nil {
 		fmt.Println(term.Red("[error]"), "Failed to tidy up: "+err.Error())
 	}
 }
 
-func tidy() (err error) {
+func tidy(noSRI bool) (err error) {
 	indexHtml, exists, err := lookupClosestFile("index.html")
 	if err != nil {
 		err = fmt.Errorf("Failed to lookup index.html: %w", err)
@@ -119,7 +122,7 @@ func tidy() (err error) {
 						specifiers = append(specifiers, imp.Specifier(true))
 					}
 					sort.Strings(specifiers)
-					addImports(importMap, specifiers, false, false)
+					addImports(importMap, specifiers, false, false, noSRI)
 					buf.WriteString(importMap.FormatJSON(2))
 					buf.WriteString("\n  ")
 					if token == html.EndTagToken {

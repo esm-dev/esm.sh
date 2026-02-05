@@ -11,14 +11,14 @@ func TestAddPackages(t *testing.T) {
 	// 1. add imports
 	{
 		im := Blank()
-		warnings, errors := im.AddImportFromSpecifier("react@19")
+		warnings, errors := im.AddImportFromSpecifier("react@19", false)
 		if len(errors) > 0 {
 			t.Fatalf("Expected no errors, got %d", len(errors))
 		}
 		if len(warnings) > 0 {
 			t.Fatalf("Expected no warnings, got %d", len(warnings))
 		}
-		warnings, errors = im.AddImportFromSpecifier("react-dom@19/client")
+		warnings, errors = im.AddImportFromSpecifier("react-dom@19/client", false)
 		if len(errors) > 0 {
 			t.Fatalf("Expected no errors, got %d", len(errors))
 		}
@@ -50,7 +50,7 @@ func TestAddPackages(t *testing.T) {
 	// 2. add peer imports to `imports`
 	{
 		im := Blank()
-		warnings, errors := im.AddImportFromSpecifier("react-dom@19")
+		warnings, errors := im.AddImportFromSpecifier("react-dom@19", false)
 		if len(errors) > 0 {
 			t.Fatalf("Expected no errors, got %d", len(errors))
 		}
@@ -80,15 +80,12 @@ func TestAddPackages(t *testing.T) {
 			config: Config{
 				CDN:    "https://cdn.esm.sh",
 				Target: "esnext",
-				SRI: SRIConfig{
-					Algorithm: "sha512",
-				},
 			},
 			Imports:   newImports(nil),
 			scopes:    make(map[string]*Imports),
 			integrity: newImports(nil),
 		}
-		warnings, errors := im.AddImportFromSpecifier("react@19")
+		warnings, errors := im.AddImportFromSpecifier("react@19", false)
 		if len(errors) > 0 {
 			t.Fatalf("Errors: %v", errors)
 			t.Fatalf("Expected no errors, got %d", len(errors))
@@ -111,7 +108,7 @@ func TestAddPackages(t *testing.T) {
 
 func TestResolve(t *testing.T) {
 	im := Blank()
-	im.AddImportFromSpecifier("react-dom@19/client")
+	im.AddImportFromSpecifier("react-dom@19/client", false)
 	referrer, _ := url.Parse("file:///main.js")
 	modUrl, ok := im.Resolve("react", referrer)
 	if !ok {

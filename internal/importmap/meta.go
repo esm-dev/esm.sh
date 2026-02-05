@@ -63,6 +63,7 @@ func (im Import) RegistryPrefix() string {
 // ImportMeta represents the import metadata of a import.
 type ImportMeta struct {
 	Import
+	Integrity   string   `json:"integrity"`
 	Exports     []string `json:"exports"`
 	Imports     []string `json:"imports"`
 	PeerImports []string `json:"peerImports"`

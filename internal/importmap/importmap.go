@@ -16,6 +16,12 @@ import (
 	"github.com/ije/gox/utils"
 )
 
+// Config represents the configuration of an import map.
+type Config struct {
+	CDN    string `json:"cdn,omitempty"`
+	Target string `json:"target,omitempty"`
+}
+
 // Imports represents a map of imports.
 type Imports struct {
 	lock    sync.RWMutex
@@ -71,18 +77,6 @@ func (i *Imports) Range(fn func(specifier string, url string) bool) {
 			break
 		}
 	}
-}
-
-// Config represents the configuration of an import map.
-type Config struct {
-	CDN    string `json:"cdn,omitempty"`
-	Target string `json:"target,omitempty"`
-	SRI    any    `json:"sri,omitempty"`
-}
-
-// SRIConfig represents the SRI configuration of an import map.
-type SRIConfig struct {
-	Algorithm string `json:"algorithm"`
 }
 
 // ImportMapJson represents the JSON structure of an import map.
@@ -278,22 +272,22 @@ func (im *ImportMap) FetchImportMeta(i Import) (meta ImportMeta, err error) {
 }
 
 // AddImportFromSpecifier adds an import from a specifier to the import map.
-func (im *ImportMap) AddImportFromSpecifier(specifier string) (warnings []string, errors []error) {
+func (im *ImportMap) AddImportFromSpecifier(specifier string, noSRI bool) (warnings []string, errors []error) {
 	imp, err := im.ParseImport(specifier)
 	if err != nil {
 		errors = append(errors, err)
 		return
 	}
-	return im.AddImport(imp)
+	return im.AddImport(imp, noSRI)
 }
 
 // AddImport adds an import to the import map.
-func (im *ImportMap) AddImport(imp ImportMeta) (warnings []string, errors []error) {
-	return im.addImport(imp, false, nil, set.New[string]())
+func (im *ImportMap) AddImport(imp ImportMeta, noSRI bool) (warnings []string, errors []error) {
+	return im.addImport(set.New[string](), imp, false, nil, noSRI)
 }
 
 // addImport adds an import to the import map.
-func (im *ImportMap) addImport(imp ImportMeta, indirect bool, targetImports *Imports, mark *set.Set[string]) (warnings []string, errors []error) {
+func (im *ImportMap) addImport(mark *set.Set[string], imp ImportMeta, indirect bool, targetImports *Imports, noSRI bool) (warnings []string, errors []error) {
 	specifier := imp.Specifier(false)
 	if mark.Has(specifier) {
 		return
@@ -416,7 +410,7 @@ func (im *ImportMap) addImport(imp ImportMeta, indirect bool, targetImports *Imp
 					errors = append(errors, err)
 					return
 				}
-				warns, errs := im.addImport(meta, !isPeer, targetImports, mark)
+				warns, errs := im.addImport(mark, meta, !isPeer, targetImports, noSRI)
 				warnings = append(warnings, warns...)
 				errors = append(errors, errs...)
 			})
