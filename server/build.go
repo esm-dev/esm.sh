@@ -278,7 +278,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 		err = ctx.storage.Put(ctx.getSavePath(), buffer)
 		if err != nil {
 			ctx.logger.Errorf("storage.put(%s): %v", ctx.getSavePath(), err)
-			err = errors.New("storage: " + err.Error())
+			err = errors.New("storage(put): " + err.Error())
 			return
 		}
 		meta = &BuildMeta{ExportDefault: true}
@@ -333,7 +333,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 		err = ctx.storage.Put(ctx.getSavePath(), buf)
 		if err != nil {
 			ctx.logger.Errorf("storage.put(%s): %v", ctx.getSavePath(), err)
-			err = errors.New("storage: " + err.Error())
+			err = errors.New("storage(put): " + err.Error())
 			return
 		}
 		meta.Dts, err = ctx.resolveDTS(entry)
@@ -1397,15 +1397,14 @@ REBUILD:
 			}
 			if err != storage.ErrNotFound {
 				ctx.logger.Errorf("storage.stat(%s): %v", ctx.getSavePath(), err)
-				err = errors.New("storage: " + err.Error())
+				err = errors.New("storage(stat): " + err.Error())
 				return
 			}
 			sha := sha3.New384()
-			r := storage.TeeReader(finalJS, sha)
-			err = ctx.storage.Put(ctx.getSavePath(), r)
+			err = ctx.storage.Put(ctx.getSavePath(), storage.TeeReader(finalJS, sha))
 			if err != nil {
 				ctx.logger.Errorf("storage.put(%s): %v", ctx.getSavePath(), err)
-				err = errors.New("storage: " + err.Error())
+				err = errors.New("storage(put): " + err.Error())
 				return
 			}
 			meta.Integrity = "sha384-" + base64.RawStdEncoding.EncodeToString(sha.Sum(nil))
@@ -1419,7 +1418,7 @@ REBUILD:
 			err = ctx.storage.Put(savePath, bytes.NewReader(file.Contents))
 			if err != nil {
 				ctx.logger.Errorf("storage.put(%s): %v", savePath, err)
-				err = errors.New("storage: " + err.Error())
+				err = errors.New("storage(put): " + err.Error())
 				return
 			}
 			meta.CSSInJS = true
@@ -1440,7 +1439,7 @@ REBUILD:
 					err = ctx.storage.Put(ctx.getSavePath()+".map", buf)
 					if err != nil {
 						ctx.logger.Errorf("storage.put(%s): %v", ctx.getSavePath()+".map", err)
-						err = errors.New("storage: " + err.Error())
+						err = errors.New("storage(put): " + err.Error())
 						return
 					}
 				}

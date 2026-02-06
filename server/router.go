@@ -462,7 +462,8 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 			savePath := normalizeSavePath(fmt.Sprintf("modules/transform/%s.%s", hash, ext))
 			f, fi, err := esmStorage.Get(savePath)
 			if err != nil {
-				return rex.Status(500, err.Error())
+				logger.Errorf("storage.get(%s): %v", savePath, err)
+				return rex.Status(500, "Storage error, please try again")
 			}
 			if strings.HasSuffix(pathname, ".map") {
 				ctx.SetHeader("Content-Type", ctJSON)
@@ -604,7 +605,8 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 				savePath := normalizeSavePath(path.Join("modules/x", hex.EncodeToString(h.Sum(nil))+".css"))
 				r, fi, err := esmStorage.Get(savePath)
 				if err != nil && err != storage.ErrNotFound {
-					return rex.Status(500, err.Error())
+					logger.Errorf("storage.get(%s): %v", savePath, err)
+					return rex.Status(500, "Storage error, please try again")
 				}
 				if err == nil {
 					ctx.SetHeader("Cache-Control", ccImmutable)
@@ -749,7 +751,8 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 				savePath := normalizeSavePath(path.Join("modules/x", hex.EncodeToString(h.Sum(nil))+".mjs"))
 				content, fi, err := esmStorage.Get(savePath)
 				if err != nil && err != storage.ErrNotFound {
-					return rex.Status(500, err.Error())
+					logger.Errorf("storage.get(%s): %v", savePath, err)
+					return rex.Status(500, "Storage error, please try again")
 				}
 				var body io.Reader = content
 				if err == storage.ErrNotFound {
@@ -1270,7 +1273,8 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 				f, stat, err := esmStorage.Get(savePath)
 				if err != nil {
 					if err != storage.ErrNotFound {
-						return rex.Status(500, err.Error())
+						logger.Errorf("storage.get(%s): %v", savePath, err)
+						return rex.Status(500, "Storage error, please try again")
 					} else if pathKind == EsmSourceMap {
 						ctx.SetHeader("Cache-Control", ccImmutable)
 						return rex.Status(404, "Not found")
@@ -1322,7 +1326,8 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 								return f2 // auto closed
 							}
 							if err != storage.ErrNotFound {
-								return rex.Status(500, err.Error())
+								logger.Errorf("storage.get(%s): %v", savePath, err)
+								return rex.Status(500, "Storage error, please try again")
 							}
 							code, err := io.ReadAll(f)
 							if err != nil {
@@ -1330,7 +1335,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 							}
 							target := "es2022"
 							// check target in the pathname
-							for _, seg := range strings.Split(pathname, "/") {
+							for seg := range strings.SplitSeq(pathname, "/") {
 								if targets[seg] > 0 {
 									target = seg
 									break
@@ -1499,7 +1504,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 			content, _, err := readDts()
 			if err != nil {
 				if err != storage.ErrNotFound {
-					return rex.Status(500, err.Error())
+					return rex.Status(500, "Storage error, please try again")
 				}
 				buildCtx := &BuildContext{
 					npmrc:       npmrc,
@@ -1756,7 +1761,8 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 				savePath := build.getSavePath()
 				f, _, err := esmStorage.Get(savePath)
 				if err != nil {
-					return rex.Status(500, err.Error())
+					logger.Errorf("storage.get(%s): %v", savePath, err)
+					return rex.Status(500, "Storage error, please try again")
 				}
 				sha := sha3.New384()
 				_, err = io.Copy(sha, f)
@@ -1820,9 +1826,10 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 					key := build.Path()
 					metaDB.Delete(key)
 					cacheLRU.Remove(key)
-					return rex.Status(500, "Storage error, please try again")
+				} else {
+					logger.Errorf("storage.get(%s): %v", savePath, err)
 				}
-				return rex.Status(500, err.Error())
+				return rex.Status(500, "Storage error, please try again")
 			}
 			ctx.SetHeader("Last-Modified", fi.ModTime().UTC().Format(http.TimeFormat))
 			ctx.SetHeader("Cache-Control", ccImmutable)
@@ -1855,7 +1862,8 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 						return f2 // auto closed
 					}
 					if err != storage.ErrNotFound {
-						return rex.Status(500, err.Error())
+						logger.Errorf("storage.get(%s): %v", savePath, err)
+						return rex.Status(500, "Storage error, please try again")
 					}
 					code, err := io.ReadAll(f)
 					if err != nil {

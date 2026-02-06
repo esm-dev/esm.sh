@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/xml"
 	"errors"
-	"fmt"
 	"html"
 	"io"
 	"net/http"
@@ -127,7 +126,7 @@ func (s3 *s3Storage) Stat(name string) (stat Stat, err error) {
 		return
 	}
 	if resp.StatusCode >= 400 {
-		err = fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		err = errors.New("unexpected status code: " + resp.Status)
 		return
 	}
 	contentLengthHeader := resp.Header.Get("Content-Length")
@@ -262,10 +261,10 @@ func (s3 *s3Storage) Put(name string, content io.Reader) (err error) {
 			}
 			contentLength = size
 		} else {
-			return errors.New("put: missing content length")
+			return errors.New("missing content length")
 		}
 	} else {
-		err = errors.New("put: missing content length")
+		err = errors.New("missing content length")
 		return
 	}
 	if s3.fsCache != nil && !strings.HasSuffix(name, ".mjs.map") {
