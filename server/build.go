@@ -1401,14 +1401,14 @@ REBUILD:
 				return
 			}
 			sha := sha3.New384()
-			r := io.TeeReader(finalJS, sha)
+			r := storage.TeeReader(finalJS, sha)
 			err = ctx.storage.Put(ctx.getSavePath(), r)
 			if err != nil {
 				ctx.logger.Errorf("storage.put(%s): %v", ctx.getSavePath(), err)
 				err = errors.New("storage: " + err.Error())
 				return
 			}
-			meta.Integrity = sha.Sum(nil)
+			meta.Integrity = "sha384-" + base64.RawStdEncoding.EncodeToString(sha.Sum(nil))
 		}
 	}
 

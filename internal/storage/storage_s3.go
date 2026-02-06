@@ -247,6 +247,23 @@ func (s3 *s3Storage) Put(name string, content io.Reader) (err error) {
 			return
 		}
 		contentLength = size
+	} else if reader, ok := content.(*teeReader); ok {
+		if buf, ok := reader.r.(*bytes.Buffer); ok {
+			contentLength = int64(buf.Len())
+		} else if seeker, ok := reader.r.(io.Seeker); ok {
+			var size int64
+			size, err = seeker.Seek(0, io.SeekEnd)
+			if err != nil {
+				return
+			}
+			_, err = seeker.Seek(0, io.SeekStart)
+			if err != nil {
+				return
+			}
+			contentLength = size
+		} else {
+			return errors.New("put: missing content length")
+		}
 	} else {
 		err = errors.New("put: missing content length")
 		return
@@ -415,4 +432,23 @@ func parseS3Error(resp *http.Response) error {
 		return ErrNotFound
 	}
 	return s3Error
+}
+
+func TeeReader(r io.Reader, w io.Writer) io.Reader {
+	return &teeReader{r, w}
+}
+
+type teeReader struct {
+	r io.Reader
+	w io.Writer
+}
+
+func (t *teeReader) Read(p []byte) (n int, err error) {
+	n, err = t.r.Read(p)
+	if n > 0 {
+		if n, err := t.w.Write(p[:n]); err != nil {
+			return n, err
+		}
+	}
+	return
 }

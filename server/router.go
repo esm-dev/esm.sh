@@ -1763,14 +1763,14 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 				if err != nil {
 					return rex.Status(500, err.Error())
 				}
-				integrity = sha.Sum(nil)
+				integrity = "sha384-" + base64.RawStdEncoding.EncodeToString(sha.Sum(nil))
 				buildMeta.Integrity = integrity
 				err = metaDB.Put(build.Path(), encodeBuildMeta(buildMeta))
 				if err != nil {
 					return rex.Status(500, err.Error())
 				}
 			}
-			metaJson["integrity"] = "sha384-" + base64.RawStdEncoding.EncodeToString(integrity)
+			metaJson["integrity"] = integrity
 			ctx.SetHeader("Content-Type", ctJSON)
 			if isExactVersion {
 				ctx.SetHeader("Cache-Control", ccImmutable)
