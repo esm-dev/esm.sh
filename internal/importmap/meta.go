@@ -1,6 +1,8 @@
 package importmap
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -63,14 +65,14 @@ func (im Import) RegistryPrefix() string {
 // ImportMeta represents the import metadata of a import.
 type ImportMeta struct {
 	Import
-	Integrity   string   `json:"integrity"`
+	Integrity   string   `json:"integrity"` // "sha384-..."
 	Exports     []string `json:"exports"`
 	Imports     []string `json:"imports"`
 	PeerImports []string `json:"peerImports"`
 }
 
 // HasExternalImports returns true if the import has external imports.
-func (imp ImportMeta) HasExternalImports() bool {
+func (imp *ImportMeta) HasExternalImports() bool {
 	if len(imp.PeerImports) > 0 {
 		return true
 	}
@@ -83,7 +85,7 @@ func (imp ImportMeta) HasExternalImports() bool {
 }
 
 // EsmSpecifier returns the esm specifier of the import meta.
-func (imp ImportMeta) EsmSpecifier() string {
+func (imp *ImportMeta) EsmSpecifier() string {
 	b := strings.Builder{}
 	if imp.Github {
 		b.WriteString("gh/")
@@ -100,17 +102,17 @@ func (imp ImportMeta) EsmSpecifier() string {
 }
 
 // FetchImportMeta fetches the import metadata from the esm.sh CDN.
-func fetchImportMeta(cdnOrigin string, im Import, target string) (meta ImportMeta, err error) {
-	regPrefix := im.RegistryPrefix()
+func fetchImportMeta(cdnOrigin string, imp Import, target string) (meta ImportMeta, err error) {
+	regPrefix := imp.RegistryPrefix()
 	subPath := ""
 	version := ""
-	if im.SubPath != "" {
-		subPath = "/" + im.SubPath
+	if imp.SubPath != "" {
+		subPath = "/" + imp.SubPath
 	}
-	if im.Version != "" {
-		version = "@" + im.Version
+	if imp.Version != "" {
+		version = "@" + imp.Version
 	}
-	url := fmt.Sprintf("%s/%s%s%s%s?meta", cdnOrigin, regPrefix, im.Name, version, subPath)
+	url := fmt.Sprintf("%s/%s%s%s%s?meta", cdnOrigin, regPrefix, imp.Name, version, subPath)
 	if target != "" {
 		url += "&target=" + target
 	}
@@ -137,22 +139,19 @@ func fetchImportMeta(cdnOrigin string, im Import, target string) (meta ImportMet
 		return
 	}
 
-	name := im.Name + "@" + im.Version
-	if im.SubPath != "" {
-		name += "/" + im.SubPath
-	}
-	cachePath := filepath.Join(appDir, "meta", regPrefix, name+".json")
+	sha := sha256.Sum256([]byte(url))
+	cachePath := filepath.Join(appDir, "meta", hex.EncodeToString(sha[:]))
 
 	// if the version is exact, check the cache on disk
-	if npm.IsExactVersion(im.Version) {
+	if npm.IsExactVersion(imp.Version) {
 		f, err := os.Open(cachePath)
 		if err == nil {
 			defer f.Close()
 			err = json.NewDecoder(f).Decode(&meta)
 			if err == nil {
-				meta.Name = im.Name
-				meta.Github = im.Github
-				meta.Jsr = im.Jsr
+				meta.Name = imp.Name
+				meta.Github = imp.Github
+				meta.Jsr = imp.Jsr
 				fetchCache.Store(url, meta)
 				return meta, nil
 			}
@@ -168,7 +167,7 @@ func fetchImportMeta(cdnOrigin string, im Import, target string) (meta ImportMet
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 404 {
-		err = fmt.Errorf("package not found: %s", im.Specifier(true))
+		err = fmt.Errorf("package not found: %s", imp.Specifier(true))
 		return
 	}
 
@@ -190,9 +189,9 @@ func fetchImportMeta(cdnOrigin string, im Import, target string) (meta ImportMet
 		return
 	}
 
-	meta.Name = im.Name
-	meta.Github = im.Github
-	meta.Jsr = im.Jsr
+	meta.Name = imp.Name
+	meta.Github = imp.Github
+	meta.Jsr = imp.Jsr
 
 	// cache the metadata on disk
 	dirname := filepath.Dir(cachePath)
@@ -203,9 +202,13 @@ func fetchImportMeta(cdnOrigin string, im Import, target string) (meta ImportMet
 
 	// cache the metadata in memory
 	fetchCache.Store(url, meta)
-	if meta.Version != im.Version {
+	if meta.Version != imp.Version {
 		// cache the exact version as well
-		fetchCache.Store(fmt.Sprintf("%s/%s%s@%s%s?meta", cdnOrigin, regPrefix, im.Name, meta.Version, subPath), meta)
+		cacheKey := fmt.Sprintf("%s/%s%s@%s%s?meta", cdnOrigin, regPrefix, imp.Name, meta.Version, subPath)
+		if target != "" {
+			cacheKey += "&target=" + target
+		}
+		fetchCache.Store(cacheKey, meta)
 	}
 	return
 }

@@ -277,8 +277,8 @@ func (im *ImportMap) ParseImport(specifier string) (meta ImportMeta, err error) 
 	return fetchImportMeta(im.cdnOrigin(), imp, im.config.Target)
 }
 
-func (im *ImportMap) FetchImportMeta(i Import) (meta ImportMeta, err error) {
-	return fetchImportMeta(im.cdnOrigin(), i, im.config.Target)
+func (im *ImportMap) FetchImportMeta(imp Import) (meta ImportMeta, err error) {
+	return fetchImportMeta(im.cdnOrigin(), imp, im.config.Target)
 }
 
 // AddImportFromSpecifier adds an import from a specifier to the import map.
@@ -345,12 +345,15 @@ func (im *ImportMap) addImport(mark *set.Set[string], imp ImportMeta, indirect b
 		}
 	}
 
-	im.lock.Lock()
 	imports.Set(specifier, moduleUrl)
 	if !indirect {
 		cdnScopeImportsMap.Delete(specifier)
 	}
-	im.lock.Unlock()
+	if !noSRI && imp.Integrity != "" {
+		im.integrity.Set(moduleUrl, imp.Integrity)
+	} else {
+		im.integrity.Delete(moduleUrl)
+	}
 
 	if imp.HasExternalImports() {
 		peerImportsLen := len(imp.PeerImports)

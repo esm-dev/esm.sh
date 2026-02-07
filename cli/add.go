@@ -107,7 +107,7 @@ func updateImportMap(specifiers []string, all bool, noPrompt bool, noSRI bool) (
 				if string(tagName) == "head" && !updated {
 					buf.WriteString("  <script type=\"importmap\">\n")
 					var importMap importmap.ImportMap
-					if addImports(&importMap, specifiers, !noPrompt, all, noSRI) {
+					if addImports(&importMap, specifiers, all, noPrompt, noSRI) {
 						buf.WriteString(importMap.FormatJSON(2))
 						buf.WriteString("\n  </script>\n")
 					}
@@ -131,7 +131,7 @@ func updateImportMap(specifiers []string, all bool, noPrompt bool, noSRI bool) (
 					if typeAttr != "importmap" && !updated {
 						buf.WriteString("<script type=\"importmap\">\n")
 						importMap := importmap.Blank()
-						if addImports(importMap, specifiers, !noPrompt, all, noSRI) {
+						if addImports(importMap, specifiers, all, noPrompt, noSRI) {
 							buf.WriteString(importMap.FormatJSON(2))
 							buf.WriteString("\n  </script>\n  ")
 						}
@@ -154,7 +154,7 @@ func updateImportMap(specifiers []string, all bool, noPrompt bool, noSRI bool) (
 								}
 							}
 						}
-						if addImports(importMap, specifiers, !noPrompt, all, noSRI) {
+						if addImports(importMap, specifiers, all, noPrompt, noSRI) {
 							buf.WriteString("\n")
 							buf.WriteString(importMap.FormatJSON(2))
 							buf.WriteString("\n  ")
@@ -179,7 +179,7 @@ func updateImportMap(specifiers []string, all bool, noPrompt bool, noSRI bool) (
 		err = os.WriteFile(indexHtml, buf.Bytes(), fi.Mode())
 	} else {
 		importMap := importmap.Blank()
-		if addImports(importMap, specifiers, !noPrompt, all, noSRI) {
+		if addImports(importMap, specifiers, all, noPrompt, noSRI) {
 			err = os.WriteFile(indexHtml, fmt.Appendf(nil, htmlTemplate, importMap.FormatJSON(2), specifiers[0]), 0644)
 			if err == nil {
 				fmt.Println(term.Dim("Created index.html with importmap script."))
@@ -189,7 +189,7 @@ func updateImportMap(specifiers []string, all bool, noPrompt bool, noSRI bool) (
 	return
 }
 
-func addImports(im *importmap.ImportMap, specifiers []string, prompt bool, all bool, noSRI bool) bool {
+func addImports(im *importmap.ImportMap, specifiers []string, all bool, noPrompt bool, noSRI bool) bool {
 	term.HideCursor()
 	defer term.ShowCursor()
 
@@ -240,6 +240,7 @@ func addImports(im *importmap.ImportMap, specifiers []string, prompt bool, all b
 								SubPath: exportPath[2:],
 								Github:  imp.Github,
 								Jsr:     imp.Jsr,
+								Dev:     imp.Dev,
 							})
 							if err != nil {
 								errors = append(errors, err)
@@ -270,7 +271,7 @@ func addImports(im *importmap.ImportMap, specifiers []string, prompt bool, all b
 
 	spinner.Stop()
 
-	if prompt {
+	if !noPrompt {
 		term := &termRaw{}
 		if term.isTTY() {
 			for _, imp := range resolvedImports {
@@ -282,7 +283,7 @@ func addImports(im *importmap.ImportMap, specifiers []string, prompt bool, all b
 						}
 					}
 					if len(subModules) > 0 {
-						ui := &subModuleSelectUI{term: term, im: im, mainImport: &imp}
+						ui := &subModuleSelectUI{term: term, im: im, mainImport: &imp, noSRI: noSRI}
 						ui.init(subModules)
 						if ui.termHeight >= 4 {
 							ui.show()
