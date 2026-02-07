@@ -92,6 +92,7 @@ func tidy(noSRI bool) (err error) {
 					buf.WriteString("\n")
 					importMap := importmap.Blank()
 					importMap.SetConfig(prevImportMap.Config())
+					importMap.SetIntegrity(prevImportMap.Integrity())
 					imports := make([]importmap.Import, 0, prevImportMap.Imports.Len())
 					prevImportMap.Imports.Range(func(specifier string, url string) bool {
 						if strings.HasPrefix(url, "https://") || strings.HasPrefix(url, "http://") {

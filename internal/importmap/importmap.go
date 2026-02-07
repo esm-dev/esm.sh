@@ -137,6 +137,16 @@ func (im *ImportMap) SetConfig(config Config) {
 	im.config = config
 }
 
+// Integrity returns the integrity of the import map.
+func (im *ImportMap) Integrity() *Imports {
+	return im.integrity
+}
+
+// SetIntegrity sets the integrity of the import map.
+func (im *ImportMap) SetIntegrity(integrity *Imports) {
+	im.integrity = integrity
+}
+
 // GetScopeImports returns the imports of the given scope.
 func (im *ImportMap) GetScopeImports(scope string) (*Imports, bool) {
 	im.lock.RLock()
