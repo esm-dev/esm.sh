@@ -1726,6 +1726,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 				if err != nil {
 					return rex.Status(500, err.Error())
 				}
+				defer f.Close()
 				sha := sha512.New384()
 				_, err = io.Copy(sha, f)
 				if err != nil {
