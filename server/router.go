@@ -1720,7 +1720,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 			}
 			integrity := buildMeta.Integrity
 			// compute the integrity from the original js if it's not set in the build meta
-			if len(buildMeta.Integrity) == 0 || !strings.HasPrefix(buildMeta.Integrity, "sha384-") {
+			if len(buildMeta.Integrity) == 0 || !strings.HasPrefix(buildMeta.Integrity, "sha-2-384-") {
 				savePath := build.getSavePath()
 				f, _, err := esmStorage.Get(savePath)
 				if err != nil {
@@ -1731,14 +1731,14 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 				if err != nil {
 					return rex.Status(500, err.Error())
 				}
-				integrity = "sha384-" + base64.StdEncoding.EncodeToString(sha.Sum(nil))
+				integrity = "sha-2-384-" + base64.StdEncoding.EncodeToString(sha.Sum(nil))
 				buildMeta.Integrity = integrity
 				err = metaDB.Put(build.Path(), encodeBuildMeta(buildMeta))
 				if err != nil {
 					return rex.Status(500, err.Error())
 				}
 			}
-			metaJson["integrity"] = integrity
+			metaJson["integrity"] = "sha384-" + integrity[10:]
 			ctx.SetHeader("Content-Type", ctJSON)
 			if isExactVersion {
 				ctx.SetHeader("Cache-Control", ccImmutable)
