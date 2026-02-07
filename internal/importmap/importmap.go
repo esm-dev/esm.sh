@@ -264,11 +264,11 @@ func (im *ImportMap) ParseImport(specifier string) (meta ImportMeta, err error) 
 	if scopeName != "" {
 		imp.Name = scopeName + "/" + imp.Name
 	}
-	return fetchImportMeta(im.cdnOrigin(), imp)
+	return fetchImportMeta(im.cdnOrigin(), imp, im.config.Target)
 }
 
 func (im *ImportMap) FetchImportMeta(i Import) (meta ImportMeta, err error) {
-	return fetchImportMeta(im.cdnOrigin(), i)
+	return fetchImportMeta(im.cdnOrigin(), i, im.config.Target)
 }
 
 // AddImportFromSpecifier adds an import from a specifier to the import map.
@@ -405,7 +405,7 @@ func (im *ImportMap) addImport(mark *set.Set[string], imp ImportMeta, indirect b
 						}
 					}
 				}
-				meta, err := fetchImportMeta(im.cdnOrigin(), depImport)
+				meta, err := fetchImportMeta(im.cdnOrigin(), depImport, target)
 				if err != nil {
 					errors = append(errors, err)
 					return
@@ -440,16 +440,28 @@ func (im *ImportMap) FormatJSON(indent int) string {
 	indentStr := bytes.Repeat([]byte{' ', ' '}, indent+1)
 	buf.Write(indentStr[0 : 2*indent])
 	buf.WriteString("{\n")
-	if cdn := im.config.CDN; cdn != "" && cdn != "https://esm.sh" {
+	if cf := im.config; cf.CDN != "" || cf.Target != "" {
 		buf.Write(indentStr)
 		buf.WriteString("\"config\": {\n")
+		if cf.CDN != "" {
+			buf.Write(indentStr)
+			buf.WriteString("  \"cdn\": \"")
+			buf.WriteString(cf.CDN)
+			buf.WriteString("\"")
+			if cf.Target != "" {
+				buf.WriteString(",\n")
+			} else {
+				buf.WriteByte('\n')
+			}
+		}
+		if cf.Target != "" {
+			buf.Write(indentStr)
+			buf.WriteString("  \"target\": \"")
+			buf.WriteString(cf.Target)
+			buf.WriteString("\"\n")
+		}
 		buf.Write(indentStr)
-		buf.Write(indentStr)
-		buf.WriteString("\"cdn\": \"")
-		buf.WriteString(cdn)
-		buf.WriteString("\"\n")
-		buf.Write(indentStr)
-		buf.WriteString("}\n")
+		buf.WriteString("},\n")
 	}
 	buf.Write(indentStr)
 	buf.WriteString("\"imports\": {")

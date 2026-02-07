@@ -100,7 +100,7 @@ func (imp ImportMeta) EsmSpecifier() string {
 }
 
 // FetchImportMeta fetches the import metadata from the esm.sh CDN.
-func fetchImportMeta(cdnOrigin string, im Import) (meta ImportMeta, err error) {
+func fetchImportMeta(cdnOrigin string, im Import, target string) (meta ImportMeta, err error) {
 	regPrefix := im.RegistryPrefix()
 	subPath := ""
 	version := ""
@@ -111,6 +111,9 @@ func fetchImportMeta(cdnOrigin string, im Import) (meta ImportMeta, err error) {
 		version = "@" + im.Version
 	}
 	url := fmt.Sprintf("%s/%s%s%s%s?meta", cdnOrigin, regPrefix, im.Name, version, subPath)
+	if target != "" {
+		url += "&target=" + target
+	}
 
 	// check memory cache first
 	if v, ok := fetchCache.Load(url); ok {
