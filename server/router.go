@@ -1731,7 +1731,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 				if err != nil {
 					return rex.Status(500, err.Error())
 				}
-				integrity = "sha384-" + base64.RawStdEncoding.EncodeToString(sha.Sum(nil))
+				integrity = "sha384-" + base64.StdEncoding.EncodeToString(sha.Sum(nil))
 				buildMeta.Integrity = integrity
 				err = metaDB.Put(build.Path(), encodeBuildMeta(buildMeta))
 				if err != nil {
