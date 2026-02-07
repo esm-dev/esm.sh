@@ -58,6 +58,11 @@ const htmlTemplate = `<!DOCTYPE html>
 </html>
 `
 
+var (
+	CR  = []byte{'\r'}
+	EOL = []byte{'\n'}
+)
+
 // Add adds imports to "importmap" script
 func Add() {
 	all := flag.Bool("all", false, "add all modules of the import")
@@ -202,6 +207,7 @@ func addImports(im *importmap.ImportMap, specifiers []string, prompt bool, all b
 
 	var wg sync.WaitGroup
 	var resolvedImports []importmap.ImportMeta
+	var addedSpecifiers []string
 	var warnings []string
 	var errors []error
 	for _, specifier := range specifiers {
@@ -259,6 +265,7 @@ func addImports(im *importmap.ImportMap, specifiers []string, prompt bool, all b
 			return false
 		}
 		warnings = append(warnings, warns...)
+		addedSpecifiers = append(addedSpecifiers, imp.Specifier(false))
 	}
 
 	spinner.Stop()
@@ -268,7 +275,7 @@ func addImports(im *importmap.ImportMap, specifiers []string, prompt bool, all b
 		if term.isTTY() {
 			for _, imp := range resolvedImports {
 				if imp.SubPath == "" && len(imp.Exports) > 0 {
-					var subModules = make([]string, 0, len(imp.Exports))
+					var subModules = make([]string, 0, len(imp.Exports)+1)
 					for _, exportPath := range imp.Exports {
 						if validateExportPath(exportPath) {
 							subModules = append(subModules, exportPath[2:])
@@ -277,8 +284,14 @@ func addImports(im *importmap.ImportMap, specifiers []string, prompt bool, all b
 					if len(subModules) > 0 {
 						ui := &subModuleSelectUI{term: term, im: im, mainImport: &imp}
 						ui.init(subModules)
-						if ui.termHeight >= 3 {
+						if ui.termHeight >= 4 {
 							ui.show()
+							addedSpecifiers = []string{}
+							for i := range ui.subModules {
+								if ui.state[i] == 1 {
+									addedSpecifiers = append(addedSpecifiers, ui.toSpecifier(i, false))
+								}
+							}
 						}
 					}
 				}
@@ -286,18 +299,11 @@ func addImports(im *importmap.ImportMap, specifiers []string, prompt bool, all b
 		}
 	}
 
-	record := make(map[string]string)
-	for _, imp := range resolvedImports {
-		specifier := imp.Specifier(false)
-		record[specifier], _ = im.Imports.Get(specifier)
-	}
-	keys := make([]string, 0, len(record))
-	for key := range record {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		fmt.Println(term.Green("✔"), key, term.Dim("→"), term.Dim(record[key]))
+	sort.Strings(addedSpecifiers)
+	for _, specifier := range addedSpecifiers {
+		if value, ok := im.Imports.Get(specifier); ok {
+			fmt.Println(term.Green("✔"), specifier, term.Dim("→"), term.Dim(value))
+		}
 	}
 
 	if len(warnings) > 0 {
@@ -321,21 +327,25 @@ type subModuleSelectUI struct {
 	spinnerIndex int
 	spinnerTimer *time.Timer
 	spinnerChars []string
+	termWidth    int
 	termHeight   int
 }
 
 func (ui *subModuleSelectUI) init(subModules []string) {
-	ui.subModules = subModules
-	ui.state = make([]uint8, len(subModules))
+	ui.subModules = make([]string, len(subModules)+1)
+	ui.subModules[0] = "."
+	copy(ui.subModules[1:], subModules)
+	ui.state = make([]uint8, len(ui.subModules))
+	ui.state[0] = 1
 	ui.spinnerChars = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
-	_, height, err := ui.term.GetSize()
+	width, height, err := ui.term.GetSize()
 	if err == nil {
+		ui.termWidth = width
 		ui.termHeight = height
 	}
 }
 
 func (ui *subModuleSelectUI) show() {
-	fmt.Println(term.Cyan("Select sub-modules of " + ui.mainImport.Specifier(true) + ":"))
 	ui.render(false)
 
 	defer func() {
@@ -368,7 +378,7 @@ func (ui *subModuleSelectUI) show() {
 				ui.state[cur] = 2
 				ui.startSpinner()
 				go func() {
-					errors, _ := ui.im.AddImportFromSpecifier(ui.mainImport.Specifier(true)+"/"+ui.subModules[cur], ui.noSRI)
+					errors, _ := ui.im.AddImportFromSpecifier(ui.toSpecifier(cur, true), ui.noSRI)
 					if len(errors) > 0 {
 						ui.state[cur] = 3
 					} else {
@@ -377,10 +387,27 @@ func (ui *subModuleSelectUI) show() {
 				}()
 			case 1:
 				// remove
-				ui.im.Imports.Delete(ui.mainImport.Specifier(false) + "/" + ui.subModules[ui.cursor])
+				ui.im.Imports.Delete(ui.toSpecifier(ui.cursor, false))
 				ui.state[ui.cursor] = 0
 			}
 			ui.render(true)
+		case 'a':
+			for i := range ui.subModules {
+				state := ui.state[i]
+				specifier := ui.toSpecifier(i, true)
+				if state == 0 || state == 3 {
+					ui.state[i] = 2
+					ui.startSpinner()
+					go func() {
+						errors, _ := ui.im.AddImportFromSpecifier(specifier, ui.noSRI)
+						if len(errors) > 0 {
+							ui.state[i] = 3
+						} else {
+							ui.state[i] = 1
+						}
+					}()
+				}
+			}
 		case 65, 16, 'p': // Up, ctrl+p, p
 			if ui.cursor > 0 {
 				ui.cursor--
@@ -391,75 +418,6 @@ func (ui *subModuleSelectUI) show() {
 				ui.cursor++
 				ui.render(true)
 			}
-		}
-	}
-}
-
-func (ui *subModuleSelectUI) isPending() bool {
-	return slices.Contains(ui.state, 2)
-}
-
-func (ui *subModuleSelectUI) clearLines() {
-	func() {
-		height := ui.maxLines()
-		term.MoveCursorUp(height)
-		for range height {
-			term.ClearLine()
-			os.Stdout.Write([]byte{'\n'}) // move to the next line
-		}
-		term.MoveCursorUp(height)
-	}()
-}
-
-func (ui *subModuleSelectUI) maxLines() int {
-	return min(ui.termHeight-2, len(ui.subModules))
-}
-
-func (ui *subModuleSelectUI) render(resetCursor bool) {
-	visibleOptions := ui.subModules[:ui.maxLines()]
-	if resetCursor {
-		term.MoveCursorUp(len(visibleOptions) - 1)
-	}
-	for i, exportPath := range visibleOptions {
-		state := ui.state[i]
-		os.Stdout.WriteString("\r")
-		term.ClearLineRight()
-		switch state {
-		case 0:
-			if i == ui.cursor {
-				os.Stdout.WriteString("○")
-			} else {
-				os.Stdout.WriteString(term.Dim("○"))
-			}
-		case 1:
-			os.Stdout.WriteString(term.Green("✔"))
-		case 2:
-			os.Stdout.WriteString(term.Dim(ui.spinnerChars[ui.spinnerIndex]))
-		case 3:
-			os.Stdout.WriteString(term.Red("✖︎"))
-		}
-		os.Stdout.Write([]byte{' '})
-		specifier := ui.mainImport.Specifier(false) + "/" + exportPath
-		if i == ui.cursor {
-			os.Stdout.WriteString(term.Bold(specifier))
-			switch state {
-			case 0:
-				os.Stdout.WriteString(term.Dim(" space to add, enter to confirm"))
-			case 1:
-				os.Stdout.WriteString(term.Dim(" space to remove, enter to confirm"))
-			case 2:
-				os.Stdout.WriteString(term.Dim(" ..."))
-			case 3:
-				os.Stdout.WriteString(term.Dim(" error"))
-			}
-		} else {
-			os.Stdout.WriteString(term.Dim(specifier))
-			if state == 3 {
-				os.Stdout.WriteString(term.Dim(" error"))
-			}
-		}
-		if i < len(visibleOptions)-1 {
-			os.Stdout.Write([]byte{'\n'})
 		}
 	}
 }
@@ -475,6 +433,91 @@ func (ui *subModuleSelectUI) startSpinner() {
 		ui.spinnerIndex = 0
 	}
 	ui.render(true)
+}
+
+func (ui *subModuleSelectUI) isPending() bool {
+	return slices.Contains(ui.state, 2)
+}
+
+func (ui *subModuleSelectUI) clearLines() {
+	func() {
+		height := ui.maxLines() + 1
+		term.MoveCursorUp(height)
+		for range height {
+			term.ClearLine()
+			os.Stdout.Write(EOL) // move to the next line
+		}
+		term.MoveCursorUp(height)
+	}()
+}
+
+func (ui *subModuleSelectUI) maxLines() int {
+	return min(ui.termHeight-3, len(ui.subModules))
+}
+
+func (ui *subModuleSelectUI) render(resetCursor bool) {
+	start := 0
+	maxLines := ui.maxLines()
+	if ui.cursor >= maxLines {
+		start = ui.cursor - maxLines + 1
+	}
+	if start+maxLines > len(ui.subModules) {
+		start = max(len(ui.subModules)-maxLines, 0)
+	}
+	end := min(start+maxLines, len(ui.subModules))
+	visibleLines := ui.subModules[start:end]
+	stdout := os.Stdout
+
+	if resetCursor {
+		term.MoveCursorUp(len(visibleLines) + 1)
+	}
+	stdout.Write(CR)
+	stdout.WriteString(term.Cyan("Select sub-modules of " + term.Underline(ui.mainImport.Specifier(true))))
+	stdout.Write(EOL)
+	for i := range visibleLines {
+		index := start + i
+		state := ui.state[index]
+		stdout.Write(CR)
+		term.ClearLineRight()
+		switch state {
+		case 0:
+			if index == ui.cursor {
+				stdout.WriteString("○")
+			} else {
+				stdout.WriteString(term.Dim("○"))
+			}
+		case 1:
+			stdout.WriteString(term.Green("✔"))
+		case 2:
+			stdout.WriteString(term.Dim(ui.spinnerChars[ui.spinnerIndex]))
+		case 3:
+			stdout.WriteString(term.Red("✖︎"))
+		}
+		stdout.Write([]byte{' '})
+		specifier := ui.toSpecifier(index, false)
+		if index == ui.cursor {
+			stdout.WriteString(specifier)
+		} else {
+			stdout.WriteString(term.Dim(specifier))
+		}
+		stdout.Write(EOL)
+	}
+
+	stdout.Write(CR)
+	stdout.WriteString("[a]")
+	stdout.WriteString(term.Dim(" add all "))
+	stdout.WriteString("[space]")
+	stdout.WriteString(term.Dim(" add/remove "))
+	stdout.WriteString("[enter]")
+	stdout.WriteString(term.Dim(" confirm"))
+}
+
+func (ui *subModuleSelectUI) toSpecifier(subModuleIndex int, withVersion bool) string {
+	subModule := ui.subModules[subModuleIndex]
+	if subModule == "." {
+		return ui.mainImport.Specifier(withVersion)
+	}
+	return ui.mainImport.Specifier(withVersion) + "/" + subModule
 }
 
 func validateExportPath(exportPath string) bool {
