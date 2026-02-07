@@ -3,7 +3,7 @@ package server
 import (
 	"bytes"
 	"crypto/sha1"
-	"crypto/sha3"
+	"crypto/sha512"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -1720,13 +1720,13 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 			}
 			integrity := buildMeta.Integrity
 			// compute the integrity from the original js if it's not set in the build meta
-			if len(buildMeta.Integrity) == 0 {
+			if len(buildMeta.Integrity) == 0 || !strings.HasPrefix(buildMeta.Integrity, "sha384-") {
 				savePath := build.getSavePath()
 				f, _, err := esmStorage.Get(savePath)
 				if err != nil {
 					return rex.Status(500, err.Error())
 				}
-				sha := sha3.New384()
+				sha := sha512.New384()
 				_, err = io.Copy(sha, f)
 				if err != nil {
 					return rex.Status(500, err.Error())

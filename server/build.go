@@ -2,7 +2,7 @@ package server
 
 import (
 	"bytes"
-	"crypto/sha3"
+	"crypto/sha512"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -1400,7 +1400,7 @@ REBUILD:
 				err = errors.New("storage: " + err.Error())
 				return
 			}
-			sha := sha3.New384()
+			sha := sha512.New384()
 			r := storage.TeeReader(finalJS, sha)
 			err = ctx.storage.Put(ctx.getSavePath(), r)
 			if err != nil {
