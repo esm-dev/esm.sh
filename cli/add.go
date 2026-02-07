@@ -216,13 +216,18 @@ func addImports(im *importmap.ImportMap, specifiers []string, prompt bool, all b
 	}
 	wg.Wait()
 
-	var wg2 sync.WaitGroup
-	if all && len(resolvedImports) > 0 {
+	if len(errors) > 0 {
+		onErrors(errors)
+		return false
+	}
+
+	if all {
+		var wg sync.WaitGroup
 		for _, imp := range resolvedImports {
 			if len(imp.Exports) > 0 {
 				for _, exportPath := range imp.Exports {
 					if validateExportPath(exportPath) {
-						wg2.Go(func() {
+						wg.Go(func() {
 							meta, err := im.FetchImportMeta(importmap.Import{
 								Name:    imp.Name,
 								Version: imp.Version,
@@ -240,12 +245,11 @@ func addImports(im *importmap.ImportMap, specifiers []string, prompt bool, all b
 				}
 			}
 		}
-	}
-	wg2.Wait()
-
-	if len(errors) > 0 {
-		onErrors(errors)
-		return false
+		wg.Wait()
+		if len(errors) > 0 {
+			onErrors(errors)
+			return false
+		}
 	}
 
 	for _, imp := range resolvedImports {
@@ -273,7 +277,9 @@ func addImports(im *importmap.ImportMap, specifiers []string, prompt bool, all b
 					if len(subModules) > 0 {
 						ui := &subModuleSelectUI{term: term, im: im, mainImport: &imp}
 						ui.init(subModules)
-						ui.show()
+						if ui.termHeight >= 3 {
+							ui.show()
+						}
 					}
 				}
 			}
@@ -311,16 +317,21 @@ type subModuleSelectUI struct {
 	noSRI        bool
 	cursor       int
 	subModules   []string
-	state        []uint8 // 0 - not added, 1 - added, 2 - loading...
+	state        []uint8 // 0 - not added, 1 - added, 2 - loading, 3 - error
 	spinnerIndex int
-	spinnerChars []string
 	spinnerTimer *time.Timer
+	spinnerChars []string
+	termHeight   int
 }
 
 func (ui *subModuleSelectUI) init(subModules []string) {
 	ui.subModules = subModules
 	ui.state = make([]uint8, len(subModules))
 	ui.spinnerChars = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+	_, height, err := ui.term.GetSize()
+	if err == nil {
+		ui.termHeight = height
+	}
 }
 
 func (ui *subModuleSelectUI) show() {
@@ -351,14 +362,18 @@ func (ui *subModuleSelectUI) show() {
 		case 32: // Space
 			state := ui.state[ui.cursor]
 			switch state {
-			case 0:
+			case 0, 3:
 				// add
 				cur := ui.cursor
 				ui.state[cur] = 2
 				ui.startSpinner()
 				go func() {
-					ui.im.AddImportFromSpecifier(ui.mainImport.Specifier(true)+"/"+ui.subModules[cur], ui.noSRI)
-					ui.state[cur] = 1
+					errors, _ := ui.im.AddImportFromSpecifier(ui.mainImport.Specifier(true)+"/"+ui.subModules[cur], ui.noSRI)
+					if len(errors) > 0 {
+						ui.state[cur] = 3
+					} else {
+						ui.state[cur] = 1
+					}
 				}()
 			case 1:
 				// remove
@@ -386,33 +401,30 @@ func (ui *subModuleSelectUI) isPending() bool {
 
 func (ui *subModuleSelectUI) clearLines() {
 	func() {
-		lines := ui.getVisibleHeight()
-		term.MoveCursorUp(lines)
-		for range lines {
+		height := ui.maxLines()
+		term.MoveCursorUp(height)
+		for range height {
 			term.ClearLine()
 			os.Stdout.Write([]byte{'\n'}) // move to the next line
 		}
-		term.MoveCursorUp(lines)
+		term.MoveCursorUp(height)
 	}()
 }
 
-func (ui *subModuleSelectUI) getVisibleHeight() int {
-	lines := len(ui.subModules)
-	if _, height, err := ui.term.GetSize(); err == nil && height < lines {
-		return max(height-1, 2)
-	}
-	return lines
+func (ui *subModuleSelectUI) maxLines() int {
+	return min(ui.termHeight-2, len(ui.subModules))
 }
 
 func (ui *subModuleSelectUI) render(resetCursor bool) {
-	visibleOptions := ui.subModules[:ui.getVisibleHeight()]
+	visibleOptions := ui.subModules[:ui.maxLines()]
 	if resetCursor {
 		term.MoveCursorUp(len(visibleOptions) - 1)
 	}
 	for i, exportPath := range visibleOptions {
+		state := ui.state[i]
 		os.Stdout.WriteString("\r")
 		term.ClearLineRight()
-		switch ui.state[i] {
+		switch state {
 		case 0:
 			if i == ui.cursor {
 				os.Stdout.WriteString("○")
@@ -423,21 +435,28 @@ func (ui *subModuleSelectUI) render(resetCursor bool) {
 			os.Stdout.WriteString(term.Green("✔"))
 		case 2:
 			os.Stdout.WriteString(term.Dim(ui.spinnerChars[ui.spinnerIndex]))
+		case 3:
+			os.Stdout.WriteString(term.Red("✖︎"))
 		}
 		os.Stdout.Write([]byte{' '})
 		specifier := ui.mainImport.Specifier(false) + "/" + exportPath
 		if i == ui.cursor {
 			os.Stdout.WriteString(term.Bold(specifier))
-			switch ui.state[i] {
+			switch state {
 			case 0:
 				os.Stdout.WriteString(term.Dim(" space to add, enter to confirm"))
 			case 1:
 				os.Stdout.WriteString(term.Dim(" space to remove, enter to confirm"))
 			case 2:
 				os.Stdout.WriteString(term.Dim(" ..."))
+			case 3:
+				os.Stdout.WriteString(term.Dim(" error"))
 			}
 		} else {
 			os.Stdout.WriteString(term.Dim(specifier))
+			if state == 3 {
+				os.Stdout.WriteString(term.Dim(" error"))
+			}
 		}
 		if i < len(visibleOptions)-1 {
 			os.Stdout.Write([]byte{'\n'})
