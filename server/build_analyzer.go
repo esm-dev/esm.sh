@@ -144,6 +144,9 @@ func (ctx *BuildContext) analyzeSplitting() (err error) {
 			}
 			_, includes, err := b.buildModule(true)
 			if err != nil {
+				if err.Error() == "could not resolve build entry" {
+					continue // ignore non-existent exports
+				}
 				return fmt.Errorf("failed to analyze %s: %v", esmPath.String(), err)
 			}
 			for _, include := range includes {
