@@ -121,17 +121,20 @@ func (a *PackageJSONRaw) ToNpmPackage() *PackageJSON {
 			if s == "false" {
 				sideEffectsFalse = true
 			} else if isModule(s) {
-				sideEffects = set.New[string]()
-				sideEffects.Add(s)
+				sideEffects = set.New(s)
 			}
 		} else if b, ok := a.SideEffects.(bool); ok {
 			sideEffectsFalse = !b
-		} else if m, ok := a.SideEffects.([]any); ok && len(m) > 0 {
-			sideEffects = set.New[string]()
-			for _, v := range m {
-				if name, ok := v.(string); ok && isModule(name) {
-					sideEffects.Add(name)
+		} else if m, ok := a.SideEffects.([]any); ok {
+			if len(m) > 0 {
+				sideEffects = set.New[string]()
+				for _, v := range m {
+					if name, ok := v.(string); ok && isModule(name) {
+						sideEffects.Add(name)
+					}
 				}
+			} else {
+				sideEffectsFalse = true
 			}
 		}
 	}

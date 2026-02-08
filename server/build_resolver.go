@@ -699,10 +699,16 @@ LOOP:
 	return
 }
 
-func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.ResolveKind, withTypeJSON bool, analyzeMode bool) (resolvedPath string, err error) {
+func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.ResolveKind, withTypeJSON bool, analyzeMode bool) (resolvedPath string, sideEffects esbuild.SideEffects, err error) {
+	if strings.HasPrefix(specifier, "file:") {
+		err = errors.New("file: protocol is not supported: " + specifier)
+		return
+	}
+
 	// return the specifier directly in analyze mode
 	if analyzeMode {
-		return specifier, nil
+		resolvedPath = specifier
+		return
 	}
 
 	defer func() {
@@ -724,6 +730,12 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 		}
 	}()
 
+	// if it's a http module
+	if isHttpSpecifier(specifier) {
+		resolvedPath = specifier
+		return
+	}
+
 	// check `?external`
 	packageName := toPackageName(specifier)
 	if ctx.externalAll || ctx.args.External.Has(packageName) || isPackageInExternalNamespace(packageName, ctx.args.External) {
@@ -743,54 +755,69 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 		return
 	}
 
-	// if it's a http module
-	if isHttpSpecifier(specifier) {
-		return specifier, nil
-	}
-
-	if strings.HasPrefix(specifier, "file:") {
-		return "", errors.New("file: protocol is not supported: " + specifier)
-	}
-
 	// if it's `main` entry of current package
 	if pkgJson := ctx.pkgJson; specifier == pkgJson.Name || specifier == pkgJson.PkgName {
-		resolvedPath = ctx.getImportPath(EsmPath{
-			PkgName:    pkgJson.Name,
-			PkgVersion: pkgJson.Version,
+		esmPath := EsmPath{
 			GhPrefix:   ctx.esmPath.GhPrefix,
 			PrPrefix:   ctx.esmPath.PrPrefix,
-		}, ctx.getBuildArgsPrefix(false), ctx.externalAll)
+			PkgName:    pkgJson.Name,
+			PkgVersion: pkgJson.Version,
+		}
+		if ctx.pkgJson.SideEffectsFalse {
+			sideEffects = esbuild.SideEffectsFalse
+		} else if ctx.pkgJson.SideEffects.Len() > 0 {
+			sideEffects = esbuild.SideEffectsFalse
+			entry := ctx.resolveEntry(esmPath)
+			if entry.main != "" && !ctx.pkgJson.SideEffects.Has(entry.main) {
+				sideEffects = esbuild.SideEffectsTrue
+			}
+		}
+		resolvedPath = ctx.getImportPath(esmPath, ctx.getBuildArgsPrefix(false), ctx.externalAll)
 		return
 	}
 
 	// if it's a sub-module of current package
-	if after, ok := strings.CutPrefix(specifier, ctx.pkgJson.Name+"/"); ok {
-		subPath := after
-		subModule := EsmPath{
-			GhPrefix:   ctx.esmPath.GhPrefix,
-			PrPrefix:   ctx.esmPath.PrPrefix,
-			PkgName:    ctx.esmPath.PkgName,
-			PkgVersion: ctx.esmPath.PkgVersion,
-			SubPath:    stripEntryModuleExt(subPath),
+	{
+		subPath, ok := strings.CutPrefix(specifier, ctx.pkgJson.Name+"/")
+		if !ok {
+			subPath, ok = strings.CutPrefix(specifier, ctx.pkgJson.PkgName+"/")
 		}
-		if withTypeJSON {
-			resolvedPath = "/" + subModule.String()
-			if !strings.HasSuffix(subPath, ".json") {
+		if ok {
+			subModule := EsmPath{
+				GhPrefix:   ctx.esmPath.GhPrefix,
+				PrPrefix:   ctx.esmPath.PrPrefix,
+				PkgName:    ctx.esmPath.PkgName,
+				PkgVersion: ctx.esmPath.PkgVersion,
+				SubPath:    stripEntryModuleExt(subPath),
+			}
+			if ctx.pkgJson.SideEffectsFalse {
+				sideEffects = esbuild.SideEffectsFalse
+			} else if ctx.pkgJson.SideEffects.Len() > 0 {
+				sideEffects = esbuild.SideEffectsFalse
 				entry := ctx.resolveEntry(subModule)
-				if entry.main != "" {
-					resolvedPath = "/" + subModule.ID() + entry.main[1:]
+				if entry.main != "" && !ctx.pkgJson.SideEffects.Has(entry.main) {
+					sideEffects = esbuild.SideEffectsTrue
 				}
 			}
-			// esbuild removes the `{ type: "json" }` when it's a dynamic import
-			resolvedPath += "?module"
-		} else {
-			resolvedPath = ctx.getImportPath(subModule, ctx.getBuildArgsPrefix(false), ctx.externalAll)
-			if ctx.bundleMode == BundleFalse {
-				n, e := utils.SplitByLastByte(resolvedPath, '.')
-				resolvedPath = n + ".nobundle." + e
+			if withTypeJSON {
+				resolvedPath = "/" + subModule.String()
+				if !strings.HasSuffix(subPath, ".json") {
+					entry := ctx.resolveEntry(subModule)
+					if entry.main != "" {
+						resolvedPath = "/" + subModule.ID() + entry.main[1:]
+					}
+				}
+				// esbuild removes the `{ type: "json" }` when it's a dynamic import
+				resolvedPath += "?module"
+			} else {
+				resolvedPath = ctx.getImportPath(subModule, ctx.getBuildArgsPrefix(false), ctx.externalAll)
+				if ctx.bundleMode == BundleFalse {
+					n, e := utils.SplitByLastByte(resolvedPath, '.')
+					resolvedPath = n + ".nobundle." + e
+				}
 			}
+			return
 		}
-		return
 	}
 
 	var pkgName string
@@ -801,7 +828,8 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 	if strings.HasPrefix(specifier, "jsr:") {
 		pkgName, pkgVersion, subPath = splitEsmPath(specifier[4:])
 		if !strings.HasPrefix(pkgName, "@") || !strings.ContainsRune(pkgName, '/') {
-			return specifier, errors.New("invalid `jsr:` dependency:" + specifier)
+			err = errors.New("invalid `jsr:` dependency:" + specifier)
+			return
 		}
 		scope, name := utils.SplitByFirstByte(pkgName, '/')
 		pkgName = "@jsr/" + scope[1:] + "__" + name

@@ -369,11 +369,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 
 	browserExclude := map[string]*set.Set[string]{}
 	implicitExternal := set.New[string]()
-	pkgSideEffects := esbuild.SideEffectsTrue
-	if ctx.pkgJson.SideEffectsFalse {
-		pkgSideEffects = esbuild.SideEffectsFalse
-	}
-	noBundle := ctx.bundleMode == BundleFalse || ctx.pkgJson.SideEffects.Len() > 0
+	noBundle := ctx.bundleMode == BundleFalse
 	if ctx.pkgJson.Esmsh != nil {
 		if v, ok := ctx.pkgJson.Esmsh["bundle"]; ok {
 			if b, ok := v.(bool); ok && !b {
@@ -441,13 +437,14 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 
 					// it's implicit external
 					if implicitExternal.Has(args.Path) {
-						externalPath, err := ctx.resolveExternalModule(args.Path, args.Kind, withTypeJSON, analyzeMode)
+						externalPath, sideEffects, err := ctx.resolveExternalModule(args.Path, args.Kind, withTypeJSON, analyzeMode)
 						if err != nil {
 							return esbuild.OnResolveResult{}, err
 						}
 						return esbuild.OnResolveResult{
-							Path:     externalPath,
-							External: true,
+							Path:        externalPath,
+							SideEffects: sideEffects,
+							External:    true,
 						}, nil
 					}
 
@@ -524,13 +521,14 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 
 					// nodejs builtin module
 					if isNodeBuiltinSpecifier(specifier) {
-						externalPath, err := ctx.resolveExternalModule(specifier, args.Kind, withTypeJSON, analyzeMode)
+						externalPath, sideEffects, err := ctx.resolveExternalModule(specifier, args.Kind, withTypeJSON, analyzeMode)
 						if err != nil {
 							return esbuild.OnResolveResult{}, err
 						}
 						return esbuild.OnResolveResult{
-							Path:     externalPath,
-							External: true,
+							Path:        externalPath,
+							SideEffects: sideEffects,
+							External:    true,
 						}, nil
 					}
 
@@ -559,7 +557,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 					// externalize top-level module
 					// e.g. "react/jsx-runtime" imports "react"
 					if ctx.esmPath.SubPath != "" && specifier == ctx.esmPath.PkgName && ctx.bundleMode != BundleDeps {
-						externalPath, err := ctx.resolveExternalModule(ctx.esmPath.PkgName, args.Kind, withTypeJSON, analyzeMode)
+						externalPath, sideEffects, err := ctx.resolveExternalModule(ctx.esmPath.PkgName, args.Kind, withTypeJSON, analyzeMode)
 						if err != nil {
 							return esbuild.OnResolveResult{}, err
 						}
@@ -568,8 +566,8 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 						}
 						return esbuild.OnResolveResult{
 							Path:        externalPath,
+							SideEffects: sideEffects,
 							External:    true,
-							SideEffects: pkgSideEffects,
 						}, nil
 					}
 
@@ -629,13 +627,14 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 										}, nil
 									}
 									if !isRelPathSpecifier(path) {
-										externalPath, err := ctx.resolveExternalModule(path, args.Kind, withTypeJSON, analyzeMode)
+										externalPath, sideEffects, err := ctx.resolveExternalModule(path, args.Kind, withTypeJSON, analyzeMode)
 										if err != nil {
 											return esbuild.OnResolveResult{}, err
 										}
 										return esbuild.OnResolveResult{
-											Path:     externalPath,
-											External: true,
+											Path:        externalPath,
+											SideEffects: sideEffects,
+											External:    true,
 										}, nil
 									}
 									modulePath = path
@@ -668,14 +667,14 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 										if match {
 											exportAs = path.Join(pkgJson.Name, stripModuleExt(exportName))
 											if exportAs != entrySpecifier && exportAs != entrySpecifier+"/index" {
-												externalPath, err := ctx.resolveExternalModule(exportAs, args.Kind, withTypeJSON, analyzeMode)
+												externalPath, sideEffects, err := ctx.resolveExternalModule(exportAs, args.Kind, withTypeJSON, analyzeMode)
 												if err != nil {
 													return esbuild.OnResolveResult{}, err
 												}
 												return esbuild.OnResolveResult{
 													Path:        externalPath,
+													SideEffects: sideEffects,
 													External:    true,
-													SideEffects: pkgSideEffects,
 												}, nil
 											}
 										}
@@ -720,24 +719,25 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 										}
 										// single `export * from "external"` statement
 										if len(exportFrom) == 1 && !moreStmt && !isRelPathSpecifier(exportFrom[0]) {
-											externalPath, err := ctx.resolveExternalModule(exportFrom[0], args.Kind, withTypeJSON, analyzeMode)
-											if err != nil {
-												return esbuild.OnResolveResult{}, err
-											}
-											return esbuild.OnResolveResult{
-												Path:     externalPath,
-												External: true,
-											}, nil
-										}
-										if len(exportFrom) > 0 && moreStmt {
-											externalPath, err := ctx.resolveExternalModule(specifier, args.Kind, withTypeJSON, false)
+											externalPath, sideEffects, err := ctx.resolveExternalModule(exportFrom[0], args.Kind, withTypeJSON, analyzeMode)
 											if err != nil {
 												return esbuild.OnResolveResult{}, err
 											}
 											return esbuild.OnResolveResult{
 												Path:        externalPath,
+												SideEffects: sideEffects,
 												External:    true,
-												SideEffects: pkgSideEffects,
+											}, nil
+										}
+										if len(exportFrom) > 0 && moreStmt {
+											externalPath, sideEffects, err := ctx.resolveExternalModule(specifier, args.Kind, withTypeJSON, false)
+											if err != nil {
+												return esbuild.OnResolveResult{}, err
+											}
+											return esbuild.OnResolveResult{
+												Path:        externalPath,
+												SideEffects: sideEffects,
+												External:    true,
 											}, nil
 										}
 									}
@@ -757,14 +757,14 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 									}
 									if !analyzeMode && ctx.splitting != nil && ctx.splitting.Has(short) {
 										specifier = pkgJson.Name + utils.NormalizePathname(stripEntryModuleExt(short))
-										externalPath, err := ctx.resolveExternalModule(specifier, args.Kind, withTypeJSON, false)
+										externalPath, sideEffects, err := ctx.resolveExternalModule(specifier, args.Kind, withTypeJSON, false)
 										if err != nil {
 											return esbuild.OnResolveResult{}, err
 										}
 										return esbuild.OnResolveResult{
 											Path:        externalPath,
+											SideEffects: sideEffects,
 											External:    true,
-											SideEffects: pkgSideEffects,
 										}, nil
 									}
 									// embed wasm as WebAssembly.Module
@@ -869,11 +869,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 					}
 
 					// dynamic external
-					sideEffects := esbuild.SideEffectsTrue
-					if specifier == pkgJson.Name || specifier == pkgJson.PkgName || strings.HasPrefix(specifier, pkgJson.Name+"/") || strings.HasPrefix(specifier, pkgJson.Name+"/") {
-						sideEffects = pkgSideEffects
-					}
-					externalPath, err := ctx.resolveExternalModule(specifier, args.Kind, withTypeJSON, analyzeMode)
+					externalPath, sideEffects, err := ctx.resolveExternalModule(specifier, args.Kind, withTypeJSON, analyzeMode)
 					if err != nil {
 						return esbuild.OnResolveResult{}, err
 					}

@@ -1341,7 +1341,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 									break
 								}
 							}
-							ret, err := treeShake(code, exports, targets[target])
+							ret, err := treeShake(npmrc, esmPath.Package(), code, exports, targets[target])
 							if err != nil {
 								return rex.Status(500, err.Error())
 							}
@@ -1870,7 +1870,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 					if err != nil {
 						return rex.Status(500, err.Error())
 					}
-					ret, err := treeShake(code, exports, targets[target])
+					ret, err := treeShake(npmrc, esmPath.Package(), code, exports, targets[target])
 					if err != nil {
 						return rex.Status(500, err.Error())
 					}

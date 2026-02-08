@@ -123,9 +123,7 @@ func ResolveDependencyVersion(v string) (Package, error) {
 				Version:  version,
 			}, nil
 		}
-		return Package{
-			Url: v,
-		}, nil
+		return Package{Url: v}, nil
 	}
 	// see https://docs.npmjs.com/cli/v10/configuring-npm/package-json#git-urls-as-dependencies
 	if !strings.HasPrefix(v, "@") && strings.ContainsRune(v, '/') {
