@@ -1898,7 +1898,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 				moduleUrl,
 			)
 		} else {
-			if len(buildMeta.Imports) > 0 {
+			if len(buildMeta.Imports) > 0 && len(exports) == 0 {
 				for _, dep := range buildMeta.Imports {
 					fmt.Fprintf(buf, "import \"%s\";\n", dep)
 				}
@@ -1907,7 +1907,6 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 			if !buildMeta.CJS && len(exports) > 0 {
 				esm += "?exports=" + strings.Join(exports, ",")
 			}
-			ctx.SetHeader("X-ESM-Path", esm)
 			fmt.Fprintf(buf, "export * from \"%s\";\n", esm)
 			if buildMeta.ExportDefault && (len(exports) == 0 || slices.Contains(exports, "default")) {
 				fmt.Fprintf(buf, "export { default } from \"%s\";\n", esm)
@@ -1916,6 +1915,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 				fmt.Fprintf(buf, "import _ from \"%s\";\n", esm)
 				fmt.Fprintf(buf, "export const { %s } = _;\n", strings.Join(exports, ", "))
 			}
+			ctx.SetHeader("X-ESM-Path", esm)
 			if noDts := query.Has("no-dts") || query.Has("no-check"); !noDts && buildMeta.Dts != "" {
 				ctx.SetHeader("X-TypeScript-Types", origin+buildMeta.Dts)
 				ctx.SetHeader("Access-Control-Expose-Headers", "X-ESM-Path, X-TypeScript-Types")
