@@ -1898,7 +1898,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 				moduleUrl,
 			)
 		} else {
-			if len(buildMeta.Imports) > 0 && len(exports) == 0 {
+			if len(buildMeta.Imports) > 0 && !query.Has("exports") {
 				for _, dep := range buildMeta.Imports {
 					fmt.Fprintf(buf, "import \"%s\";\n", dep)
 				}
