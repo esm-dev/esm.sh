@@ -68,7 +68,7 @@ func DefaultNpmRC() *NpmRC {
 	defaultNpmRC = &NpmRC{
 		globalRegistry: globalRegistry,
 		scopedRegistries: map[string]*NpmRegistry{
-			"@jsr": &NpmRegistry{
+			"@jsr": {
 				NpmRegistryConfig: NpmRegistryConfig{
 					Registry: jsrRegistry,
 				},

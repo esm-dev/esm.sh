@@ -12,6 +12,7 @@ import (
 	"github.com/esm-dev/esm.sh/internal/fetch"
 	"github.com/esm-dev/esm.sh/internal/gfm"
 	"github.com/esm-dev/esm.sh/internal/importmap"
+	"github.com/esm-dev/esm.sh/internal/npm"
 	esbuild "github.com/ije/esbuild-internal/api"
 	"github.com/ije/gox/utils"
 )
@@ -368,7 +369,7 @@ func bundleHttpModule(npmrc *NpmRC, entry string, importMap *importmap.ImportMap
 }
 
 // treeShake tree-shakes the given javascript code with the given exports.
-func treeShake(code []byte, exports []string, target esbuild.Target) ([]byte, error) {
+func treeShake(npmrc *NpmRC, pkg npm.Package, code []byte, exports []string, target esbuild.Target) ([]byte, error) {
 	input := &esbuild.StdinOptions{
 		Contents: fmt.Sprintf(`export { %s } from '.';`, strings.Join(exports, ", ")),
 		Loader:   esbuild.LoaderJS,
@@ -381,7 +382,17 @@ func treeShake(code []byte, exports []string, target esbuild.Target) ([]byte, er
 					if args.Path == "." {
 						return esbuild.OnResolveResult{Path: ".", Namespace: "memory", PluginData: code}, nil
 					}
-					return esbuild.OnResolveResult{External: true}, nil
+					sideEffects := esbuild.SideEffectsTrue
+					if isRelPathSpecifier(args.Path) {
+						pkgJson, err := npmrc.installPackage(pkg)
+						if err != nil {
+							return esbuild.OnResolveResult{}, err
+						}
+						if pkgJson.SideEffectsFalse {
+							sideEffects = esbuild.SideEffectsFalse
+						}
+					}
+					return esbuild.OnResolveResult{SideEffects: sideEffects, External: true}, nil
 				})
 				build.OnLoad(esbuild.OnLoadOptions{Filter: ".*", Namespace: "memory"}, func(args esbuild.OnLoadArgs) (esbuild.OnLoadResult, error) {
 					contents := string(args.PluginData.([]byte))
