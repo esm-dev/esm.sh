@@ -1007,10 +1007,34 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 		rawFlag := query.Has("raw") || strings.HasPrefix(ctx.R.Host, "raw.")
 		if rawFlag {
 			pathKind = RawFile
-			if esmPath.SubPath != "" {
-				extname := path.Ext(pathname)
-				if !strings.HasSuffix(esmPath.SubPath, extname) {
-					esmPath.SubPath += extname
+		}
+
+		// restore the original path extension
+		if pathKind == RawFile && esmPath.SubPath != "" {
+			extname := path.Ext(pathname)
+			if !strings.HasSuffix(esmPath.SubPath, extname) {
+				esmPath.SubPath += extname
+			}
+		}
+
+		if pathKind == RawFile && !rawFlag && esmPath.SubPath != "" && strings.HasSuffix(esmPath.SubPath, ".map") {
+			pkgJson, err := npmrc.installPackage(esmPath.Package())
+			if err != nil {
+				return rex.Status(500, err.Error())
+			}
+			filename := path.Join(npmrc.StoreDir(), esmPath.ID(), "node_modules", esmPath.PkgName, esmPath.SubPath)
+			stat, err := os.Lstat(filename)
+			if err != nil {
+				if os.IsNotExist(err) {
+					if _, ok := pkgJson.Exports.Get("./" + esmPath.SubPath); ok {
+						pathKind = EsmEntry
+					}
+				} else {
+					return rex.Status(500, err.Error())
+				}
+			} else if stat.IsDir() {
+				if _, ok := pkgJson.Exports.Get("./" + esmPath.SubPath); ok {
+					pathKind = EsmEntry
 				}
 			}
 		}
@@ -1176,8 +1200,10 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 					if rawQuery != "" {
 						query = "?" + rawQuery
 					}
+					// redirect to the 'main' JS file
 					return redirect(ctx, fmt.Sprintf("%s/%s%s%s", origin, esmPath.ID(), utils.NormalizePathname(entry.main), query), true)
 				}
+
 				filename := path.Join(npmrc.StoreDir(), esmPath.ID(), "node_modules", esmPath.PkgName, esmPath.SubPath)
 				stat, err := os.Lstat(filename)
 				if err != nil && os.IsNotExist(err) {
@@ -1201,11 +1227,11 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 						}
 						entry := b.resolveEntry(esmPath)
 						if entry.main != "" && entry.main != "./"+esmPath.SubPath {
-							// redirect to the resolved path
 							query := ""
 							if rawQuery != "" {
 								query = "?" + rawQuery
 							}
+							// redirect to the resolved path
 							return redirect(ctx, fmt.Sprintf("%s/%s%s%s", origin, esmPath.ID(), utils.NormalizePathname(entry.main), query), true)
 						}
 						ctx.SetHeader("Cache-Control", ccImmutable)
@@ -1834,7 +1860,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 			}
 			ctx.SetHeader("Last-Modified", fi.ModTime().UTC().Format(http.TimeFormat))
 			ctx.SetHeader("Cache-Control", ccImmutable)
-			if endsWith(savePath, ".css") {
+			if strings.HasSuffix(savePath, ".css") {
 				ctx.SetHeader("Content-Type", ctCSS)
 			} else if endsWith(savePath, ".map") {
 				ctx.SetHeader("Content-Type", ctJSON)

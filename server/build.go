@@ -143,8 +143,8 @@ func (ctx *BuildContext) Build() (meta *BuildMeta, err error) {
 		return
 	}
 
-	// analyze splitting modules
-	if ctx.bundleMode == BundleDefault && ctx.pkgJson.Exports.Len() > 1 {
+	// analyze splitting modules if bundling
+	if ctx.pkgJson.Exports.Len() > 1 && !ctx.isNoBundle() {
 		ctx.status = "analyze"
 		err = ctx.analyzeSplitting()
 		if err != nil {
@@ -369,14 +369,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 
 	browserExclude := map[string]*set.Set[string]{}
 	implicitExternal := set.New[string]()
-	noBundle := ctx.bundleMode == BundleFalse || ctx.pkgJson.SideEffects.Len() > 0
-	if ctx.pkgJson.Esmsh != nil {
-		if v, ok := ctx.pkgJson.Esmsh["bundle"]; ok {
-			if b, ok := v.(bool); ok && !b {
-				noBundle = true
-			}
-		}
-	}
+	noBundle := ctx.isNoBundle()
 	esmifyPlugin := esbuild.Plugin{
 		Name: "esmify",
 		Setup: func(build esbuild.PluginBuild) {
@@ -1552,4 +1545,16 @@ func (ctx *BuildContext) install() (err error) {
 		}
 	}
 	return
+}
+
+func (ctx *BuildContext) isNoBundle() bool {
+	noBundle := ctx.bundleMode == BundleFalse || ctx.pkgJson.SideEffects.Len() > 0
+	if ctx.pkgJson.Esmsh != nil {
+		if v, ok := ctx.pkgJson.Esmsh["bundle"]; ok {
+			if b, ok := v.(bool); ok && !b {
+				noBundle = true
+			}
+		}
+	}
+	return noBundle
 }
