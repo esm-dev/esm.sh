@@ -6,11 +6,9 @@ import (
 	"encoding/hex"
 	"errors"
 	"io"
-	"strings"
 
 	"github.com/esm-dev/esm.sh/internal/storage"
 	lru "github.com/hashicorp/golang-lru/v2"
-	"github.com/ije/gox/utils"
 )
 
 type BuildMeta struct {
@@ -94,25 +92,16 @@ func decodeBuildMeta(data []byte) (*BuildMeta, error) {
 			}
 		default:
 			if line[1] == ':' {
+				value := string(line[2:])
 				switch line[0] {
 				case '.':
-					meta.CSSEntry = string(line[2:])
+					meta.CSSEntry = value
 				case 'd':
-					meta.Dts = string(line[2:])
-					if !endsWith(meta.Dts, ".ts", ".mts", ".cts") {
-						return nil, errors.New("invalid dts path")
-					}
+					meta.Dts = value
 				case 'i':
-					importSepcifier := string(line[2:])
-					if !strings.HasSuffix(importSepcifier, ".mjs") {
-						_, q := utils.SplitByLastByte(importSepcifier, '?')
-						if q == "" || !strings.Contains(q, "target=") {
-							return nil, errors.New("invalid import specifier")
-						}
-					}
-					meta.Imports = append(meta.Imports, importSepcifier)
+					meta.Imports = append(meta.Imports, value)
 				case 's':
-					meta.Integrity = string(line[2:])
+					meta.Integrity = value
 				}
 			}
 		}

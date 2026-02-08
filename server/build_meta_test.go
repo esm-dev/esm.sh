@@ -11,8 +11,8 @@ func TestEncodeBuildMeta(t *testing.T) {
 		CSSInJS:       true,
 		TypesOnly:     true,
 		ExportDefault: true,
-		CSSEntry:      "index.css",
-		Dts:           "index.d.ts",
+		CSSEntry:      "./index.css",
+		Dts:           "./types/index.d.ts",
 		Imports:       []string{"/react@19.2.4?target=es2022", "/react-dom@19.2.4?target=es2022"},
 		Integrity:     "sha384-...",
 	}
@@ -24,4 +24,5 @@ func TestEncodeBuildMeta(t *testing.T) {
 	if !reflect.DeepEqual(meta1, meta2) {
 		t.Fatalf("meta mismatch: %+v != %+v", meta1, meta2)
 	}
+	// fmt.Println(string(data))
 }
