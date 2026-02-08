@@ -190,6 +190,10 @@ func updateImportMap(specifiers []string, all bool, noPrompt bool, noSRI bool) (
 }
 
 func addImports(im *importmap.ImportMap, specifiers []string, all bool, noPrompt bool, noSRI bool) bool {
+	// for debug
+	// im.AddImportFromSpecifier(specifiers[0], noSRI)
+	// return true
+
 	term.HideCursor()
 	defer term.ShowCursor()
 

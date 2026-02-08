@@ -25,12 +25,13 @@ var (
 
 // Import represents an import from esm.sh CDN.
 type Import struct {
-	Name    string `json:"name"`
-	Version string `json:"version"`
-	SubPath string `json:"subpath"`
-	Github  bool   `json:"-"`
-	Jsr     bool   `json:"-"`
-	Dev     bool   `json:"-"`
+	Name     string `json:"name"`
+	Version  string `json:"version"`
+	SubPath  string `json:"subpath"`
+	Github   bool   `json:"-"`
+	Jsr      bool   `json:"-"`
+	External bool   `json:"-"`
+	Dev      bool   `json:"-"`
 }
 
 func (im Import) Specifier(withVersion bool) string {
@@ -101,19 +102,22 @@ func (imp *ImportMeta) EsmSpecifier() string {
 	return b.String()
 }
 
-// FetchImportMeta fetches the import metadata from the esm.sh CDN.
+// fetchImportMeta fetches the import metadata from the esm.sh CDN.
 func fetchImportMeta(cdnOrigin string, imp Import, target string) (meta ImportMeta, err error) {
-	regPrefix := imp.RegistryPrefix()
-	subPath := ""
+	asteriskPrefix := ""
 	version := ""
-	if imp.SubPath != "" {
-		subPath = "/" + imp.SubPath
+	subPath := ""
+	if imp.External {
+		asteriskPrefix = "*"
 	}
 	if imp.Version != "" {
 		version = "@" + imp.Version
 	}
-	url := fmt.Sprintf("%s/%s%s%s%s?meta", cdnOrigin, regPrefix, imp.Name, version, subPath)
-	if target != "" {
+	if imp.SubPath != "" {
+		subPath = "/" + imp.SubPath
+	}
+	url := fmt.Sprintf("%s/%s%s%s%s%s?meta", cdnOrigin, asteriskPrefix, imp.RegistryPrefix(), imp.Name, version, subPath)
+	if target != "" && target != "es2022" {
 		url += "&target=" + target
 	}
 
@@ -204,7 +208,7 @@ func fetchImportMeta(cdnOrigin string, imp Import, target string) (meta ImportMe
 	fetchCache.Store(url, meta)
 	if meta.Version != imp.Version {
 		// cache the exact version as well
-		cacheKey := fmt.Sprintf("%s/%s%s@%s%s?meta", cdnOrigin, regPrefix, imp.Name, meta.Version, subPath)
+		cacheKey := fmt.Sprintf("%s/%s%s%s@%s%s?meta", cdnOrigin, asteriskPrefix, imp.RegistryPrefix(), imp.Name, meta.Version, subPath)
 		if target != "" {
 			cacheKey += "&target=" + target
 		}

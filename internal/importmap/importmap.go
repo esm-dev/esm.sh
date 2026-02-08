@@ -349,8 +349,29 @@ func (im *ImportMap) addImport(mark *set.Set[string], imp ImportMeta, indirect b
 	if !indirect {
 		cdnScopeImportsMap.Delete(specifier)
 	}
-	if !noSRI && imp.Integrity != "" {
-		im.integrity.Set(moduleUrl, imp.Integrity)
+	if !noSRI {
+		if !imp.HasExternalImports() {
+			if imp.Integrity != "" {
+				im.integrity.Set(moduleUrl, imp.Integrity)
+			}
+		} else {
+			meta, err := im.FetchImportMeta(Import{
+				Name:     imp.Name,
+				Version:  imp.Version,
+				SubPath:  imp.SubPath,
+				Github:   imp.Github,
+				Jsr:      imp.Jsr,
+				Dev:      imp.Dev,
+				External: true,
+			})
+			if err != nil {
+				errors = append(errors, err)
+				return
+			}
+			if meta.Integrity != "" {
+				im.integrity.Set(moduleUrl, meta.Integrity)
+			}
+		}
 	} else {
 		im.integrity.Delete(moduleUrl)
 	}
@@ -418,7 +439,7 @@ func (im *ImportMap) addImport(mark *set.Set[string], imp ImportMeta, indirect b
 						}
 					}
 				}
-				meta, err := fetchImportMeta(im.cdnOrigin(), depImport, target)
+				meta, err := im.FetchImportMeta(depImport)
 				if err != nil {
 					errors = append(errors, err)
 					return
