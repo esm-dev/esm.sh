@@ -24,5 +24,12 @@ func TestEncodeBuildMeta(t *testing.T) {
 	if !reflect.DeepEqual(meta1, meta2) {
 		t.Fatalf("meta mismatch: %+v != %+v", meta1, meta2)
 	}
-	// fmt.Println(string(data))
+	meta3, err := decodeBuildMeta([]byte("ESM\r\nwhatever"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	metaEmpty := &BuildMeta{}
+	if !reflect.DeepEqual(meta3, metaEmpty) {
+		t.Fatalf("meta mismatch: %+v != %+v", meta3, metaEmpty)
+	}
 }
