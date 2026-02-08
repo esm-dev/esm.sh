@@ -369,7 +369,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 
 	browserExclude := map[string]*set.Set[string]{}
 	implicitExternal := set.New[string]()
-	noBundle := ctx.bundleMode == BundleFalse
+	noBundle := ctx.bundleMode == BundleFalse || ctx.pkgJson.SideEffects.Len() > 0
 	if ctx.pkgJson.Esmsh != nil {
 		if v, ok := ctx.pkgJson.Esmsh["bundle"]; ok {
 			if b, ok := v.(bool); ok && !b {

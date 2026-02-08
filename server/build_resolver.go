@@ -768,7 +768,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 		} else if ctx.pkgJson.SideEffects.Len() > 0 {
 			sideEffects = esbuild.SideEffectsFalse
 			entry := ctx.resolveEntry(esmPath)
-			if entry.main != "" && !ctx.pkgJson.SideEffects.Has(entry.main) {
+			if entry.main != "" && !(ctx.pkgJson.SideEffects.Has(entry.main) || ctx.pkgJson.SideEffects.Has(strings.TrimPrefix(entry.main, "./"))) {
 				sideEffects = esbuild.SideEffectsTrue
 			}
 		}
@@ -795,7 +795,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 			} else if ctx.pkgJson.SideEffects.Len() > 0 {
 				sideEffects = esbuild.SideEffectsFalse
 				entry := ctx.resolveEntry(subModule)
-				if entry.main != "" && !ctx.pkgJson.SideEffects.Has(entry.main) {
+				if entry.main != "" && !(ctx.pkgJson.SideEffects.Has(entry.main) || ctx.pkgJson.SideEffects.Has(strings.TrimPrefix(entry.main, "./"))) {
 					sideEffects = esbuild.SideEffectsTrue
 				}
 			}
