@@ -1407,7 +1407,7 @@ REBUILD:
 				err = errors.New("storage(put): " + err.Error())
 				return
 			}
-			meta.Integrity = "sha-2-384-" + base64.StdEncoding.EncodeToString(sha.Sum(nil))
+			meta.Integrity = "sha384-" + base64.StdEncoding.EncodeToString(sha.Sum(nil))
 		}
 	}
 
