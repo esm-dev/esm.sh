@@ -78,7 +78,7 @@ func Add() {
 
 	err := updateImportMap(set.New(specifiers...).Values(), *all || *a, *noPrompt, *noSRI)
 	if err != nil {
-		fmt.Println(term.Red("✖︎"), "Failed to add packages: "+err.Error())
+		fmt.Println(term.Red("✖︎"), "Failed to add imports: "+err.Error())
 	}
 }
 
@@ -209,11 +209,11 @@ func addImports(im *importmap.ImportMap, specifiers []string, all bool, noPrompt
 		}
 	}
 
-	var wg sync.WaitGroup
 	var resolvedImports []importmap.ImportMeta
 	var addedSpecifiers []string
 	var warnings []string
 	var errors []error
+	var wg sync.WaitGroup
 	for _, specifier := range specifiers {
 		wg.Go(func() {
 			imp, err := im.ParseImport(specifier)

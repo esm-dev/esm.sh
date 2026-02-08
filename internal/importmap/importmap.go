@@ -30,6 +30,8 @@ type Imports struct {
 
 // Len returns the length of the imports map.
 func (i *Imports) Len() int {
+	i.lock.RLock()
+	defer i.lock.RUnlock()
 	return len(i.imports)
 }
 

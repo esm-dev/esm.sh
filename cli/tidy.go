@@ -77,9 +77,8 @@ func tidy(noSRI bool) (err error) {
 				}
 				if typeAttr == "importmap" {
 					buf.Write(tokenizer.Raw())
-					token := tokenizer.Next()
 					var prevImportMap *importmap.ImportMap
-					if token == html.TextToken {
+					if tokenizer.Next() == html.TextToken {
 						importMapJson := bytes.TrimSpace(tokenizer.Text())
 						if len(importMapJson) > 0 {
 							prevImportMap, err = importmap.Parse(nil, importMapJson)
@@ -88,6 +87,10 @@ func tidy(noSRI bool) (err error) {
 								return
 							}
 						}
+					}
+					if prevImportMap == nil || prevImportMap.Imports.Len() == 0 {
+						fmt.Println(term.Dim("No imports found."))
+						return
 					}
 					buf.WriteString("\n")
 					importMap := importmap.Blank()
@@ -118,12 +121,16 @@ func tidy(noSRI bool) (err error) {
 						importMap.SetScopeImports(scope, imports)
 						return true
 					})
+					if len(imports) == 0 {
+						fmt.Println(term.Dim("No imports found."))
+						return
+					}
 					specifiers := make([]string, 0, len(imports))
 					for _, imp := range imports {
 						specifiers = append(specifiers, imp.Specifier(true))
 					}
 					sort.Strings(specifiers)
-					addImports(importMap, specifiers, false, false, noSRI)
+					addImports(importMap, specifiers, false, true, noSRI)
 					buf.WriteString(importMap.FormatJSON(2))
 					buf.WriteString("\n  ")
 					if token == html.EndTagToken {
