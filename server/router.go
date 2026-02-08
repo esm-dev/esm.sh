@@ -1007,11 +1007,13 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 		rawFlag := query.Has("raw") || strings.HasPrefix(ctx.R.Host, "raw.")
 		if rawFlag {
 			pathKind = RawFile
-			if esmPath.SubPath != "" {
-				extname := path.Ext(pathname)
-				if !strings.HasSuffix(esmPath.SubPath, extname) {
-					esmPath.SubPath += extname // restore the original path extension
-				}
+		}
+
+		// restore the original path extension
+		if pathKind == RawFile && esmPath.SubPath != "" {
+			extname := path.Ext(pathname)
+			if !strings.HasSuffix(esmPath.SubPath, extname) {
+				esmPath.SubPath += extname
 			}
 		}
 
@@ -1214,25 +1216,23 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 				}
 				if err != nil {
 					if os.IsNotExist(err) {
-						if rawFlag {
-							// try to resolve the file through package.json exports
-							b := &BuildContext{
-								npmrc:   npmrc,
-								esmPath: esmPath,
+						// try to resolve the file through package.json exports
+						b := &BuildContext{
+							npmrc:   npmrc,
+							esmPath: esmPath,
+						}
+						err = b.install()
+						if err != nil {
+							return rex.Status(500, err.Error())
+						}
+						entry := b.resolveEntry(esmPath)
+						if entry.main != "" && entry.main != "./"+esmPath.SubPath {
+							query := ""
+							if rawQuery != "" {
+								query = "?" + rawQuery
 							}
-							err = b.install()
-							if err != nil {
-								return rex.Status(500, err.Error())
-							}
-							entry := b.resolveEntry(esmPath)
-							if entry.main != "" && entry.main != "./"+esmPath.SubPath {
-								query := ""
-								if rawQuery != "" {
-									query = "?" + rawQuery
-								}
-								// redirect to the resolved path
-								return redirect(ctx, fmt.Sprintf("%s/%s%s%s", origin, esmPath.ID(), utils.NormalizePathname(entry.main), query), true)
-							}
+							// redirect to the resolved path
+							return redirect(ctx, fmt.Sprintf("%s/%s%s%s", origin, esmPath.ID(), utils.NormalizePathname(entry.main), query), true)
 						}
 						ctx.SetHeader("Cache-Control", ccImmutable)
 						return rex.Status(404, "File Not Found")
