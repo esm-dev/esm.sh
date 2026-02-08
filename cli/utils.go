@@ -5,7 +5,6 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"golang.org/x/term"
 )
@@ -14,11 +13,12 @@ import (
 type termRaw struct{}
 
 func (t *termRaw) Next() byte {
-	oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
+	fd := int(os.Stdin.Fd())
+	oldState, err := term.MakeRaw(fd)
 	if err != nil {
 		panic(err)
 	}
-	defer term.Restore(int(os.Stdin.Fd()), oldState)
+	defer term.Restore(fd, oldState)
 
 	buf := make([]byte, 3)
 	n, err := os.Stdin.Read(buf)
@@ -35,31 +35,20 @@ func (t *termRaw) Next() byte {
 	return buf[0]
 }
 
+func (t *termRaw) GetSize() (width int, height int, err error) {
+	return term.GetSize(int(os.Stdin.Fd()))
+}
+
+func (t *termRaw) isTTY() bool {
+	return term.IsTerminal(int(os.Stdin.Fd()))
+}
+
 // parseCommandFlags parses the command flags
 func parseCommandFlags() (args []string, helpFlag bool) {
-	rawArgs := make([]string, 0, len(os.Args)-2)
-	for _, arg := range os.Args[2:] {
-		if arg == "-h" || arg == "--help" {
-			helpFlag = true
-		} else {
-			rawArgs = append(rawArgs, arg)
-		}
-	}
-	flag.CommandLine.Parse(rawArgs)
-	args = make([]string, 0, len(rawArgs))
-	nextVaule := false
-	for _, arg := range rawArgs {
-		if !strings.HasPrefix(arg, "-") {
-			if !nextVaule {
-				args = append(args, arg)
-			} else {
-				nextVaule = false
-			}
-		} else if !strings.Contains(arg, "=") {
-			nextVaule = true
-		}
-	}
-	return
+	help := flag.Bool("help", false, "Print help message")
+	h := flag.Bool("h", false, "Print help message")
+	flag.CommandLine.Parse(os.Args[2:])
+	return flag.CommandLine.Args(), *help || *h
 }
 
 func lookupClosestFile(name string) (filename string, exists bool, err error) {

@@ -6,11 +6,9 @@ import (
 	"encoding/hex"
 	"errors"
 	"io"
-	"strings"
 
 	"github.com/esm-dev/esm.sh/internal/storage"
 	lru "github.com/hashicorp/golang-lru/v2"
-	"github.com/ije/gox/utils"
 )
 
 type BuildMeta struct {
@@ -57,7 +55,7 @@ func encodeBuildMeta(meta *BuildMeta) []byte {
 		}
 	}
 	if len(meta.Integrity) > 0 {
-		buf.Write([]byte{'~', ':'})
+		buf.Write([]byte{'s', ':'})
 		buf.WriteString(meta.Integrity)
 		buf.WriteByte('\n')
 	}
@@ -69,48 +67,35 @@ func decodeBuildMeta(data []byte) (*BuildMeta, error) {
 	if len(data) < 5 || !bytes.Equal(data[:5], []byte{'E', 'S', 'M', '\r', '\n'}) {
 		return nil, errors.New("invalid build meta")
 	}
-	lines := bytes.Split(data[5:], []byte{'\n'})
-	n := 0
-	for _, line := range lines {
-		if len(line) > 2 && line[0] == 'i' && line[1] == ':' {
-			n++
-		}
-	}
-	meta.Imports = make([]string, 0, n)
-	for _, line := range lines {
-		ll := len(line)
-		if ll == 0 {
-			continue
-		}
-		switch {
-		case ll == 1 && line[0] == 'j':
-			meta.CJS = true
-		case ll == 1 && line[0] == 'c':
-			meta.CSSInJS = true
-		case ll == 1 && line[0] == 't':
-			meta.TypesOnly = true
-		case ll == 1 && line[0] == 'e':
-			meta.ExportDefault = true
-		case ll > 2 && line[0] == '.' && line[1] == ':':
-			meta.CSSEntry = string(line[2:])
-		case ll > 2 && line[0] == 'd' && line[1] == ':':
-			meta.Dts = string(line[2:])
-			if !endsWith(meta.Dts, ".ts", ".mts", ".cts") {
-				return nil, errors.New("invalid dts path")
+	for _, line := range bytes.Split(data[5:], []byte{'\n'}) {
+		switch len(line) {
+		case 0:
+			// ignore empty line
+		case 1:
+			switch line[0] {
+			case 'j':
+				meta.CJS = true
+			case 'c':
+				meta.CSSInJS = true
+			case 't':
+				meta.TypesOnly = true
+			case 'e':
+				meta.ExportDefault = true
 			}
-		case ll > 2 && line[0] == 'i' && line[1] == ':':
-			importSepcifier := string(line[2:])
-			if !strings.HasSuffix(importSepcifier, ".mjs") {
-				_, q := utils.SplitByLastByte(importSepcifier, '?')
-				if q == "" || !strings.Contains(q, "target=") {
-					return nil, errors.New("invalid import specifier")
+		default:
+			if line[1] == ':' {
+				value := string(line[2:])
+				switch line[0] {
+				case '.':
+					meta.CSSEntry = value
+				case 'd':
+					meta.Dts = value
+				case 'i':
+					meta.Imports = append(meta.Imports, value)
+				case 's':
+					meta.Integrity = value
 				}
 			}
-			meta.Imports = append(meta.Imports, importSepcifier)
-		case ll > 2 && line[0] == '~' && line[1] == ':':
-			meta.Integrity = string(line[2:])
-		default:
-			return nil, errors.New("invalid build meta")
 		}
 	}
 	return meta, nil

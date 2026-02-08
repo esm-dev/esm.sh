@@ -8,339 +8,143 @@ import (
 )
 
 func TestAddPackages(t *testing.T) {
-	// 1. add packages
+	// 1. add imports
 	{
-		im := ImportMap{}
-		addedPackages, warnings, errors := im.AddPackages([]string{"react@19", "react-dom@19"})
+		im := Blank()
+		warnings, errors := im.AddImportFromSpecifier("react@19", false)
 		if len(errors) > 0 {
 			t.Fatalf("Expected no errors, got %d", len(errors))
 		}
 		if len(warnings) > 0 {
 			t.Fatalf("Expected no warnings, got %d", len(warnings))
 		}
-		if len(addedPackages) != 2 {
-			t.Fatalf("Expected 2 added packages, got %d", len(addedPackages))
-		}
-		if len(im.Imports) != 4 {
-			t.Fatalf("Expected 4 imports, got %d", len(im.Imports))
-		}
-		keys := getKeys(im.Imports)
-		if keys[0] != "react" || keys[1] != "react-dom" || keys[2] != "react-dom/" || keys[3] != "react/" {
-			t.Fatalf("Expected [react react-dom react-dom/ react/], got %v", keys)
-		}
-		if len(im.Scopes) != 1 {
-			t.Fatalf("Expected 1 scope, got %d", len(im.Scopes))
-		}
-		scope := im.Scopes["https://esm.sh/"]
-		if len(scope) != 2 {
-			t.Fatalf("Expected 2 imports in scope, got %d", len(scope))
-		}
-		keys = getKeys(scope)
-		if keys[0] != "scheduler" || keys[1] != "scheduler/" {
-			t.Fatalf("Expected [scheduler scheduler/], got %v", keys)
-		}
-	}
-
-	// 2. add peer dependencies to `imports`
-	{
-		im := ImportMap{}
-		addedPackages, warnings, errors := im.AddPackages([]string{"react-dom@19"})
+		warnings, errors = im.AddImportFromSpecifier("react-dom@19/client", false)
 		if len(errors) > 0 {
 			t.Fatalf("Expected no errors, got %d", len(errors))
 		}
 		if len(warnings) > 0 {
 			t.Fatalf("Expected no warnings, got %d", len(warnings))
 		}
-		if len(addedPackages) != 1 {
-			t.Fatalf("Expected 1 added package, got %d", len(addedPackages))
+		if im.Imports.Len() != 2 {
+			t.Fatalf("Expected 2 imports, got %d", im.Imports.Len())
 		}
-		if len(im.Imports) != 4 {
-			t.Fatalf("Expected 4 imports, got %d", len(im.Imports))
-		}
-		keys := getKeys(im.Imports)
-		if keys[0] != "react" || keys[1] != "react-dom" || keys[2] != "react-dom/" || keys[3] != "react/" {
-			t.Fatalf("Expected [react react-dom react-dom/ react/], got %v", keys)
-		}
-		if len(im.Scopes) != 1 {
-			t.Fatalf("Expected 1 scope, got %d", len(im.Scopes))
-		}
-		scope := im.Scopes["https://esm.sh/"]
-		if len(scope) != 2 {
-			t.Fatalf("Expected 2 imports in scope, got %d", len(scope))
-		}
-		keys = getKeys(scope)
-		if keys[0] != "scheduler" || keys[1] != "scheduler/" {
-			t.Fatalf("Expected [scheduler scheduler/], got %v", keys)
-		}
-	}
-
-	// 3. resolve dependencies without conflicts
-	{
-		im := ImportMap{}
-		addedPackages, warnings, errors := im.AddPackages([]string{"loose-envify@1.1.0"})
-		if len(errors) > 0 {
-			t.Fatalf("Expected no errors, got %d", len(errors))
-		}
-		if len(warnings) > 0 {
-			t.Fatalf("Expected no warnings, got %d", len(warnings))
-		}
-		if len(addedPackages) != 1 {
-			t.Fatalf("Expected 1 added package, got %d", len(addedPackages))
-		}
-		if len(im.Imports) != 2 {
-			t.Fatalf("Expected 2 imports, got %d", len(im.Imports))
-		}
-		keys := make([]string, 0, len(im.Imports))
-		for k := range im.Imports {
-			keys = append(keys, k)
-		}
+		keys := im.Imports.Keys()
 		sort.Strings(keys)
-		if keys[0] != "loose-envify" || keys[1] != "loose-envify/" {
-			t.Fatalf("Expected [loose-envify loose-envify/], got %v", keys)
+		if keys[0] != "react" || keys[1] != "react-dom/client" {
+			t.Fatalf("Expected [react react-dom/client], got %v", keys)
 		}
-		if len(im.Scopes) != 1 {
-			t.Fatalf("Expected 1 scope, got %d", len(im.Scopes))
+		if len(im.scopes) != 1 {
+			t.Fatalf("Expected 1 scope, got %d", len(im.scopes))
 		}
-		scope := im.Scopes["https://esm.sh/"]
-		if len(scope) != 2 {
-			t.Fatalf("Expected 2 imports in scope, got %d", len(scope))
+		scope := im.scopes["https://esm.sh/"]
+		if scope.Len() != 2 {
+			t.Fatalf("Expected 2 imports in scope, got %d", scope.Len())
 		}
-		keys = getKeys(scope)
-		if keys[0] != "js-tokens" || keys[1] != "js-tokens/" {
-			t.Fatalf("Expected [js-tokens js-tokens/], got %v", keys)
-		}
-
-		addedPackages, warnings, errors = im.AddPackages([]string{"react@18"})
-		if len(errors) > 0 {
-			t.Fatalf("Expected no errors, got %d", len(errors))
-		}
-		if len(warnings) > 0 {
-			t.Fatalf("Expected no warnings, got %d", len(warnings))
-		}
-		if len(addedPackages) != 1 {
-			t.Fatalf("Expected 1 added package, got %d", len(addedPackages))
-		}
-		if len(im.Imports) != 4 {
-			t.Fatalf("Expected 4 imports, got %d", len(im.Imports))
-		}
-		keys = getKeys(im.Imports)
-		if keys[0] != "loose-envify" || keys[1] != "loose-envify/" || keys[2] != "react" || keys[3] != "react/" {
-			t.Fatalf("Expected [loose-envify loose-envify/ react react/], got %v", keys)
-		}
-		if im.Imports["loose-envify"] != "https://esm.sh/*loose-envify@1.1.0/es2022/loose-envify.mjs" {
-			t.Fatalf("Expected loose-envify to be resolved to loose-envify@1.1.0, got %s", im.Imports["loose-envify"])
-		}
-		if len(im.Scopes) != 1 {
-			t.Fatalf("Expected 1 scope, got %d", len(im.Scopes))
-		}
-		scope = im.Scopes["https://esm.sh/"]
-		if len(scope) != 2 {
-			t.Fatalf("Expected 2 imports in scope, got %d", len(scope))
-		}
-		keys = getKeys(scope)
-		if keys[0] != "js-tokens" || keys[1] != "js-tokens/" {
-			t.Fatalf("Expected [js-tokens js-tokens/], got %v", keys)
-		}
-	}
-
-	// 4. resolve dependencies with conflicts
-	{
-		im := ImportMap{}
-		addedPackages, warnings, errors := im.AddPackages([]string{"loose-envify@1.0.0"})
-		if len(errors) > 0 {
-			t.Fatalf("Expected no errors, got %d", len(errors))
-		}
-		if len(warnings) > 0 {
-			t.Fatalf("Expected no warnings, got %d", len(warnings))
-		}
-		if len(addedPackages) != 1 {
-			t.Fatalf("Expected 1 added package, got %d", len(addedPackages))
-		}
-		if len(im.Imports) != 2 {
-			t.Fatalf("Expected 2 imports, got %d", len(im.Imports))
-		}
-		keys := make([]string, 0, len(im.Imports))
-		for k := range im.Imports {
-			keys = append(keys, k)
-		}
+		keys = scope.Keys()
 		sort.Strings(keys)
-		if keys[0] != "loose-envify" || keys[1] != "loose-envify/" {
-			t.Fatalf("Expected [loose-envify loose-envify/], got %v", keys)
+		if keys[0] != "react-dom" || keys[1] != "scheduler" {
+			t.Fatalf("Expected [react-dom scheduler], got %v", keys)
 		}
-		if len(im.Scopes) != 1 {
-			t.Fatalf("Expected 1 scope, got %d", len(im.Scopes))
-		}
-		scope := im.Scopes["https://esm.sh/"]
-		if len(scope) != 2 {
-			t.Fatalf("Expected 2 imports in scope, got %d", len(scope))
-		}
-		keys = getKeys(scope)
-		if keys[0] != "js-tokens" || keys[1] != "js-tokens/" {
-			t.Fatalf("Expected [js-tokens js-tokens/], got %v", keys)
-		}
+	}
 
-		addedPackages, warnings, errors = im.AddPackages([]string{"react@18"})
+	// 2. add peer imports to `imports`
+	{
+		im := Blank()
+		warnings, errors := im.AddImportFromSpecifier("react-dom@19", false)
 		if len(errors) > 0 {
 			t.Fatalf("Expected no errors, got %d", len(errors))
 		}
 		if len(warnings) > 0 {
 			t.Fatalf("Expected no warnings, got %d", len(warnings))
 		}
-		if len(addedPackages) != 1 {
-			t.Fatalf("Expected 1 added package, got %d", len(addedPackages))
+		if im.Imports.Len() != 2 {
+			t.Fatalf("Expected 2 imports, got %d", im.Imports.Len())
 		}
-		if len(im.Imports) != 4 {
-			t.Fatalf("Expected 4 imports, got %d", len(im.Imports))
+		keys := im.Imports.Keys()
+		sort.Strings(keys)
+		if keys[0] != "react" || keys[1] != "react-dom" {
+			t.Fatalf("Expected [react react-dom], got %v", keys)
 		}
-		keys = getKeys(im.Imports)
-		if keys[0] != "loose-envify" || keys[1] != "loose-envify/" || keys[2] != "react" || keys[3] != "react/" {
-			t.Fatalf("Expected [loose-envify loose-envify/ react react/], got %v", keys)
+		if len(im.scopes) != 1 {
+			t.Fatalf("Expected 1 scope, got %d", len(im.scopes))
 		}
-		if im.Imports["loose-envify"] != "https://esm.sh/*loose-envify@1.0.0/es2022/loose-envify.mjs" {
-			t.Fatalf("Expected loose-envify to be resolved to loose-envify@1.0.0, got %s", im.Imports["loose-envify"])
-		}
-		if len(im.Scopes) != 3 {
-			t.Fatalf("Expected 3 scopes, got %d", len(im.Scopes))
-		}
-		scope = im.Scopes["https://esm.sh/"]
-		if len(scope) != 2 {
-			t.Fatalf("Expected 2 imports in scope, got %d", len(scope))
-		}
-		keys = getKeys(scope)
-		if keys[0] != "js-tokens" || keys[1] != "js-tokens/" {
-			t.Fatalf("Expected [js-tokens js-tokens/], got %v", keys)
-		}
-		if scope["js-tokens"] != "https://esm.sh/js-tokens@1.0.3/es2022/js-tokens.mjs" {
-			t.Fatalf("Expected js-tokens to be resolved to js-tokens@1.0.3, got %s", scope["js-tokens"])
-		}
-		scope = im.Scopes["https://esm.sh/*react@18.3.1/"]
-		if len(scope) != 2 {
-			t.Fatalf("Expected 2 imports in scope, got %d", len(scope))
-		}
-		keys = getKeys(scope)
-		if keys[0] != "loose-envify" || keys[1] != "loose-envify/" {
-			t.Fatalf("Expected [loose-envify loose-envify/], got %v", keys)
-		}
-		scope = im.Scopes["https://esm.sh/*loose-envify@1.4.0/"]
-		if len(scope) != 2 {
-			t.Fatalf("Expected 2 imports in scope, got %d", len(scope))
-		}
-		keys = getKeys(scope)
-		if keys[0] != "js-tokens" || keys[1] != "js-tokens/" {
-			t.Fatalf("Expected [js-tokens js-tokens/], got %v", keys)
-		}
-		if scope["js-tokens"] != "https://esm.sh/js-tokens@4.0.0/es2022/js-tokens.mjs" {
-			t.Fatalf("Expected js-tokens to be resolved to js-tokens@4.0.0, got %s", scope["js-tokens"])
+		scope := im.scopes["https://esm.sh/"]
+		if scope.Len() != 0 {
+			t.Fatalf("Expected 0 imports in scope, got %d", scope.Len())
 		}
 	}
 
-	// 4. with config
+	// 3. with config
 	{
-		im := ImportMap{
-			Config: Config{
-				CDN:    "https://next.esm.sh",
+		im := &ImportMap{
+			config: Config{
+				CDN:    "https://cdn.esm.sh",
 				Target: "esnext",
-				SRI: SRIConfig{
-					Algorithm: "sha512",
-				},
 			},
+			Imports:   newImports(nil),
+			scopes:    make(map[string]*Imports),
+			integrity: newImports(nil),
 		}
-		addedPackages, warnings, errors := im.AddPackages([]string{"react@19"})
+		warnings, errors := im.AddImportFromSpecifier("react@19", false)
 		if len(errors) > 0 {
+			t.Fatalf("Errors: %v", errors)
 			t.Fatalf("Expected no errors, got %d", len(errors))
 		}
 		if len(warnings) > 0 {
 			t.Fatalf("Expected no warnings, got %d", len(warnings))
 		}
-		if len(addedPackages) != 1 {
-			t.Fatalf("Expected 1 added package, got %d", len(addedPackages))
+		if im.Imports.Len() != 1 {
+			t.Fatalf("Expected 1 imports, got %d", im.Imports.Len())
 		}
-		if len(im.Imports) != 2 {
-			t.Fatalf("Expected 2 imports, got %d", len(im.Imports))
+		keys := im.Imports.Keys()
+		if keys[0] != "react" {
+			t.Fatalf("Expected [react], got %v", keys)
 		}
-		keys := getKeys(im.Imports)
-		if keys[0] != "react" || keys[1] != "react/" {
-			t.Fatalf("Expected [react react/], got %v", keys)
+		if url, ok := im.Imports.Get("react"); !ok || !strings.HasPrefix(url, "https://cdn.esm.sh/react@19.") || !strings.HasSuffix(url, "/esnext/react.mjs") {
+			t.Fatalf("Expected react to be resolved to https://cdn.esm.sh/react@19.x.x/esnext/react.mjs, got %s", url)
 		}
-		if !strings.HasPrefix(im.Imports["react"], "https://next.esm.sh/react@19.") || !strings.HasSuffix(im.Imports["react"], "/esnext/react.mjs") {
-			t.Fatalf("Expected react to be resolved to https://next.esm.sh/react@19.x.x/esnext/react.mjs, got %s", im.Imports["react"])
-		}
-	}
-}
-
-func TestScopeKeys(t *testing.T) {
-	scopeKeys := ScopeKeys{
-		"https://esm.sh/",
-		"https://esm.sh/*react@18.3.1/",
-		"https://esm.sh/*loose-envify@1.4.0/",
-	}
-	sort.Sort(scopeKeys)
-	if scopeKeys[0] != "https://esm.sh/*react@18.3.1/" || scopeKeys[1] != "https://esm.sh/*loose-envify@1.4.0/" || scopeKeys[2] != "https://esm.sh/" {
-		t.Fatalf("Expected [https://esm.sh/*react@18.3.1/ https://esm.sh/*loose-envify@1.4.0/ https://esm.sh/], got %v", scopeKeys)
 	}
 }
 
 func TestResolve(t *testing.T) {
-	im := ImportMap{}
-	im.AddPackages([]string{"loose-envify@1.0.0"})
-	im.AddPackages([]string{"react@18"})
+	im := Blank()
+	im.AddImportFromSpecifier("react-dom@19/client", false)
 	referrer, _ := url.Parse("file:///main.js")
-	path, ok := im.Resolve("react", referrer)
+	modUrl, ok := im.Resolve("react", referrer)
 	if !ok {
 		t.Fatalf("Expected ok to be true, got false")
 	}
-	if path != "https://esm.sh/*react@18.3.1/es2022/react.mjs" {
-		t.Fatalf("Expected path to be https://esm.sh/*react@18.3.1/es2022/react.mjs, got %s", path)
+	if !strings.HasPrefix(modUrl, "https://esm.sh/react@19.") || !strings.HasSuffix(modUrl, "/es2022/react.mjs") {
+		t.Fatalf("Expected react to be resolved to https://esm.sh/react@19.x.x/es2022/react.mjs, got %s", modUrl)
 	}
-	path, ok = im.Resolve("react/jsx-runtime", referrer)
+	modUrl, ok = im.Resolve("react-dom/client", referrer)
 	if !ok {
 		t.Fatalf("Expected ok to be true, got false")
 	}
-	if path != "https://esm.sh/*react@18.3.1&target=es2022/jsx-runtime" {
-		t.Fatalf("Expected path to be https://esm.sh/*react@18.3.1&target=es2022/jsx-runtime, got %s", path)
+	if !strings.HasPrefix(modUrl, "https://esm.sh/*react-dom@19.") || !strings.HasSuffix(modUrl, "/es2022/client.mjs") {
+		t.Fatalf("Expected react-dom/client to be resolved to https://esm.sh/*react-dom@19.x.x/es2022/client.mjs, got %s", modUrl)
 	}
-	path, ok = im.Resolve("loose-envify", referrer)
-	if !ok {
-		t.Fatalf("Expected ok to be true, got false")
-	}
-	if path != "https://esm.sh/*loose-envify@1.0.0/es2022/loose-envify.mjs" {
-		t.Fatalf("Expected path to be https://esm.sh/*loose-envify@1.0.0/es2022/loose-envify.mjs, got %s", path)
-	}
-	referrer, _ = url.Parse("https://esm.sh/*react@18.3.1/es2022/react.mjs")
-	path, ok = im.Resolve("loose-envify", referrer)
-	if !ok {
-		t.Fatalf("Expected ok to be true, got false")
-	}
-	if path != "https://esm.sh/*loose-envify@1.4.0/es2022/loose-envify.mjs" {
-		t.Fatalf("Expected path to be https://esm.sh/*loose-envify@1.4.0/es2022/loose-envify.mjs, got %s", path)
-	}
-	_, ok = im.Resolve("js-tokens", referrer)
+	_, ok = im.Resolve("react-dom", referrer)
 	if ok {
 		t.Fatalf("Expected ok to be false, got true")
 	}
-	referrer, _ = url.Parse("https://esm.sh/*loose-envify@1.0.0/es2022/loose-envify.mjs")
-	path, ok = im.Resolve("js-tokens", referrer)
+	_, ok = im.Resolve("scheduler", referrer)
+	if ok {
+		t.Fatalf("Expected ok to be false, got true")
+	}
+	referrer, _ = url.Parse("https://esm.sh/*react-dom@19.2.4/es2022/client.mjs")
+	modUrl, ok = im.Resolve("react-dom", referrer)
 	if !ok {
 		t.Fatalf("Expected ok to be true, got false")
 	}
-	if path != "https://esm.sh/js-tokens@1.0.3/es2022/js-tokens.mjs" {
-		t.Fatalf("Expected path to be https://esm.sh/js-tokens@1.0.3/es2022/js-tokens.mjs, got %s", path)
+	if !strings.HasPrefix(modUrl, "https://esm.sh/*react-dom@19.") || !strings.HasSuffix(modUrl, "/es2022/react-dom.mjs") {
+		t.Fatalf("Expected react-dom/client to be resolved to https://esm.sh/*react-dom@19.x.x/es2022/react-dom.mjs, got %s", modUrl)
 	}
-	referrer, _ = url.Parse("https://esm.sh/*loose-envify@1.4.0/es2022/loose-envify.mjs")
-	path, ok = im.Resolve("js-tokens", referrer)
+	modUrl, ok = im.Resolve("scheduler", referrer)
 	if !ok {
 		t.Fatalf("Expected ok to be true, got false")
 	}
-	if path != "https://esm.sh/js-tokens@4.0.0/es2022/js-tokens.mjs" {
-		t.Fatalf("Expected path to be https://esm.sh/js-tokens@4.0.0/es2022/js-tokens.mjs, got %s", path)
+	if !strings.HasPrefix(modUrl, "https://esm.sh/scheduler@0.27.") || !strings.HasSuffix(modUrl, "/es2022/scheduler.mjs") {
+		t.Fatalf("Expected scheduler to be resolved to https://esm.sh/scheduler@0.27.x/es2022/scheduler.mjs, got %s", modUrl)
 	}
-}
-
-func getKeys(m map[string]string) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
 }

@@ -1,17 +1,17 @@
 run/cli/init:
-	@go run -tags debug main.go init
+	@go run -tags debug main.go init ${args}
 
 run/cli/add:
-	@go run -tags debug main.go add ${pkg}
+	@go run -tags debug main.go add ${args}
 
 run/cli/tidy:
 	@go run -tags debug main.go tidy
 
 run/cli/dev:
-	@go run -tags debug main.go dev cli/template/${tpl}
+	@go run -tags debug main.go dev ${args} cli/template/${app}
 
 run/cli/serve:
-	@go run -tags debug main.go serve cli/template/${tpl}
+	@go run -tags debug main.go serve ${args} cli/template/${app}
 
 run/server: config.json
 	@rm -rf .esmd/log

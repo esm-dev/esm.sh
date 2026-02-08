@@ -278,7 +278,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 		err = ctx.storage.Put(ctx.getSavePath(), buffer)
 		if err != nil {
 			ctx.logger.Errorf("storage.put(%s): %v", ctx.getSavePath(), err)
-			err = errors.New("storage: " + err.Error())
+			err = errors.New("storage(put): " + err.Error())
 			return
 		}
 		meta = &BuildMeta{ExportDefault: true}
@@ -333,7 +333,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 		err = ctx.storage.Put(ctx.getSavePath(), buf)
 		if err != nil {
 			ctx.logger.Errorf("storage.put(%s): %v", ctx.getSavePath(), err)
-			err = errors.New("storage: " + err.Error())
+			err = errors.New("storage(put): " + err.Error())
 			return
 		}
 		meta.Dts, err = ctx.resolveDTS(entry)
@@ -1265,7 +1265,7 @@ REBUILD:
 				}
 			}
 
-			// apply cjs requires
+			// check cjs requires
 			if len(ctx.cjsRequires) > 0 {
 				requires := make([][3]string, 0, len(ctx.cjsRequires))
 				set := set.New[string]()
@@ -1354,10 +1354,10 @@ REBUILD:
 				header.WriteByte('\n')
 			}
 
-			// apply esm imports
+			// check esm imports
 			for _, a := range ctx.esmImports {
 				resolvedPathFull, resolvedPath := a[0], a[1]
-				if bytes.Contains(jsContent, []byte(fmt.Sprintf(`"%s"`, resolvedPath))) {
+				if bytes.Contains(jsContent, fmt.Appendf(nil, `"%s"`, resolvedPath)) {
 					imports.Add(resolvedPathFull)
 				}
 			}
@@ -1397,18 +1397,17 @@ REBUILD:
 			}
 			if err != storage.ErrNotFound {
 				ctx.logger.Errorf("storage.stat(%s): %v", ctx.getSavePath(), err)
-				err = errors.New("storage: " + err.Error())
+				err = errors.New("storage(stat): " + err.Error())
 				return
 			}
 			sha := sha512.New384()
-			r := storage.TeeReader(finalJS, sha)
-			err = ctx.storage.Put(ctx.getSavePath(), r)
+			err = ctx.storage.Put(ctx.getSavePath(), storage.TeeReader(finalJS, sha))
 			if err != nil {
 				ctx.logger.Errorf("storage.put(%s): %v", ctx.getSavePath(), err)
-				err = errors.New("storage: " + err.Error())
+				err = errors.New("storage(put): " + err.Error())
 				return
 			}
-			meta.Integrity = "sha-2-384-" + base64.StdEncoding.EncodeToString(sha.Sum(nil))
+			meta.Integrity = "sha384-" + base64.StdEncoding.EncodeToString(sha.Sum(nil))
 		}
 	}
 
@@ -1419,7 +1418,7 @@ REBUILD:
 			err = ctx.storage.Put(savePath, bytes.NewReader(file.Contents))
 			if err != nil {
 				ctx.logger.Errorf("storage.put(%s): %v", savePath, err)
-				err = errors.New("storage: " + err.Error())
+				err = errors.New("storage(put): " + err.Error())
 				return
 			}
 			meta.CSSInJS = true
@@ -1440,7 +1439,7 @@ REBUILD:
 					err = ctx.storage.Put(ctx.getSavePath()+".map", buf)
 					if err != nil {
 						ctx.logger.Errorf("storage.put(%s): %v", ctx.getSavePath()+".map", err)
-						err = errors.New("storage: " + err.Error())
+						err = errors.New("storage(put): " + err.Error())
 						return
 					}
 				}

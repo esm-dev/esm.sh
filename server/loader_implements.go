@@ -66,10 +66,10 @@ func compileSvelteLoader(npmrc *NpmRC, svelteVersion string, loaderExecPath stri
 	return
 }
 
-func resolveSvelteVersion(npmrc *NpmRC, importMap importmap.ImportMap) (svelteVersion string, err error) {
+func resolveSvelteVersion(npmrc *NpmRC, importMap *importmap.ImportMap) (svelteVersion string, err error) {
 	svelteVersion = "5"
-	if len(importMap.Imports) > 0 {
-		svelteUrl, ok := importMap.Imports["svelte"]
+	if importMap != nil {
+		svelteUrl, ok := importMap.Resolve("svelte", nil)
 		if ok && isHttpSpecifier(svelteUrl) {
 			u, e := url.Parse(svelteUrl)
 			if e == nil {
@@ -146,10 +146,10 @@ func compileVueLoader(npmrc *NpmRC, vueVersion string, loaderVersion, loaderExec
 	return
 }
 
-func resolveVueVersion(npmrc *NpmRC, importMap importmap.ImportMap) (vueVersion string, err error) {
+func resolveVueVersion(npmrc *NpmRC, importMap *importmap.ImportMap) (vueVersion string, err error) {
 	vueVersion = "3"
-	if len(importMap.Imports) > 0 {
-		vueUrl, ok := importMap.Imports["vue"]
+	if importMap != nil {
+		vueUrl, ok := importMap.Resolve("vue", nil)
 		if ok && isHttpSpecifier(vueUrl) {
 			u, e := url.Parse(vueUrl)
 			if e == nil {
