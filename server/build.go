@@ -2,7 +2,7 @@ package server
 
 import (
 	"bytes"
-	"crypto/sha3"
+	"crypto/sha512"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -1400,14 +1400,14 @@ REBUILD:
 				err = errors.New("storage(stat): " + err.Error())
 				return
 			}
-			sha := sha3.New384()
+			sha := sha512.New384()
 			err = ctx.storage.Put(ctx.getSavePath(), storage.TeeReader(finalJS, sha))
 			if err != nil {
 				ctx.logger.Errorf("storage.put(%s): %v", ctx.getSavePath(), err)
 				err = errors.New("storage(put): " + err.Error())
 				return
 			}
-			meta.Integrity = "sha384-" + base64.RawStdEncoding.EncodeToString(sha.Sum(nil))
+			meta.Integrity = "sha-2-384-" + base64.StdEncoding.EncodeToString(sha.Sum(nil))
 		}
 	}
 
