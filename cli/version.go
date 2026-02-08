@@ -1,3 +1,3 @@
 package cli
 
-const Version = "v136"
+const VERSION = "v136"

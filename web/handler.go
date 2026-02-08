@@ -558,9 +558,10 @@ func (s *Handler) ServeFrameworkCSS(w http.ResponseWriter, r *http.Request, quer
 	}
 	defer indexHtmlFile.Close()
 
+	var importMap *importmap.ImportMap
+
 	contents := [][]byte{}
 	jsEntries := map[string]struct{}{}
-	importMap := importmap.ImportMap{}
 	tokenizer := html.NewTokenizer(indexHtmlFile)
 	for {
 		tt := tokenizer.Next()
@@ -757,7 +758,7 @@ func (s *Handler) ServeHmrWS(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Handler) getAppImportMap() (importMapRaw []byte, importMap importmap.ImportMap, err error) {
+func (s *Handler) getAppImportMap() (importMapRaw []byte, importMap *importmap.ImportMap, err error) {
 	file, err := os.Open(filepath.Join(s.config.AppDir, "index.html"))
 	if err != nil {
 		return
@@ -806,7 +807,7 @@ func (s *Handler) getAppImportMap() (importMapRaw []byte, importMap importmap.Im
 	return
 }
 
-func (s *Handler) analyzeDependencyTree(entry string, importMap importmap.ImportMap) (tree map[string][]byte, err error) {
+func (s *Handler) analyzeDependencyTree(entry string, importMap *importmap.ImportMap) (tree map[string][]byte, err error) {
 	tree = make(map[string][]byte)
 	ret := esbuild.Build(esbuild.BuildOptions{
 		EntryPoints:      []string{entry},
@@ -824,7 +825,10 @@ func (s *Handler) analyzeDependencyTree(entry string, importMap importmap.Import
 				Setup: func(build esbuild.PluginBuild) {
 					build.OnResolve(esbuild.OnResolveOptions{Filter: ".*"}, func(args esbuild.OnResolveArgs) (esbuild.OnResolveResult, error) {
 						url, _ := url.Parse(args.Importer)
-						path, _ := importMap.Resolve(args.Path, url)
+						path := args.Path
+						if importMap != nil {
+							path, _ = importMap.Resolve(args.Path, url)
+						}
 						if isHttpSepcifier(path) || (!isRelPathSpecifier(path) && !isAbsPathSpecifier(path)) {
 							return esbuild.OnResolveResult{Path: path, External: true}, nil
 						}
