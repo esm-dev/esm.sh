@@ -1015,7 +1015,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 			}
 		}
 
-		if !rawFlag && pathKind == RawFile && esmPath.SubPath != "" && endsWith(esmPath.SubPath, ".map") {
+		if pathKind == RawFile && !rawFlag && esmPath.SubPath != "" && strings.HasSuffix(esmPath.SubPath, ".map") {
 			pkgJson, err := npmrc.installPackage(esmPath.Package())
 			if err != nil {
 				return rex.Status(500, err.Error())
@@ -1860,7 +1860,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 			}
 			ctx.SetHeader("Last-Modified", fi.ModTime().UTC().Format(http.TimeFormat))
 			ctx.SetHeader("Cache-Control", ccImmutable)
-			if endsWith(savePath, ".css") {
+			if strings.HasSuffix(savePath, ".css") {
 				ctx.SetHeader("Content-Type", ctCSS)
 			} else if endsWith(savePath, ".map") {
 				ctx.SetHeader("Content-Type", ctJSON)
