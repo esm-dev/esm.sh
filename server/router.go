@@ -1010,7 +1010,29 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 			if esmPath.SubPath != "" {
 				extname := path.Ext(pathname)
 				if !strings.HasSuffix(esmPath.SubPath, extname) {
-					esmPath.SubPath += extname
+					esmPath.SubPath += extname // restore the original path extension
+				}
+			}
+		}
+
+		if !rawFlag && pathKind == RawFile && esmPath.SubPath != "" && endsWith(esmPath.SubPath, ".map") {
+			pkgJson, err := npmrc.installPackage(esmPath.Package())
+			if err != nil {
+				return rex.Status(500, err.Error())
+			}
+			filename := path.Join(npmrc.StoreDir(), esmPath.ID(), "node_modules", esmPath.PkgName, esmPath.SubPath)
+			stat, err := os.Lstat(filename)
+			if err != nil {
+				if os.IsNotExist(err) {
+					if _, ok := pkgJson.Exports.Get("./" + esmPath.SubPath); ok {
+						pathKind = EsmEntry
+					}
+				} else {
+					return rex.Status(500, err.Error())
+				}
+			} else if stat.IsDir() {
+				if _, ok := pkgJson.Exports.Get("./" + esmPath.SubPath); ok {
+					pathKind = EsmEntry
 				}
 			}
 		}
@@ -1176,8 +1198,10 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 					if rawQuery != "" {
 						query = "?" + rawQuery
 					}
+					// redirect to the 'main' JS file
 					return redirect(ctx, fmt.Sprintf("%s/%s%s%s", origin, esmPath.ID(), utils.NormalizePathname(entry.main), query), true)
 				}
+
 				filename := path.Join(npmrc.StoreDir(), esmPath.ID(), "node_modules", esmPath.PkgName, esmPath.SubPath)
 				stat, err := os.Lstat(filename)
 				if err != nil && os.IsNotExist(err) {
@@ -1190,23 +1214,25 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 				}
 				if err != nil {
 					if os.IsNotExist(err) {
-						// try to resolve the file through package.json exports
-						b := &BuildContext{
-							npmrc:   npmrc,
-							esmPath: esmPath,
-						}
-						err = b.install()
-						if err != nil {
-							return rex.Status(500, err.Error())
-						}
-						entry := b.resolveEntry(esmPath)
-						if entry.main != "" && entry.main != "./"+esmPath.SubPath {
-							// redirect to the resolved path
-							query := ""
-							if rawQuery != "" {
-								query = "?" + rawQuery
+						if rawFlag {
+							// try to resolve the file through package.json exports
+							b := &BuildContext{
+								npmrc:   npmrc,
+								esmPath: esmPath,
 							}
-							return redirect(ctx, fmt.Sprintf("%s/%s%s%s", origin, esmPath.ID(), utils.NormalizePathname(entry.main), query), true)
+							err = b.install()
+							if err != nil {
+								return rex.Status(500, err.Error())
+							}
+							entry := b.resolveEntry(esmPath)
+							if entry.main != "" && entry.main != "./"+esmPath.SubPath {
+								query := ""
+								if rawQuery != "" {
+									query = "?" + rawQuery
+								}
+								// redirect to the resolved path
+								return redirect(ctx, fmt.Sprintf("%s/%s%s%s", origin, esmPath.ID(), utils.NormalizePathname(entry.main), query), true)
+							}
 						}
 						ctx.SetHeader("Cache-Control", ccImmutable)
 						return rex.Status(404, "File Not Found")
