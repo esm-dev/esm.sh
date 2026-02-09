@@ -6,7 +6,7 @@ require (
 	github.com/Masterminds/semver/v3 v3.4.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/hashicorp/golang-lru/v2 v2.0.7
-	github.com/ije/esbuild-internal v0.27.2
+	github.com/ije/esbuild-internal v0.27.3
 	github.com/ije/gox v0.10.4
 	github.com/ije/rex v1.15.5
 	github.com/mssola/useragent v1.0.0

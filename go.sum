@@ -8,8 +8,8 @@ github.com/gorilla/websocket v1.5.3 h1:saDtZ6Pbx/0u+bgYQ3q96pZgCzfhKXGPqt7kZ72aN
 github.com/gorilla/websocket v1.5.3/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=
 github.com/hashicorp/golang-lru/v2 v2.0.7 h1:a+bsQ5rvGLjzHuww6tVxozPZFVghXaHOwFs4luLUK2k=
 github.com/hashicorp/golang-lru/v2 v2.0.7/go.mod h1:QeFd9opnmA6QUJc5vARoKUSoFhyfM2/ZepoAG6RGpeM=
-github.com/ije/esbuild-internal v0.27.2 h1:lhprBu+mfJWAG6hwBZHBEMfytqF0cxPNeyIP3G/FUqw=
-github.com/ije/esbuild-internal v0.27.2/go.mod h1:s7HvKZ4ZGifyzvgWpSwnJOQTr6b+bsgfNBZ8HAEwwSM=
+github.com/ije/esbuild-internal v0.27.3 h1:T5TKpONy2ERDP45fdS6kW+yHfFlilgTSMZ0K9LahS9Q=
+github.com/ije/esbuild-internal v0.27.3/go.mod h1:s7HvKZ4ZGifyzvgWpSwnJOQTr6b+bsgfNBZ8HAEwwSM=
 github.com/ije/gox v0.10.4 h1:c8QpPl6cCdUOm0FrheF4icNstsTImaRRrJv4l8BQmw8=
 github.com/ije/gox v0.10.4/go.mod h1:3GTaK8WXf6oxRbrViLqKNLTNcMR871Dz0zoujFNmG48=
 github.com/ije/rex v1.15.5 h1:WOPUhBJzLg2xXpFsxP2q+jEn7BEvpMI0DQR/vSN83FI=
