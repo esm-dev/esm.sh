@@ -61,7 +61,7 @@ esm.sh provides a Docker image for fast deployment. You can pull the container i
 
 ```bash
 docker pull ghcr.io/esm-dev/esm.sh        # latest stable version
-docker pull ghcr.io/esm-dev/esm.sh:v136_1 # specific stable version
+docker pull ghcr.io/esm-dev/esm.sh:v137   # specified stable version
 docker pull ghcr.io/esm-dev/esm.sh:dev    # latest dev version
 ```
 
