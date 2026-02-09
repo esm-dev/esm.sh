@@ -1,4 +1,35 @@
-# Changelog
+# Server Changelog
+
+## v137
+
+* Introduce `esm.sh/x` - ts/jsx/vue/svelte just works™️ in browser.
+  ```html
+  <!-- use build tools like Vite, Webpack, etc. -->
+  <script type="module" src="app.tsx"></script>
+
+  <!-- use esm.sh/x -->
+  <script src="https://esm.sh/x" href="app.tsx"></script>
+  ```
+* Introduce date(`yyyy-mm-dd`) versioning
+  ```js
+  import * as myPackage from "https://esm.sh/my-package@2026-01-02";
+  ```
+* Other Changes:
+  * Upgrade esbuild to 0.27.3
+  * Upgrade unenv to 2.0.0-rc.22
+  * Support import with `{type: json}` (#1202)
+  * Optimize storage (#1260)
+  * Remove unsafe `x-zone-id` and `x-npmrc` headers (#1235)
+  * Support `.d.cts` types (#987)
+  * Ban urls with `/../` segments in path (#1271)
+  * Fix memory leak (#1157)
+  * Fix S3 Storage signature with `/#/` path (#1022)
+  * Fix forward build deps for Typescript types (#1244)
+  * Fix `pkg.pr.new` redirects (#1204)
+  * Fix SSRF (#1149)
+  * Fix `*.css?module` XSS (#1237)
+  * Fix dts_lexer: bufio.Scanner: token too long (#1139)
+  * Fix cjs-module-lexer timeout (#1265)
 
 ## v136
 
