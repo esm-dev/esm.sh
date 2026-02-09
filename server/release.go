@@ -15,7 +15,7 @@ const DEBUG = false
 var embedFS embed.FS
 
 // may be changed by `-ldflags`
-var VERSION = "v136"
+var VERSION = "v137"
 
 // pprof is disabled in production build
 func pprofRouter() rex.Handle {
