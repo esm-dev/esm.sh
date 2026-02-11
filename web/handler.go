@@ -2,7 +2,6 @@ package web
 
 import (
 	"bytes"
-	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -422,12 +421,7 @@ func (s *Handler) ServeHtml(w http.ResponseWriter, r *http.Request, filename str
 }
 
 func (s *Handler) ServeModule(w http.ResponseWriter, r *http.Request, filename string, query url.Values, preTransform []byte) {
-	im, err := base64.RawURLEncoding.DecodeString(query.Get("im"))
-	if err != nil {
-		http.Error(w, "Bad Request", 400)
-		return
-	}
-	imfi, err := os.Lstat(filepath.Join(s.config.AppDir, string(im)))
+	indeHtmlStat, err := os.Lstat(filepath.Join(s.config.AppDir, "index.html"))
 	if err != nil {
 		if os.IsNotExist(err) {
 			http.Error(w, "Bad Request", 400)
@@ -457,7 +451,7 @@ func (s *Handler) ServeModule(w http.ResponseWriter, r *http.Request, filename s
 		modTime = uint64(fi.ModTime().UnixMilli())
 		size = fi.Size()
 	}
-	etag := fmt.Sprintf("w/\"%x-%x-%x-%x%s\"", modTime, size, imfi.ModTime().UnixMilli(), imfi.Size(), s.etagSuffix)
+	etag := fmt.Sprintf("w/\"%x-%x-%x-%x%s\"", modTime, size, indeHtmlStat.ModTime().UnixMilli(), indeHtmlStat.Size(), s.etagSuffix)
 	if r.Header.Get("If-None-Match") == etag && !query.Has("t") {
 		w.WriteHeader(http.StatusNotModified)
 		return
@@ -1005,11 +999,11 @@ func (s *Handler) preload() {
 		}
 	}
 	if len(entries) > 0 {
-		u := url.URL{Path: "/"}
-		im := base64.RawURLEncoding.EncodeToString([]byte("/index.html"))
+		rootUrl := url.URL{Path: "/"}
 		w := &dummyResponseWriter{}
+		q := url.Values{}
 		for entry := range entries {
-			pathname := u.ResolveReference(&url.URL{Path: entry}).Path
+			pathname := rootUrl.ResolveReference(&url.URL{Path: entry}).Path
 			r := &http.Request{
 				Method: "GET",
 				URL: &url.URL{
@@ -1017,14 +1011,11 @@ func (s *Handler) preload() {
 				},
 			}
 			if strings.HasSuffix(entry, "tailwind.css") {
-				r.URL.RawQuery = "ctx=" + im
-				s.ServeFrameworkCSS(w, r, r.URL.Query(), "tailwind")
+				s.ServeFrameworkCSS(w, r, q, "tailwind")
 			} else if strings.HasSuffix(entry, "uno.css") {
-				r.URL.RawQuery = "ctx=" + im
-				s.ServeFrameworkCSS(w, r, r.URL.Query(), "unocss")
+				s.ServeFrameworkCSS(w, r, q, "unocss")
 			} else {
-				r.URL.RawQuery = "im=" + im
-				s.ServeModule(w, r, pathname, r.URL.Query(), nil)
+				s.ServeModule(w, r, pathname, q, nil)
 			}
 		}
 	}
