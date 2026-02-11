@@ -25,7 +25,7 @@ for await (const line of Deno.stdin.readable.pipeThrough(new TextDecoderStream()
         break;
       }
       case "tailwind": {
-        output("css", await tailwind(...args));
+        output("css", await tailwindCSS(...args));
         break;
       }
       case "unocss": {
@@ -46,41 +46,53 @@ async function tsx(filename, importMap, sourceCode, isDev) {
   const imports = importMap?.imports;
   const devImports = {};
   if (imports && isDev) {
-    // add `?dev` query to `react-dom` and `vue` imports for development mode
+    // add `dev` query to `react`, `react-dom` and `vue` imports for development mode
     for (const [specifier, url] of Object.entries(imports)) {
-      const isReact = specifier === "react" || specifier === "react/" || specifier.startsWith("react/");
-      if (
-        (
-          isReact
-          || specifier === "react-dom" || specifier === "react-dom/" || specifier.startsWith("react-dom/")
-          || specifier === "vue"
-        ) && (url.startsWith("https://") || url.startsWith("http://"))
-      ) {
-        const [pkgName, subModule] = specifier.split("/");
-        const { pathname } = new URL(url);
-        const seg1 = pathname.split("/")[1];
-        if (seg1 === pkgName || seg1.startsWith(pkgName + "@")) {
-          const version = seg1.split("@")[1];
-          if (specifier.endsWith("/") || !version) {
-            devImports[specifier] = "https://esm.sh/" + pkgName + (version ? "@" + version : "@latest") + "&dev"
-              + (subModule ? "/" + subModule : "") + "/";
+      const isReact = specifier === "react" || specifier.startsWith("react/");
+      const isReactDOM = specifier === "react-dom" || specifier.startsWith("react-dom/");
+      const isVue = specifier === "vue";
+      if (isHttpUrl(url) && (isReact || isReactDOM || isVue)) {
+        const [pkgName] = specifier.split("/", 1);
+        const moduleUrl = new URL(url);
+        const { pathname } = moduleUrl;
+        const firstSegment = pathname.split("/", 2)[1];
+        if (firstSegment === pkgName || firstSegment.startsWith(pkgName + "@")) {
+          const version = firstSegment.split("@")[1];
+          // replace extension `.mjs`  with `.development.mjs`
+          // or add `dev` query to the module url
+          if (pathname.endsWith(".mjs") && version) {
+            moduleUrl.pathname = pathname.slice(0, -4) + ".development.mjs";
+            devImports[specifier] = moduleUrl.toString();
           } else {
-            devImports[specifier] = "https://esm.sh/" + pkgName + "@" + version + "/es2022/" + (subModule || pkgName)
-              + ".development.mjs";
-          }
-          if (isReact && version) {
-            devImports["react/jsx-dev-runtime"] = "https://esm.sh/react@" + version + "/es2022/jsx-dev-runtime.development.mjs";
+            moduleUrl.searchParams.set("dev", "TRUE");
+            devImports[specifier] = moduleUrl.toString().replace("dev=TRUE", "dev");
           }
         }
       }
     }
   }
   let jsxImportSource = undefined;
-  if (["react/", "react/jsx-runtime", "react/jsx-dev-runtime"].some(s => !!(imports?.[s]))) {
-    jsxImportSource = "react";
-  } else if (["preact/", "preact/jsx-runtime", "preact/jsx-dev-runtime"].some(s => !!(imports?.[s]))) {
-    jsxImportSource = "preact";
+  if (imports) {
+    let jsxImportSourceUrl = undefined;
+    for (const pkg of ["react", "preact", "solid-js", "mono-jsx/dom", "mono-jsx", "vue"]) {
+      jsxImportSourceUrl = imports[pkg + "/jsx-runtime"] || imports[pkg + "/"];
+      if (jsxImportSourceUrl) {
+        jsxImportSource = pkg;
+        break;
+      }
+    }
+    // ensure `jsx-dev-runtime` is included in the import map
+    if (isDev && jsxImportSourceUrl && !imports[jsxImportSource + "/jsx-dev-runtime"]) {
+      const version = getPackageVersionFromUrl(jsxImportSourceUrl);
+      if (version && jsxImportSourceUrl.endsWith("/jsx-runtime.mjs")) {
+        devImports[jsxImportSource + "/jsx-dev-runtime"] = jsxImportSourceUrl.slice(0, -16) + "/jsx-dev-runtime.development.mjs";
+      } else if (version) {
+        const { origin } = new Url(jsxImportSourceUrl);
+        devImports[jsxImportSource + "/jsx-dev-runtime"] = origin + "/" + jsxImportSource + "@" + version + "/jsx-dev-runtime";
+      }
+    }
   }
+  output("debug", JSON.stringify(devImports));
   let lang = filename.endsWith(".md?jsx") ? "jsx" : undefined;
   let code = sourceCode ?? await Deno.readTextFile("." + filename);
   let map = undefined;
@@ -128,7 +140,7 @@ async function tsx(filename, importMap, sourceCode, isDev) {
 async function transformVue(filename, sourceCode, importMap, isDev) {
   const { transform } = await import("npm:@esm.sh/vue-compiler@1.0.1");
   const ret = await transform(filename, sourceCode, {
-    imports: { "@vue/compiler-sfc": import("npm:@vue/compiler-sfc@" + getPackageVersion(importMap, "vue", "3")) },
+    imports: { "@vue/compiler-sfc": import("npm:@vue/compiler-sfc@" + getPackageVersionFromUrl(importMap?.imports?.vue, "3")) },
     isDev,
     devRuntime: isDev ? "/@vdr" : undefined,
   });
@@ -137,7 +149,7 @@ async function transformVue(filename, sourceCode, importMap, isDev) {
 
 // transform Svelte SFC to JavaScript
 async function transformSvelte(filename, sourceCode, importMap, isDev) {
-  const { compile, VERSION } = await import("npm:svelte@" + getPackageVersion(importMap, "svelte", "5") + "/compiler");
+  const { compile, VERSION } = await import("npm:svelte@" + getPackageVersionFromUrl(importMap?.imports?.svelte, "5") + "/compiler");
   const majorVersion = parseInt(VERSION.split(".", 1)[0]);
   if (majorVersion < 5) {
     throw new Error("Unsupported Svelte version: " + VERSION + ". Please use svelte@5 or higher.");
@@ -152,19 +164,24 @@ async function transformSvelte(filename, sourceCode, importMap, isDev) {
 }
 
 // get the package version from the import map
-function getPackageVersion(importMap, pkgName, defaultVersion) {
-  const url = importMap?.imports?.[pkgName];
-  if (url && (url.startsWith("https://") || url.startsWith("http://"))) {
+function getPackageVersionFromUrl(url, defaultVersion) {
+  if (isHttpUrl(url)) {
     const { pathname } = new URL(url);
-    const m = pathname.match(/^\/\*?(svelte|vue)@([~\^]?[\w\+\-\.]+)(\/|\?|&|$)/);
+    const m = pathname.match(/^\/\*?[a-z\-]+@([~\^]?[\w\+\-\.]+)(\/|\?|&|$)/);
     if (m) {
-      return m[2];
+      return m[1];
     }
   }
   return defaultVersion;
 }
 
-async function tailwind(_id, content, config) {
+// check if the url is a http url
+function isHttpUrl(url) {
+  return typeof url === "string" && url.startsWith("https://") || url.startsWith("http://");
+}
+
+// generate css for the given content using tailwindcss
+async function tailwindCSS(_id, content, config) {
   const compilerId = config?.filename ?? ".";
   if (!once.tailwindCompilers) {
     once.tailwindCompilers = new Map();
@@ -214,7 +231,7 @@ async function tailwind(_id, content, config) {
   return (await compiler).build(extract(content));
 }
 
-// generate unocss for the given content
+// generate css for the given content using unocss
 async function unocss(_id, content, config) {
   const generatorId = config?.filename ?? ".";
   if (!once.unoGenerators) {

@@ -77,26 +77,21 @@ func transform(options *ResolvedTransformOptions) (out *TransformOutput, err err
 	}
 
 	if jsxImportSource == "" && (loader == esbuild.LoaderJSX || loader == esbuild.LoaderTSX) && options.importMap != nil {
-		var ok bool
-		for _, key := range []string{"@jsxRuntime", "@jsxImportSource"} {
-			path, resolved := options.importMap.Resolve(key, nil)
-			if resolved {
-				jsxImportSource = strings.TrimSuffix(path, "/jsx-runtime")
-				ok = true
+		for _, key := range options.importMap.Imports.Keys() {
+			if strings.HasSuffix(key, "/jsx-runtime") {
+				jsxImportSource = strings.TrimSuffix(key, "/jsx-runtime")
 				break
 			}
 		}
-		if !ok {
-			for _, key := range []string{"react/jsx-runtime", "preact/jsx-runtime"} {
-				_, resolved := options.importMap.Resolve(key, nil)
-				if resolved {
-					jsxImportSource = strings.TrimSuffix(key, "/jsx-runtime")
-					ok = true
+		if jsxImportSource == "" {
+			for _, key := range []string{"react/", "preact/", "solid-js/", "mono-jsx/dom/", "mono-jsx/", "vue/"} {
+				if options.importMap.Imports.Has(key) {
+					jsxImportSource = strings.TrimSuffix(key, "/")
 					break
 				}
 			}
 		}
-		if !ok {
+		if jsxImportSource == "" {
 			jsxImportSource = "react"
 		}
 	}

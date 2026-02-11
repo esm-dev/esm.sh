@@ -51,7 +51,7 @@ Deno.test("transform", async (t) => {
       target: "es2022",
       importMap: {
         imports: {
-          "@jsxRuntime": "https://preact@10.13.2",
+          "preact/jsx-runtime": "https://esm.sh/preact@10.13.2/jsx-runtime",
           "preact-render-to-string": "https://esm.sh/preact-render-to-string6.0.2",
         },
       },
@@ -68,7 +68,7 @@ Deno.test("transform", async (t) => {
     });
     assertEquals(res1.status, 200);
     const transformOut = await res1.json();
-    assertStringIncludes(transformOut.code, `"https://preact@10.13.2/jsx-runtime"`);
+    assertStringIncludes(transformOut.code, `"preact/jsx-runtime"`);
     assertStringIncludes(transformOut.code, `("h1"`);
     assertStringIncludes(transformOut.code, `//# sourceMappingURL=+${hash}.mjs.map`);
     assertStringIncludes(transformOut.map, `"mappings":`);
