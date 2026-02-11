@@ -92,7 +92,6 @@ async function tsx(filename, importMap, sourceCode, isDev) {
       }
     }
   }
-  output("debug", JSON.stringify(devImports));
   let lang = filename.endsWith(".md?jsx") ? "jsx" : undefined;
   let code = sourceCode ?? await Deno.readTextFile("." + filename);
   let map = undefined;
@@ -102,7 +101,7 @@ async function tsx(filename, importMap, sourceCode, isDev) {
     [lang, code, map] = await transformVue(filename, code, importMap, isDev);
   }
   if (!once.tsxWasm) {
-    once.tsxWasm = import("npm:@esm.sh/tsx@1.5.2").then(async (m) => {
+    once.tsxWasm = import("npm:@esm.sh/tsx@1.5.3").then(async (m) => {
       await m.init();
       return m;
     });
