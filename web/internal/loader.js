@@ -58,19 +58,25 @@ async function tsx(filename, importMap, sourceCode, isDev) {
         const firstSegment = pathname.split("/", 2)[1];
         if (firstSegment === pkgName || firstSegment.startsWith(pkgName + "@")) {
           const version = firstSegment.split("@")[1];
-          // replace extension `.mjs`  with `.development.mjs`
-          // or add `dev` query to the module url
-          if (pathname.endsWith(".mjs") && version) {
-            moduleUrl.pathname = pathname.slice(0, -4) + ".development.mjs";
-            devImports[specifier] = moduleUrl.toString();
-          } else {
-            moduleUrl.searchParams.set("dev", "TRUE");
-            devImports[specifier] = moduleUrl.toString().replace("dev=TRUE", "dev");
+          if (version) {
+            // replace extension `.mjs`  with `.development.mjs`
+            // or add `dev` query to the module url
+            if (pathname.endsWith(".mjs")) {
+              moduleUrl.pathname = pathname.slice(0, -4) + ".development.mjs";
+              devImports[specifier] = moduleUrl.toString();
+            } else if (specifier.endsWith("/")) {
+              // match esm.sh specified route: "https://esm.sh/react@19.2.0&dev/" pattern
+              devImports[specifier] = url.replace(version, version + "&dev" )
+            } else {
+              moduleUrl.searchParams.set("dev", "TRUE");
+              devImports[specifier] = moduleUrl.toString().replace("dev=TRUE", "dev");
+            }
           }
         }
       }
     }
   }
+
   let jsxImportSource = undefined;
   if (imports) {
     let jsxImportSourceUrl = undefined;
@@ -84,14 +90,17 @@ async function tsx(filename, importMap, sourceCode, isDev) {
     // ensure `jsx-dev-runtime` is included in the import map
     if (isDev && jsxImportSourceUrl && !imports[jsxImportSource + "/jsx-dev-runtime"]) {
       const version = getPackageVersionFromUrl(jsxImportSourceUrl);
-      if (version && jsxImportSourceUrl.endsWith("/jsx-runtime.mjs")) {
-        devImports[jsxImportSource + "/jsx-dev-runtime"] = jsxImportSourceUrl.slice(0, -16) + "/jsx-dev-runtime.development.mjs";
-      } else if (version) {
-        const { origin } = new Url(jsxImportSourceUrl);
-        devImports[jsxImportSource + "/jsx-dev-runtime"] = origin + "/" + jsxImportSource + "@" + version + "/jsx-dev-runtime";
+      if (version) {
+        if (jsxImportSourceUrl.endsWith("/jsx-runtime.mjs")) {
+          devImports[jsxImportSource + "/jsx-dev-runtime"] = jsxImportSourceUrl.slice(0, -16) + "/jsx-dev-runtime.development.mjs";
+        } else {
+          const { origin } = new URL(jsxImportSourceUrl);
+          devImports[jsxImportSource + "/jsx-dev-runtime"] = origin + "/" + jsxImportSource + "@" + version + "/jsx-dev-runtime";
+        }
       }
     }
   }
+
   let lang = filename.endsWith(".md?jsx") ? "jsx" : undefined;
   let code = sourceCode ?? await Deno.readTextFile("." + filename);
   let map = undefined;
