@@ -5,14 +5,14 @@ import (
 	"os"
 )
 
-const helpMessage = "\033[30mesm.sh - A nobuild tool for modern web development.\033[0m" + `
+const helpMessage = "\033[30mesm.sh - A no-build tool for modern web development.\033[0m" + `
 
 Usage: esm.sh [command] [options]
 
 Commands:
   add [...packages]     Add specified packages to the "importmap" in index.html
   tidy                  Clean up and optimize the "importmap" in index.html
-  init                  Initialize a new nobuild web app
+  init                  Initialize a new no-build web app
   serve                 Serve the web app in "production" mode
   dev                   Serve the web app in "development" mode with live reload
 
