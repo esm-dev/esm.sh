@@ -301,41 +301,6 @@ you to use query params with trailing slash: change the query prefix `?` to `&` 
 }
 ```
 
-## Using `esm.sh/tsx`
-
-`esm.sh/tsx` is a lightweight **1KB** script that allows you to write `TSX` directly in HTML without any build steps. Your source code is sent to the server, compiled, cached at the edge, and served to the browser as a JavaScript module.
-
-`esm.sh/tsx` supports `<script>` tags with `type` set to `text/babel`, `text/jsx`, `text/ts`, or `text/tsx`.
-
-In development mode (open the page on localhost), `esm.sh/tsx` uses [@esm.sh/tsx](https://github.com/esm-dev/tsx) to transform JSX syntax into JavaScript.
-
-```html
-<!DOCTYPE html>
-<html>
-<head>
-  <script type="importmap">
-    {
-      "imports": {
-        "react": "https://esm.sh/react@19.2.0",
-        "react-dom/client": "https://esm.sh/react-dom@19.2.0/client"
-      }
-    }
-  </script>
-  <script type="module" src="https://esm.sh/tsx"></script>
-</head>
-<body>
-  <div id="root"></div>
-  <script type="text/babel">
-    import { createRoot } from "react-dom/client"
-    createRoot(root).render(<h1>Hello, World!</h1>)
-  </script>
-</body>
-</html>
-```
-
-> [!TIP]
-> By default, esm.sh transforms your JSX syntax with `jsxImportSource` set to `react` or `preact` which is specified in the `importmap`. To use a custom JSX runtime, add `@jsxRuntime` specifier in the `importmap` script. For example, [solid-js](https://esm.sh/solid-js/jsx-runtime).
-
 ## Escape Hatch: Raw Source Files
 
 By default, esm.sh transforms (and bundles if necessary) the JavaScript source code. However, in rare cases, you may want to request JS source files from packages, as-is, without transformation into ES modules. To do so, you need to add a `?raw` query to the request URL.

@@ -3,13 +3,13 @@
 > [!WARNING]
 > The `web` package is still in development. Use it at your own risk.
 
-A golang `http.Handler` that serves _nobuild_ web applications.
+A golang `http.Handler` for serving _no-build_ web applications with esm.sh CDN.
 
-- Web applications are served _as-is_ without any build step.
+- Web applications are served _as-is_ without build step.
 - Transpiles TypeScript, JSX, Vue, Svelte _on-the-fly_.
-- Built-in [UnoCSS](https://unocss.dev) generator.
-- Staic files are served from the application directory.
-- Support Hot Module Replacement (HMR) for development
+- Built-in [TailwindCSS](https://tailwindcss.com) and [UnoCSS](https://unocss.dev) generator.
+- Static files are served from the application directory.
+- Support Hot Module Replacement (HMR) for development.
 
 ## Installation
 
@@ -19,7 +19,7 @@ go get -u github.com/esm-dev/esm.sh
 
 ## Usage
 
-Create a web server that serves the web application from a directory:
+Create a web server in golang that serves web application from a directory:
 
 ```go
 package main
@@ -41,19 +41,21 @@ func main() {
 }
 ```
 
-Create a `index.html` file in the web application directory:
+Create a `index.html` file in the application directory:
 
 ```html
 <!DOCTYPE html>
 <html>
 <head>
-  <title>My Web Application</title>
-  <link rel="stylesheet" href="/uno.css">
+  <title>My Application</title>
+  <link rel="stylesheet" href="/tailwind.css">
   <script type="importmap">
     {
       "imports": {
-        "react": "https://esm.sh/react@19.0.0",
-        "react-dom/client": "https://esm.sh/react-dom@19.0.0/client"
+        "react": "https://esm.sh/react@19.2.4",
+        "react/jsx-runtime": "https://esm.sh/react@19.2.4/jsx-runtime",
+        "react-dom": "https://esm.sh/react-dom@19.2.4",
+        "react-dom/client": "https://esm.sh/react-dom@19.2.4/client"
       }
     }
   </script>
@@ -65,7 +67,7 @@ Create a `index.html` file in the web application directory:
 </html>
 ```
 
-Create a `app.tsx` file in the web application directory:
+Create a `app.tsx` file in the application directory:
 
 ```tsx
 import { createRoot } from "react-dom/client"
@@ -77,11 +79,10 @@ function App() {
 createRoot(document.getElementById("app")).render(<App />)
 ```
 
-Create a `uno.css` file in the web application directory:
+Create a `tailwind.css` file in the application directory:
 
 ```css
-@import "@unocss/reset/tailwind.css";
-@import "@unocss/preset-wind3";
+@import "tailwindcss";
 ```
 
 Run the web server:
