@@ -1628,34 +1628,6 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 				// the sub-module name is same as the package name
 				esmPath.SubPath = basename
 			}
-			// a := strings.Split(esmPath.SubPath, "/")
-			// if len(a) > 0 {
-			// 	maybeTarget := a[0]
-			// 	if _, ok := targets[maybeTarget]; ok {
-			// 		subPath := strings.Join(a[1:], "/")
-
-			// 		basename := strings.TrimSuffix(path.Base(esmPath.PkgName), ".js")
-			// 		if strings.HasSuffix(subPath, ".css") && !strings.HasSuffix(esmPath.SubPath, ".mjs") {
-			// 			if subPath == basename+".css" {
-			// 				esmPath.SubPath = ""
-			// 				target = maybeTarget
-			// 			} else {
-			// 				url := fmt.Sprintf("%s/%s", origin, esmPath.String())
-			// 				return redirect(ctx, url, isExactVersion)
-			// 			}
-			// 		} else {
-			// 			switch subPath {
-			// 			case basename:
-			// 				subPath = ""
-			// 			case "__" + basename:
-			// 				// the sub-module name is same as the package name
-			// 				subPath = basename
-			// 			}
-			// 			esmPath.SubPath = subPath
-			// 			target = maybeTarget
-			// 		}
-			// 	}
-			// }
 		}
 
 		build := &BuildContext{
