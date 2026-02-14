@@ -37,7 +37,7 @@ func (p EsmPath) Package() npm.Package {
 func (p EsmPath) ID() string {
 	name := p.PkgName
 	if p.PkgVersion != "" && p.PkgVersion != "*" && p.PkgVersion != "latest" {
-		name += "@" + p.PkgVersion
+		name += "@" + strings.ReplaceAll(p.PkgVersion, " ", "%20")
 	}
 	if p.GhPrefix {
 		return "gh/" + name
@@ -206,27 +206,6 @@ func parseEsmPath(npmrc *NpmRC, pathname string) (esm EsmPath, extraQuery string
 	return
 }
 
-func splitEsmPath(pathname string) (pkgName string, pkgVersion string, subPath string) {
-	pathname = strings.TrimPrefix(pathname, "/")
-	if strings.HasPrefix(pathname, "@") {
-		scopeName, rest := utils.SplitByFirstByte(pathname, '/')
-		pkgName, subPath = utils.SplitByFirstByte(rest, '/')
-		pkgName = scopeName + "/" + pkgName
-	} else {
-		pkgName, subPath = utils.SplitByFirstByte(pathname, '/')
-	}
-	if len(pkgName) > 0 && pkgName[0] == '@' {
-		pkgName, pkgVersion = utils.SplitByFirstByte(pkgName[1:], '@')
-		pkgName = "@" + pkgName
-	} else {
-		pkgName, pkgVersion = utils.SplitByFirstByte(pkgName, '@')
-	}
-	if pkgVersion != "" {
-		pkgVersion = strings.TrimSpace(pkgVersion)
-	}
-	return
-}
-
 func parseSubPath(subPathRaw string) (subPath string, target string, xArgs *BuildArgs) {
 	segments := strings.Split(subPathRaw, "/")
 	if l := len(segments); l >= 2 {
@@ -249,10 +228,59 @@ func parseSubPath(subPathRaw string) (subPath string, target string, xArgs *Buil
 	return strings.Join(segments, "/"), "", nil
 }
 
+func splitEsmPath(pathname string) (pkgName string, pkgVersion string, subPath string) {
+	pathname = strings.TrimPrefix(pathname, "/")
+	if strings.HasPrefix(pathname, "@") {
+		scopeName, rest := utils.SplitByFirstByte(pathname, '/')
+		pkgName, subPath = utils.SplitByFirstByte(rest, '/')
+		pkgName = scopeName + "/" + pkgName
+	} else {
+		pkgName, subPath = utils.SplitByFirstByte(pathname, '/')
+	}
+	if len(pkgName) > 0 && pkgName[0] == '@' {
+		pkgName, pkgVersion = utils.SplitByFirstByte(pkgName[1:], '@')
+		pkgName = "@" + pkgName
+	} else {
+		pkgName, pkgVersion = utils.SplitByFirstByte(pkgName, '@')
+	}
+	if pkgVersion != "" {
+		pkgVersion = strings.TrimSpace(pkgVersion)
+	}
+	return
+}
+
 func toPackageName(specifier string) string {
 	name, _, _ := splitEsmPath(specifier)
 	return name
 }
+
+// func normalizeSemver(version string) string {
+// 	buf := make([]byte, 3*len(version))
+// 	var i int
+// 	for _, char := range version {
+// 		switch char {
+// 		case ' ':
+// 			copy(buf[i:], "%20")
+// 			i += 3
+// 		case '^':
+// 			copy(buf[i:], "%5E")
+// 			i += 3
+// 		case '|':
+// 			copy(buf[i:], "%7C")
+// 			i += 3
+// 		case '<':
+// 			copy(buf[i:], "%3C")
+// 			i += 3
+// 		case '>':
+// 			copy(buf[i:], "%3E")
+// 			i += 3
+// 		default:
+// 			buf[i] = byte(char)
+// 			i++
+// 		}
+// 	}
+// 	return string(buf[:i])
+// }
 
 // isPackageInExternalNamespace checks if a package belongs to an external namespace
 // For example, if "@radix-ui" is in external, then "@radix-ui/react-dropdown" would match
