@@ -949,16 +949,6 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 		return
 	}
 
-	if strings.ContainsRune(dep.PkgVersion, '|') || strings.ContainsRune(dep.PkgVersion, ' ') {
-		// fetch the latest version of the package based on the semver range
-		var p *npm.PackageJSON
-		_, p, err = ctx.resolveDependency(pkgName+"@"+pkgVersion, false)
-		if err != nil {
-			return
-		}
-		dep.PkgVersion = "^" + p.Version
-	}
-
 	resolvedPath = "/" + dep.String()
 	// workaround for es5-ext "../#/.." path
 	if dep.PkgName == "es5-ext" {
