@@ -34,9 +34,9 @@ func Run() {
 	case "init":
 		Init()
 	case "serve":
-		Serve(false)
+		Serve()
 	case "dev":
-		Serve(true)
+		Dev()
 	case "version":
 		fmt.Println("esm.sh CLI " + VERSION)
 	default:

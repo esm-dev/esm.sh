@@ -25,7 +25,7 @@ Options:
 `
 
 // Serve a web app in development mode.
-func Serve(dev bool) {
+func serve(dev bool) {
 	port := flag.Int("port", 3000, "port to serve on")
 	args, help := parseCommandFlags()
 
@@ -77,4 +77,9 @@ func Serve(dev bool) {
 		os.Stderr.WriteString(term.Red(err.Error()))
 		return
 	}
+}
+
+// Serve serves a web app in production mode.
+func Serve() {
+	serve(false)
 }
