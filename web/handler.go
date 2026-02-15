@@ -421,7 +421,7 @@ func (s *Handler) ServeHtml(w http.ResponseWriter, r *http.Request, filename str
 }
 
 func (s *Handler) ServeModule(w http.ResponseWriter, r *http.Request, filename string, query url.Values, preTransform []byte) {
-	indeHtmlStat, err := os.Lstat(filepath.Join(s.config.AppDir, "index.html"))
+	indexHtmlStat, err := os.Lstat(filepath.Join(s.config.AppDir, "index.html"))
 	if err != nil {
 		if os.IsNotExist(err) {
 			http.Error(w, "Bad Request", 400)
@@ -451,7 +451,7 @@ func (s *Handler) ServeModule(w http.ResponseWriter, r *http.Request, filename s
 		modTime = uint64(fi.ModTime().UnixMilli())
 		size = fi.Size()
 	}
-	etag := fmt.Sprintf("w/\"%x-%x-%x-%x%s\"", modTime, size, indeHtmlStat.ModTime().UnixMilli(), indeHtmlStat.Size(), s.etagSuffix)
+	etag := fmt.Sprintf("w/\"%x-%x-%x-%x%s\"", modTime, size, indexHtmlStat.ModTime().UnixMilli(), indexHtmlStat.Size(), s.etagSuffix)
 	if r.Header.Get("If-None-Match") == etag && !query.Has("t") {
 		w.WriteHeader(http.StatusNotModified)
 		return

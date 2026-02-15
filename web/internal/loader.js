@@ -59,14 +59,14 @@ async function tsx(filename, importMap, sourceCode, isDev) {
         if (firstSegment === pkgName || firstSegment.startsWith(pkgName + "@")) {
           const version = firstSegment.split("@")[1];
           if (version) {
-            // replace extension `.mjs`  with `.development.mjs`
+            // replace extension `.mjs` with `.development.mjs`
             // or add `dev` query to the module url
             if (pathname.endsWith(".mjs")) {
               moduleUrl.pathname = pathname.slice(0, -4) + ".development.mjs";
               devImports[specifier] = moduleUrl.toString();
             } else if (specifier.endsWith("/")) {
               // match esm.sh specified route: "https://esm.sh/react@19.2.0&dev/" pattern
-              devImports[specifier] = url.replace(version, version + "&dev" )
+              devImports[specifier] = url.replace(version, version + "&dev");
             } else {
               moduleUrl.searchParams.set("dev", "TRUE");
               devImports[specifier] = moduleUrl.toString().replace("dev=TRUE", "dev");
@@ -185,7 +185,7 @@ function getPackageVersionFromUrl(url, defaultVersion) {
 
 // check if the url is a http url
 function isHttpUrl(url) {
-  return typeof url === "string" && url.startsWith("https://") || url.startsWith("http://");
+  return typeof url === "string" && (url.startsWith("https://") || url.startsWith("http://"));
 }
 
 // generate css for the given content using tailwindcss
