@@ -452,6 +452,7 @@ func (ui *subModuleSelectUI) clearLines() {
 			term.ClearLine()
 			os.Stdout.Write(EOL) // move to the next line
 		}
+		term.ClearLine()
 		term.MoveCursorUp(height)
 	}()
 }
