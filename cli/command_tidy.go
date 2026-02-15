@@ -15,7 +15,7 @@ import (
 	"golang.org/x/net/html"
 )
 
-const tidyHelpMessage = `Clean up and optimize the "importmap" in index.html
+const tidyHelpMessage = `Clean up and optimize the "importmap" script in index.html
 
 Usage: esm.sh tidy [options]
 
