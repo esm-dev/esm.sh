@@ -277,10 +277,7 @@ func ParseEsmPath(pathnameOrUrl string) (imp Import, err error) {
 		if len(segs) > 0 {
 			if hasTargetSegment && strings.HasSuffix(pathname, ".mjs") {
 				subPath := strings.TrimSuffix(strings.Join(segs, "/"), ".mjs")
-				if strings.HasSuffix(subPath, ".development") {
-					subPath = strings.TrimSuffix(subPath, ".development")
-					imp.Dev = true
-				}
+				subPath, imp.Dev = strings.CutSuffix(subPath, ".development")
 				if strings.ContainsRune(subPath, '/') || (subPath != imp.Name && !strings.HasSuffix(imp.Name, "/"+subPath)) {
 					imp.SubPath = subPath
 				}

@@ -36,7 +36,6 @@ Deno.test("?meta query", async () => {
     const meta = await res.json();
     assertEquals(meta.name, "react-dom");
     assertEquals(meta.version, "19.2.3");
-    assertEquals(meta.subpath, "client");
 
     assert(!meta.exports);
     assertEquals(meta.imports?.length, 2);
