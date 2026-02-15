@@ -4,7 +4,7 @@ import { join } from "jsr:@std/path";
 
 Deno.test("transform", async (t) => {
   const modUrl = new URL(import.meta.url);
-  const templateDir = join(modUrl.pathname, "../../../cli/template");
+  const templateDir = join(modUrl.pathname, "../../../cli/templates");
   const ac = new AbortController();
 
   Deno.serve({
