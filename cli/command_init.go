@@ -14,7 +14,7 @@ import (
 	"github.com/ije/gox/term"
 )
 
-//go:embed template
+//go:embed templates
 var efs embed.FS
 
 const initHelpMessage = `Initialize a new nobuild web app with esm.sh CDN.
