@@ -94,11 +94,11 @@ func Init() {
 	var dir string
 	switch *cssFramework {
 	case "Tailwind":
-		dir = "template/with-tailwindcss/" + strings.ToLower(*framework)
+		dir = "templates/with-tailwindcss/" + strings.ToLower(*framework)
 	case "UnoCSS":
-		dir = "template/with-unocss/" + strings.ToLower(*framework)
+		dir = "templates/with-unocss/" + strings.ToLower(*framework)
 	default:
-		dir = "template/" + strings.ToLower(*framework)
+		dir = "templates/" + strings.ToLower(*framework)
 	}
 
 	err = walkEmbedFS(&efs, dir, func(filename string) error {
