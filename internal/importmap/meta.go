@@ -27,7 +27,7 @@ var (
 type Import struct {
 	Name     string `json:"name"`
 	Version  string `json:"version"`
-	SubPath  string `json:"subpath"`
+	SubPath  string `json:"-"`
 	Github   bool   `json:"-"`
 	Jsr      bool   `json:"-"`
 	External bool   `json:"-"`
@@ -154,9 +154,11 @@ func fetchImportMeta(cdnOrigin string, imp Import, target string) (meta ImportMe
 			defer f.Close()
 			err = json.NewDecoder(f).Decode(&meta)
 			if err == nil {
-				meta.Name = imp.Name
+				meta.SubPath = imp.SubPath
 				meta.Github = imp.Github
 				meta.Jsr = imp.Jsr
+				meta.External = imp.External
+				meta.Dev = imp.Dev
 				fetchCache.Store(url, meta)
 				return meta, nil
 			}
@@ -194,9 +196,11 @@ func fetchImportMeta(cdnOrigin string, imp Import, target string) (meta ImportMe
 		return
 	}
 
-	meta.Name = imp.Name
+	meta.SubPath = imp.SubPath
 	meta.Github = imp.Github
 	meta.Jsr = imp.Jsr
+	meta.External = imp.External
+	meta.Dev = imp.Dev
 
 	// cache the metadata on disk
 	dirname := filepath.Dir(cachePath)
