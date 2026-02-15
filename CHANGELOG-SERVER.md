@@ -7,21 +7,40 @@
   <!-- use build tools like Vite, Webpack, etc. -->
   <script type="module" src="app.tsx"></script>
 
-  <!-- use esm.sh/x -->
+  <!-- use esm.sh/x without build tools -->
   <script src="https://esm.sh/x" href="app.tsx"></script>
   ```
 * Introduce date(`yyyy-mm-dd`) versioning
   ```js
   import * as myPackage from "https://esm.sh/my-package@2026-01-02";
   ```
+* Introduce `?meta` API that allows you to get the module build metadata.
+  ```
+  $ curl https://esm.sh/react?meta
+  {
+    "name": "react",
+    "version": "19.2.4",
+    "module": "/react@19.2.4/es2022/react.mjs",
+    "integrity": "sha384-xPv1wRGmRBj4tIrN16FDkSIeMntFCfG+8ptsnx5wqrM+0zp/oKtoyJ0QqCJAAeVm",
+    "dts": "/@types/react@~19.2.9/index.d.ts",
+    "exports": ["./jsx-runtime", "./jsx-dev-runtime", "./compiler-runtime"],
+  }
+  ```
 * Other Changes:
-  * Upgrade esbuild to 0.27.3
-  * Upgrade unenv to 2.0.0-rc.22
-  * Support import with `{type: json}` (#1202)
+  * Upgrade `esbuild` to 0.27.3
+  * Upgrade `unenv` to 2.0.0-rc.22
+  * Support import with `{ type: "json" }` (#1202)
+  * Support import with `{ type: "css" }` (#1193)
+  * Support `.d.cts` types (#987)
+  * Support namespace-based external marking (#1188)
   * Optimize storage (#1260)
   * Remove unsafe `x-zone-id` and `x-npmrc` headers (#1235)
-  * Support `.d.cts` types (#987)
   * Ban urls with `/../` segments in path (#1271)
+  * Reserve semantic version of dependencies (#1313)
+  * Cache npm registry "not found" responses (#1297)
+  * Add `npmBackupRegistry` config for rate limitation (#1296)
+  * Fix sub-modules end with `.map` (#1311)
+  * Fix tree-shaking with exports query (#1310)
   * Fix memory leak (#1157)
   * Fix S3 Storage signature with `/#/` path (#1022)
   * Fix forward build deps for Typescript types (#1244)
