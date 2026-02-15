@@ -804,7 +804,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 				if !strings.HasSuffix(subPath, ".json") {
 					entry := ctx.resolveEntry(subModule)
 					if entry.main != "" {
-						resolvedPath = "/" + subModule.ID() + entry.main[1:]
+						resolvedPath = "/" + subModule.PackageId() + entry.main[1:]
 					}
 				}
 				// esbuild removes the `{ type: "json" }` when it's a dynamic import
@@ -911,7 +911,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 			}
 			entry := b.resolveEntry(dep)
 			if entry.main != "" {
-				resolvedPath = "/" + dep.ID() + entry.main[1:]
+				resolvedPath = "/" + dep.PackageId() + entry.main[1:]
 			}
 		}
 		if kind == esbuild.ResolveJSDynamicImport {
@@ -1000,7 +1000,7 @@ func (ctx *BuildContext) resolveDTS(entry BuildEntry) (string, error) {
 	if entry.types != "" {
 		return fmt.Sprintf(
 			"/%s/%s%s",
-			ctx.esmPath.ID(),
+			ctx.esmPath.PackageId(),
 			ctx.getBuildArgsPrefix(true),
 			strings.TrimPrefix(entry.types, "./"),
 		), nil
@@ -1063,7 +1063,7 @@ func (ctx *BuildContext) resolveDTS(entry BuildEntry) (string, error) {
 
 func (ctx *BuildContext) getImportPath(esm EsmPath, buildArgsPrefix string, externalAll bool) string {
 	if strings.HasSuffix(esm.SubPath, ".json") && ctx.existsPkgFile(esm.SubPath) {
-		return "/" + esm.ID() + "/" + esm.SubPath + "?module"
+		return "/" + esm.PackageId() + "/" + esm.SubPath + "?module"
 	}
 	asteriskPrefix := ""
 	if externalAll {
@@ -1088,7 +1088,7 @@ func (ctx *BuildContext) getImportPath(esm EsmPath, buildArgsPrefix string, exte
 	return fmt.Sprintf(
 		"/%s%s/%s%s/%s.mjs",
 		asteriskPrefix,
-		esm.ID(),
+		esm.PackageId(),
 		buildArgsPrefix,
 		ctx.target,
 		name,

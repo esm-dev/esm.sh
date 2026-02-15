@@ -33,7 +33,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 		marker = set.New[string]()
 	}
 
-	dtsPath := path.Join("/"+ctx.esmPath.ID(), buildArgsPrefix, dts)
+	dtsPath := path.Join("/"+ctx.esmPath.PackageId(), buildArgsPrefix, dts)
 	if marker.Has(dtsPath) {
 		// already transformed
 		return
@@ -146,7 +146,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 			if strings.ContainsRune(subPath, '*') {
 				return fmt.Sprintf(
 					"{ESM_CDN_ORIGIN}/%s/%s%s",
-					ctx.esmPath.ID(),
+					ctx.esmPath.PackageId(),
 					ctx.getBuildArgsPrefix(true),
 					subPath,
 				), nil
@@ -159,7 +159,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 				if entry.types != "" {
 					return fmt.Sprintf(
 						"{ESM_CDN_ORIGIN}/%s/%s%s",
-						ctx.esmPath.ID(),
+						ctx.esmPath.PackageId(),
 						ctx.getBuildArgsPrefix(true),
 						strings.TrimPrefix(entry.types, "./"),
 					), nil

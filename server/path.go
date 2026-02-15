@@ -34,25 +34,25 @@ func (p EsmPath) Package() npm.Package {
 	}
 }
 
-func (p EsmPath) ID() string {
-	name := p.PkgName
+func (p EsmPath) PackageId() string {
+	id := p.PkgName
 	if p.PkgVersion != "" && p.PkgVersion != "*" && p.PkgVersion != "latest" {
-		name += "@" + strings.ReplaceAll(p.PkgVersion, " ", "%20")
+		id += "@" + strings.ReplaceAll(p.PkgVersion, " ", "%20")
 	}
 	if p.GhPrefix {
-		return "gh/" + name
+		return "gh/" + id
 	}
 	if p.PrPrefix {
-		return "pr/" + name
+		return "pr/" + id
 	}
-	return name
+	return id
 }
 
 func (p EsmPath) String() string {
 	if p.SubPath != "" {
-		return p.ID() + "/" + p.SubPath
+		return p.PackageId() + "/" + p.SubPath
 	}
-	return p.ID()
+	return p.PackageId()
 }
 
 func parseEsmPath(npmrc *NpmRC, pathname string) (esm EsmPath, extraQuery string, exactVersion bool, target string, xArgs *BuildArgs, err error) {

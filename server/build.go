@@ -181,7 +181,7 @@ func (ctx *BuildContext) buildPath() {
 			ctx.path = fmt.Sprintf(
 				"/%s%s/%s%s",
 				asteriskPrefix,
-				esm.ID(),
+				esm.PackageId(),
 				ctx.getBuildArgsPrefix(true),
 				esm.SubPath,
 			)
@@ -217,7 +217,7 @@ func (ctx *BuildContext) buildPath() {
 	ctx.path = fmt.Sprintf(
 		"/%s%s/%s%s/%s.mjs",
 		asteriskPrefix,
-		esm.ID(),
+		esm.PackageId(),
 		ctx.getBuildArgsPrefix(ctx.target == "types"),
 		ctx.target,
 		name,
@@ -246,7 +246,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 		}
 		meta = &BuildMeta{
 			TypesOnly: true,
-			Dts:       "/" + ctx.esmPath.ID() + entry.types[1:],
+			Dts:       "/" + ctx.esmPath.PackageId() + entry.types[1:],
 		}
 		return
 	}
@@ -677,7 +677,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 
 							if len(args.With) > 0 && args.With["type"] == "css" {
 								return esbuild.OnResolveResult{
-									Path:        "/" + ctx.esmPath.ID() + utils.NormalizePathname(modulePath) + "?module",
+									Path:        "/" + ctx.esmPath.PackageId() + utils.NormalizePathname(modulePath) + "?module",
 									External:    true,
 									SideEffects: esbuild.SideEffectsFalse,
 								}, nil
@@ -1475,7 +1475,7 @@ func (ctx *BuildContext) buildTypes() (ret *BuildMeta, err error) {
 		return
 	}
 
-	ret = &BuildMeta{Dts: "/" + ctx.esmPath.ID() + dts[1:]}
+	ret = &BuildMeta{Dts: "/" + ctx.esmPath.PackageId() + dts[1:]}
 	return
 }
 
@@ -1527,7 +1527,7 @@ func (ctx *BuildContext) install() (err error) {
 			}
 		}
 
-		ctx.wd = path.Join(ctx.npmrc.StoreDir(), ctx.esmPath.ID())
+		ctx.wd = path.Join(ctx.npmrc.StoreDir(), ctx.esmPath.PackageId())
 		ctx.pkgJson = p
 	}
 
