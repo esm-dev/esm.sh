@@ -567,14 +567,15 @@ func (s *Handler) ServeModule(w http.ResponseWriter, r *http.Request, filename s
 			if ok {
 				im, err := importmap.ParseEsmPath(url)
 				if err != nil {
-					http.Error(w, "importmap:failed to parse vue import url: "+url, 500)
+					http.Error(w, "importmap: failed to parse vue import url: "+url, 500)
+					return
 				}
 				options["vueVersion"] = im.Version
 			}
-		}
-		// if use jsx in a vue app
-		if importMap.Imports.Has("vue/jsx-runtime") || importMap.Imports.Has("vue/") {
-			options["jsxImportSource"] = "vue"
+			// if use jsx in a vue app
+			if importMap.Imports.Has("vue/jsx-runtime") || importMap.Imports.Has("vue/") {
+				options["jsxImportSource"] = "vue"
+			}
 		}
 	} else if strings.HasSuffix(filename, ".svelte") || strings.HasSuffix(filename, ".md?svelte") {
 		if importMap != nil {
@@ -582,7 +583,8 @@ func (s *Handler) ServeModule(w http.ResponseWriter, r *http.Request, filename s
 			if ok {
 				im, err := importmap.ParseEsmPath(url)
 				if err != nil {
-					http.Error(w, "importmap:failed to parse svelte import url: "+url, 500)
+					http.Error(w, "importmap: failed to parse svelte import url: "+url, 500)
+					return
 				}
 				options["svelteVersion"] = im.Version
 			}
