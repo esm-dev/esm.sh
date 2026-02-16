@@ -284,7 +284,85 @@ func (s *Handler) ServeHtml(w http.ResponseWriter, r *http.Request, filename str
 			case "script":
 				srcAttr := attrs["src"]
 				hrefAttr := attrs["href"]
-				if !isHttpSepcifier(srcAttr) {
+				typeAttr := attrs["type"]
+				if typeAttr == "importmap" {
+					if s.config.Dev {
+						w.Write(tokenizer.Raw())
+						if tokenizer.Next() == html.TextToken {
+							text := tokenizer.Text()
+							im, err := importmap.Parse(nil, text)
+							if err != nil {
+								fmt.Println(term.Yellow("[warn] invalid importmap: " + err.Error()))
+								w.Write(text)
+							} else {
+								// 1. add `dev` query to `react`, `react-dom` and `vue` imports for development mode
+								var devImports [][2]string
+								im.Imports.Range(func(specifier, modUrl string) bool {
+									if isHttpSepcifier(modUrl) {
+										imp, err := importmap.ParseEsmPath(modUrl)
+										if err == nil {
+											u, _ := url.Parse(modUrl)
+											switch imp.Name {
+											case "react", "react-dom", "vue":
+												if strings.HasSuffix(u.Path, ".mjs") {
+													u.Path = u.Path[0:len(u.Path)-4] + ".development.mjs"
+												} else if strings.HasSuffix(specifier, "/") {
+													if imp.Version == "" {
+														return true
+													}
+													// esm.sh specified route: "https://esm.sh/react@19.2.0&dev/"
+													u.Path = strings.Replace(u.Path, "@"+imp.Version, "@"+imp.Version+"&dev", 1)
+												} else {
+													q := u.Query()
+													q.Set("dev", "TRUE")
+													u.RawQuery = strings.Replace(q.Encode(), "dev=TRUE", "dev", 1)
+												}
+												devImports = append(devImports, [2]string{specifier, encodeUrl(u)})
+											}
+										}
+									}
+									return true
+								})
+
+								// 2. ensure `jsx-dev-runtime` is included in the import map
+								var jsxRuntime string
+								var jsxRuntimeUrl string
+								for _, pkg := range []string{"react", "preact", "solid-js", "mono-jsx/dom", "mono-jsx"} {
+									url, ok := im.Resolve(pkg+"/jsx-runtime", nil)
+									if ok {
+										jsxRuntime = pkg
+										jsxRuntimeUrl = url
+										break
+									}
+								}
+								if jsxRuntimeUrl != "" && !im.Imports.Has(jsxRuntime+"/jsx-dev-runtime") {
+									u, err := url.Parse(jsxRuntimeUrl)
+									if err == nil {
+										if strings.HasSuffix(u.Path, "/jsx-runtime.mjs") {
+											u.Path = u.Path[0:len(u.Path)-16] + "/jsx-dev-runtime.development.mjs"
+										} else {
+											u.Path = strings.Replace(u.Path, "/jsx-runtime", "/jsx-dev-runtime", 1)
+										}
+										devImports = append(devImports, [2]string{jsxRuntime + "/jsx-dev-runtime", encodeUrl(u)})
+									}
+								}
+
+								// 3. override imports
+								for _, imp := range devImports {
+									im.Imports.Set(imp[0], imp[1])
+								}
+
+								// 4. send the modified importmap to client
+								w.Write([]byte{'\n'})
+								w.Write([]byte(im.FormatJSON(1)))
+								w.Write([]byte{'\n', ' ', ' '})
+							}
+						} else {
+							w.Write(tokenizer.Raw())
+						}
+						continue
+					}
+				} else if !isHttpSepcifier(srcAttr) {
 					srcAttr, _ = utils.SplitByFirstByte(srcAttr, '?')
 					srcAttr = u.ResolveReference(&url.URL{Path: srcAttr}).Path
 					w.Write([]byte("<script"))
@@ -420,7 +498,7 @@ func (s *Handler) ServeHtml(w http.ResponseWriter, r *http.Request, filename str
 	}
 }
 
-func (s *Handler) ServeModule(w http.ResponseWriter, r *http.Request, filename string, query url.Values, preTransform []byte) {
+func (s *Handler) ServeModule(w http.ResponseWriter, r *http.Request, filename string, query url.Values, preTransformContent []byte) {
 	indexHtmlStat, err := os.Lstat(filepath.Join(s.config.AppDir, "index.html"))
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -433,11 +511,11 @@ func (s *Handler) ServeModule(w http.ResponseWriter, r *http.Request, filename s
 
 	var modTime uint64
 	var size int64
-	if preTransform != nil {
+	if preTransformContent != nil {
 		xx := xxhash.New()
-		xx.Write(preTransform)
+		xx.Write(preTransformContent)
 		modTime = xx.Sum64()
-		size = int64(len(preTransform))
+		size = int64(len(preTransformContent))
 	} else {
 		fi, err := os.Lstat(filepath.Join(s.config.AppDir, filename))
 		if err != nil {
@@ -481,13 +559,55 @@ func (s *Handler) ServeModule(w http.ResponseWriter, r *http.Request, filename s
 		http.Error(w, "could not parse import map: "+err.Error(), 500)
 		return
 	}
-	args := []any{"tsx", filename, importMap, nil, s.config.Dev}
-	if preTransform != nil {
-		args[3] = string(preTransform)
+	options := map[string]any{"isDev": s.config.Dev}
+	args := []any{"tsx", filename, nil, options}
+	if strings.HasSuffix(filename, ".vue") || strings.HasSuffix(filename, ".md?vue") {
+		if importMap != nil {
+			url, ok := importMap.Imports.Get("vue")
+			if ok {
+				im, err := importmap.ParseEsmPath(url)
+				if err != nil {
+					http.Error(w, "importmap:failed to parse vue import url: "+url, 500)
+				}
+				options["vueVersion"] = im.Version
+			}
+		}
+		// if use jsx in a vue app
+		if importMap.Imports.Has("vue/jsx-runtime") || importMap.Imports.Has("vue/") {
+			options["jsxImportSource"] = "vue"
+		}
+	} else if strings.HasSuffix(filename, ".svelte") || strings.HasSuffix(filename, ".md?svelte") {
+		if importMap != nil {
+			url, ok := importMap.Imports.Get("svelte")
+			if ok {
+				im, err := importmap.ParseEsmPath(url)
+				if err != nil {
+					http.Error(w, "importmap:failed to parse svelte import url: "+url, 500)
+				}
+				options["svelteVersion"] = im.Version
+			}
+		}
+	} else {
+		if importMap != nil {
+			for _, pkg := range []string{"react", "preact", "solid-js", "mono-jsx/dom", "mono-jsx"} {
+				if importMap.Imports.Has(pkg+"/jsx-runtime") || importMap.Imports.Has(pkg+"/") {
+					options["jsxImportSource"] = pkg
+					break
+				}
+			}
+			for _, pkg := range []string{"react", "preact"} {
+				if importMap.Imports.Has(pkg) {
+					options[pkg] = true
+				}
+			}
+		}
+	}
+	if preTransformContent != nil {
+		args[2] = string(preTransformContent)
 	}
 	_, js, err := s.loaderWorker.Call(args...)
 	if err != nil {
-		fmt.Println(term.Red("[error] " + err.Error()))
+		fmt.Println(term.Red("[error] loader(tsx) " + err.Error()))
 		http.Error(w, "Internal Server Error", 500)
 		return
 	}
@@ -874,7 +994,19 @@ func (s *Handler) analyzeDependencyTree(entry string, importMap *importmap.Impor
 							if s.loaderWorker == nil {
 								return esbuild.OnLoadResult{}, errors.New("loader worker not started")
 							}
-							lang, code, err := s.loaderWorker.Call(ext[1:], pathname, contents, importMap)
+							framework := ext[1:]
+							options := map[string]any{}
+							if importMap != nil {
+								url, ok := importMap.Imports.Get(framework)
+								if ok {
+									im, err := importmap.ParseEsmPath(url)
+									if err != nil {
+										return esbuild.OnLoadResult{}, errors.New("failed to parse " + framework + " import url: " + url)
+									}
+									options[framework+"Version"] = im.Version
+								}
+							}
+							lang, code, err := s.loaderWorker.Call(framework, pathname, contents, options)
 							if err != nil {
 								return esbuild.OnLoadResult{}, err
 							}

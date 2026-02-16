@@ -2,6 +2,7 @@ package web
 
 import (
 	"net/http"
+	"net/url"
 	"path"
 	"strings"
 )
@@ -29,6 +30,25 @@ func isRelPathSpecifier(specifier string) bool {
 // isAbsPathSpecifier returns true if the specifier is an absolute path.
 func isAbsPathSpecifier(specifier string) bool {
 	return strings.HasPrefix(specifier, "/") || strings.HasPrefix(specifier, "file://")
+}
+
+// encodeUrl converts a url.URL to a string without escaping the path.
+func encodeUrl(u *url.URL) string {
+	var buf strings.Builder
+	n := len(u.Scheme) + 3 + len(u.Host) + len(u.Path) + len(u.RawQuery)
+	if u.RawQuery != "" {
+		n++ // '?'
+	}
+	buf.Grow(n)
+	buf.WriteString(u.Scheme)
+	buf.Write([]byte{':', '/', '/'})
+	buf.WriteString(u.Host)
+	buf.WriteString(u.Path)
+	if u.RawQuery != "" {
+		buf.WriteByte('?')
+		buf.WriteString(u.RawQuery)
+	}
+	return buf.String()
 }
 
 // dummyResponseWriter is a dummy http.ResponseWriter that does nothing.

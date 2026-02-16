@@ -42,72 +42,15 @@ for await (const line of Deno.stdin.readable.pipeThrough(new TextDecoderStream()
 }
 
 // transform TypeScript/JSX/TSX to JavaScript with HMR support
-async function tsx(filename, importMap, sourceCode, isDev) {
-  const imports = importMap?.imports;
-  const devImports = {};
-  if (imports && isDev) {
-    // add `dev` query to `react`, `react-dom` and `vue` imports for development mode
-    for (const [specifier, url] of Object.entries(imports)) {
-      const isReact = specifier === "react" || specifier.startsWith("react/");
-      const isReactDOM = specifier === "react-dom" || specifier.startsWith("react-dom/");
-      const isVue = specifier === "vue";
-      if (isHttpUrl(url) && (isReact || isReactDOM || isVue)) {
-        const [pkgName] = specifier.split("/", 1);
-        const moduleUrl = new URL(url);
-        const { pathname } = moduleUrl;
-        const firstSegment = pathname.split("/", 2)[1];
-        if (firstSegment === pkgName || firstSegment.startsWith(pkgName + "@")) {
-          const version = firstSegment.split("@")[1];
-          if (version) {
-            // replace extension `.mjs` with `.development.mjs`
-            // or add `dev` query to the module url
-            if (pathname.endsWith(".mjs")) {
-              moduleUrl.pathname = pathname.slice(0, -4) + ".development.mjs";
-              devImports[specifier] = moduleUrl.toString();
-            } else if (specifier.endsWith("/")) {
-              // match esm.sh specified route: "https://esm.sh/react@19.2.0&dev/" pattern
-              devImports[specifier] = url.replace(version, version + "&dev");
-            } else {
-              moduleUrl.searchParams.set("dev", "TRUE");
-              devImports[specifier] = moduleUrl.toString().replace("dev=TRUE", "dev");
-            }
-          }
-        }
-      }
-    }
-  }
-
-  let jsxImportSource = undefined;
-  if (imports) {
-    let jsxImportSourceUrl = undefined;
-    for (const pkg of ["react", "preact", "solid-js", "mono-jsx/dom", "mono-jsx", "vue"]) {
-      jsxImportSourceUrl = imports[pkg + "/jsx-runtime"] || imports[pkg + "/"];
-      if (jsxImportSourceUrl) {
-        jsxImportSource = pkg;
-        break;
-      }
-    }
-    // ensure `jsx-dev-runtime` is included in the import map
-    if (isDev && jsxImportSourceUrl && !imports[jsxImportSource + "/jsx-dev-runtime"]) {
-      const version = getPackageVersionFromUrl(jsxImportSourceUrl);
-      if (version) {
-        if (jsxImportSourceUrl.endsWith("/jsx-runtime.mjs")) {
-          devImports[jsxImportSource + "/jsx-dev-runtime"] = jsxImportSourceUrl.slice(0, -16) + "/jsx-dev-runtime.development.mjs";
-        } else {
-          const { origin } = new URL(jsxImportSourceUrl);
-          devImports[jsxImportSource + "/jsx-dev-runtime"] = origin + "/" + jsxImportSource + "@" + version + "/jsx-dev-runtime";
-        }
-      }
-    }
-  }
-
+async function tsx(filename, sourceCode, options) {
+  const { isDev, react, preact, jsxImportSource } = options ?? {};
   let lang = filename.endsWith(".md?jsx") ? "jsx" : undefined;
   let code = sourceCode ?? await Deno.readTextFile("." + filename);
-  let map = undefined;
+  let map = options.map;
   if (filename.endsWith(".svelte") || filename.endsWith(".md?svelte")) {
-    [lang, code, map] = await transformSvelte(filename, code, importMap, isDev);
+    [lang, code, map] = await transformSvelte(filename, code, options);
   } else if (filename.endsWith(".vue") || filename.endsWith(".md?vue")) {
-    [lang, code, map] = await transformVue(filename, code, importMap, isDev);
+    [lang, code, map] = await transformVue(filename, code, options);
   }
   if (!once.tsxWasm) {
     once.tsxWasm = import("npm:@esm.sh/tsx@1.5.3").then(async (m) => {
@@ -116,15 +59,12 @@ async function tsx(filename, importMap, sourceCode, isDev) {
     });
   }
 
-  const react = imports?.react;
-  const preact = imports?.preact;
   const ret = (await once.tsxWasm).transform({
     filename,
     lang,
     code,
     jsxImportSource,
-    importMap: isDev ? { imports: devImports } : undefined,
-    sourceMap: isDev ? (map ? "external" : "inline") : undefined,
+    sourceMap: isDev ? (options.map ? "external" : "inline") : undefined,
     dev: isDev
       ? {
         hmr: { runtime: "/@hmr" },
@@ -135,20 +75,20 @@ async function tsx(filename, importMap, sourceCode, isDev) {
       : undefined,
   });
   let js = dec.decode(ret.code);
-  if (ret.map) {
-    if (map) {
-      // todo: merge preprocess source map
-    }
+  if (map && ret.map) {
+    // todo: merge source maps
     js += "\n//# sourceMappingURL=data:application/json;base64," + btoa(dec.decode(ret.map));
   }
   return js;
 }
 
 // transform Vue SFC to JavaScript
-async function transformVue(filename, sourceCode, importMap, isDev) {
+async function transformVue(filename, sourceCode, options) {
+  const { isDev, vueVersion } = options ?? {};
+  const code = sourceCode ?? await Deno.readTextFile("." + filename);
   const { transform } = await import("npm:@esm.sh/vue-compiler@1.0.1");
-  const ret = await transform(filename, sourceCode, {
-    imports: { "@vue/compiler-sfc": import("npm:@vue/compiler-sfc@" + getPackageVersionFromUrl(importMap?.imports?.vue, "3")) },
+  const ret = await transform(filename, code, {
+    imports: { "@vue/compiler-sfc": import("npm:@vue/compiler-sfc@" + vueVersion) },
     isDev,
     devRuntime: isDev ? "/@vdr" : undefined,
   });
@@ -156,36 +96,21 @@ async function transformVue(filename, sourceCode, importMap, isDev) {
 }
 
 // transform Svelte SFC to JavaScript
-async function transformSvelte(filename, sourceCode, importMap, isDev) {
-  const { compile, VERSION } = await import("npm:svelte@" + getPackageVersionFromUrl(importMap?.imports?.svelte, "5") + "/compiler");
+async function transformSvelte(filename, sourceCode, options) {
+  const code = sourceCode ?? await Deno.readTextFile("." + filename);
+  const { isDev, svelteVersion } = options ?? {};
+  const { compile, VERSION } = await import("npm:svelte@" + svelteVersion + "/compiler");
   const majorVersion = parseInt(VERSION.split(".", 1)[0]);
   if (majorVersion < 5) {
     throw new Error("Unsupported Svelte version: " + VERSION + ". Please use svelte@5 or higher.");
   }
-  const { js } = compile(sourceCode, {
+  const { js } = compile(code, {
     filename,
     css: "injected",
     dev: isDev,
     hmr: isDev,
   });
   return ["js", js.code, js.map];
-}
-
-// get the package version from the import map
-function getPackageVersionFromUrl(url, defaultVersion) {
-  if (isHttpUrl(url)) {
-    const { pathname } = new URL(url);
-    const m = pathname.match(/^\/\*?[a-z\-]+@([~\^]?[\w\+\-\.]+)(\/|\?|&|$)/);
-    if (m) {
-      return m[1];
-    }
-  }
-  return defaultVersion;
-}
-
-// check if the url is a http url
-function isHttpUrl(url) {
-  return typeof url === "string" && (url.startsWith("https://") || url.startsWith("http://"));
 }
 
 // generate css for the given content using tailwindcss
