@@ -46,7 +46,7 @@ async function tsx(filename, sourceCode, options) {
   const { isDev, react, preact, jsxImportSource } = options ?? {};
   let lang = filename.endsWith(".md?jsx") ? "jsx" : undefined;
   let code = sourceCode ?? await Deno.readTextFile("." + filename);
-  let map = options.map;
+  let map = options?.map;
   if (filename.endsWith(".svelte") || filename.endsWith(".md?svelte")) {
     [lang, code, map] = await transformSvelte(filename, code, options);
   } else if (filename.endsWith(".vue") || filename.endsWith(".md?vue")) {
@@ -64,7 +64,7 @@ async function tsx(filename, sourceCode, options) {
     lang,
     code,
     jsxImportSource,
-    sourceMap: isDev ? (options.map ? "external" : "inline") : undefined,
+    sourceMap: isDev ? (map ? "external" : "inline") : undefined,
     dev: isDev
       ? {
         hmr: { runtime: "/@hmr" },
@@ -85,8 +85,11 @@ async function tsx(filename, sourceCode, options) {
 // transform Vue SFC to JavaScript
 async function transformVue(filename, sourceCode, options) {
   const { isDev, vueVersion } = options ?? {};
-  const code = sourceCode ?? await Deno.readTextFile("." + filename);
+  if (!vueVersion) {
+    throw new Error("`vueVersion` option is required");
+  }
   const { transform } = await import("npm:@esm.sh/vue-compiler@1.0.1");
+  const code = sourceCode ?? await Deno.readTextFile("." + filename);
   const ret = await transform(filename, code, {
     imports: { "@vue/compiler-sfc": import("npm:@vue/compiler-sfc@" + vueVersion) },
     isDev,
@@ -97,12 +100,15 @@ async function transformVue(filename, sourceCode, options) {
 
 // transform Svelte SFC to JavaScript
 async function transformSvelte(filename, sourceCode, options) {
-  const code = sourceCode ?? await Deno.readTextFile("." + filename);
   const { isDev, svelteVersion } = options ?? {};
+  if (!svelteVersion) {
+    throw new Error("`svelteVersion` option is required");
+  }
   const { compile, VERSION } = await import("npm:svelte@" + svelteVersion + "/compiler");
+  const code = sourceCode ?? await Deno.readTextFile("." + filename);
   const majorVersion = parseInt(VERSION.split(".", 1)[0]);
   if (majorVersion < 5) {
-    throw new Error("Unsupported Svelte version: " + VERSION + ". Please use svelte@5 or higher.");
+    throw new Error("Unsupported svelte version: " + VERSION + ". Please use svelte@5 or higher.");
   }
   const { js } = compile(code, {
     filename,
