@@ -16,7 +16,7 @@ import (
 	"github.com/ije/gox/utils"
 )
 
-const version = "2.5.6"
+const version = "2.6.9"
 
 func ResolveDenoPath(workDir string) string {
 	denoPath := filepath.Join(workDir, "bin/deno")

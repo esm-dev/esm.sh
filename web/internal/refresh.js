@@ -1,7 +1,7 @@
 // Fast-refresh for React!
 // @see https://github.com/facebook/react/issues/16604#issuecomment-528663101
 
-import Refresh from "https://esm.sh/react-refresh@0.16.0/es2022/react-refresh.development.mjs";
+import Refresh from "https://esm.sh/react-refresh@0.18.0/es2022/react-refresh.development.mjs";
 
 let timer;
 

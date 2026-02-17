@@ -1,16 +1,10 @@
 package web
 
 import (
-	"errors"
 	"net/http"
-	"os"
+	"net/url"
 	"path"
 	"strings"
-
-	"github.com/ije/esbuild-internal/config"
-	"github.com/ije/esbuild-internal/js_ast"
-	"github.com/ije/esbuild-internal/js_parser"
-	"github.com/ije/esbuild-internal/logger"
 )
 
 // isModulePath checks if the given string is a module path.
@@ -38,48 +32,23 @@ func isAbsPathSpecifier(specifier string) bool {
 	return strings.HasPrefix(specifier, "/") || strings.HasPrefix(specifier, "file://")
 }
 
-// validateModule validates javascript/typescript module from the given file.
-func validateModule(filename string) (namedExports []string, err error) {
-	data, err := os.ReadFile(filename)
-	if err != nil {
-		return
+// encodeUrl converts a url.URL to a string without escaping the path.
+func encodeUrl(u *url.URL) string {
+	var buf strings.Builder
+	n := len(u.Scheme) + 3 + len(u.Host) + len(u.Path) + len(u.RawQuery)
+	if u.RawQuery != "" {
+		n++ // '?'
 	}
-	log := logger.NewDeferLog(logger.DeferLogNoVerboseOrDebug, nil)
-	ext := path.Ext(filename)
-	parserOpts := js_parser.OptionsFromConfig(&config.Options{
-		JSX: config.JSXOptions{
-			Parse: ext == ".jsx" || ext == ".tsx",
-		},
-		TS: config.TSOptions{
-			Parse: ext == ".ts" || ext == ".tsx" || ext == ".mts",
-		},
-	})
-	ast, pass := js_parser.Parse(log, logger.Source{
-		Index:          0,
-		KeyPath:        logger.Path{Text: "<stdin>"},
-		PrettyPaths:    logger.PrettyPaths{Rel: "<stdin>"},
-		IdentifierName: "stdin",
-		Contents:       string(data),
-	}, parserOpts)
-	if !pass {
-		err = errors.New("invalid syntax, require javascript/typescript")
-		return
+	buf.Grow(n)
+	buf.WriteString(u.Scheme)
+	buf.Write([]byte{':', '/', '/'})
+	buf.WriteString(u.Host)
+	buf.WriteString(u.Path)
+	if u.RawQuery != "" {
+		buf.WriteByte('?')
+		buf.WriteString(u.RawQuery)
 	}
-	if ast.ExportsKind == js_ast.ExportsCommonJS {
-		err = errors.New("not a module")
-		return
-	}
-	if ast.ExportsKind == js_ast.ExportsESMWithDynamicFallback {
-		err = errors.New("\"export * from\" syntax is no allowed")
-		return
-	}
-	namedExports = make([]string, len(ast.NamedExports))
-	i := 0
-	for name := range ast.NamedExports {
-		namedExports[i] = name
-		i++
-	}
-	return
+	return buf.String()
 }
 
 // dummyResponseWriter is a dummy http.ResponseWriter that does nothing.

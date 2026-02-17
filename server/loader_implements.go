@@ -210,15 +210,15 @@ func generateTailwindCSS(npmrc *NpmRC, configCSS string, content string) (out *L
 }
 
 func generateUnoCSS(npmrc *NpmRC, configCSS string, content string) (out *LoaderOutput, err error) {
-	unocssVersion := "0.5.4"
-	loaderExecPath := path.Join(config.WorkDir, "bin", "unocss-"+unocssVersion)
+	esmUnocssVersion := "0.6.0"
+	loaderExecPath := path.Join(config.WorkDir, "bin", "unocss-"+esmUnocssVersion)
 
 	err = doOnce(loaderExecPath, func() (err error) {
 		if !existsFile(loaderExecPath) {
 			if DEBUG {
 				fmt.Println(term.Dim("Compiling unocss loader..."))
 			}
-			err = compileUnocssLoader(npmrc, unocssVersion, loaderExecPath)
+			err = compileUnocssLoader(npmrc, esmUnocssVersion, loaderExecPath)
 		}
 		return
 	})
@@ -345,11 +345,11 @@ func compileTailwindCSSLoader(npmrc *NpmRC, pkgVersion string, loaderExecPath st
 	return
 }
 
-func compileUnocssLoader(npmrc *NpmRC, pkgVersion string, loaderExecPath string) (err error) {
-	wd := path.Join(npmrc.StoreDir(), "@esm.sh/unocss@"+pkgVersion)
+func compileUnocssLoader(npmrc *NpmRC, esmUnocssVersion string, loaderExecPath string) (err error) {
+	wd := path.Join(npmrc.StoreDir(), "@esm.sh/unocss@"+esmUnocssVersion)
 
 	// install @esm.sh/unocss
-	pkgJson, err := npmrc.installPackage(npm.Package{Name: "@esm.sh/unocss", Version: pkgVersion})
+	pkgJson, err := npmrc.installPackage(npm.Package{Name: "@esm.sh/unocss", Version: esmUnocssVersion})
 	if err != nil {
 		return
 	}

@@ -25,7 +25,7 @@ for await (const line of Deno.stdin.readable.pipeThrough(new TextDecoderStream()
         break;
       }
       case "tailwind": {
-        output("css", await tailwind(...args));
+        output("css", await tailwindCSS(...args));
         break;
       }
       case "unocss": {
@@ -42,68 +42,28 @@ for await (const line of Deno.stdin.readable.pipeThrough(new TextDecoderStream()
 }
 
 // transform TypeScript/JSX/TSX to JavaScript with HMR support
-async function tsx(filename, importMap, sourceCode, isDev) {
-  const imports = importMap?.imports;
-  const devImports = {};
-  if (imports && isDev) {
-    // add `?dev` query to `react-dom` and `vue` imports for development mode
-    for (const [specifier, url] of Object.entries(imports)) {
-      const isReact = specifier === "react" || specifier === "react/" || specifier.startsWith("react/");
-      if (
-        (
-          isReact
-          || specifier === "react-dom" || specifier === "react-dom/" || specifier.startsWith("react-dom/")
-          || specifier === "vue"
-        ) && (url.startsWith("https://") || url.startsWith("http://"))
-      ) {
-        const [pkgName, subModule] = specifier.split("/");
-        const { pathname } = new URL(url);
-        const seg1 = pathname.split("/")[1];
-        if (seg1 === pkgName || seg1.startsWith(pkgName + "@")) {
-          const version = seg1.split("@")[1];
-          if (specifier.endsWith("/") || !version) {
-            devImports[specifier] = "https://esm.sh/" + pkgName + (version ? "@" + version : "@latest") + "&dev"
-              + (subModule ? "/" + subModule : "") + "/";
-          } else {
-            devImports[specifier] = "https://esm.sh/" + pkgName + "@" + version + "/es2022/" + (subModule || pkgName)
-              + ".development.mjs";
-          }
-          if (isReact && version) {
-            devImports["react/jsx-dev-runtime"] = "https://esm.sh/react@" + version + "/es2022/jsx-dev-runtime.development.mjs";
-          }
-        }
-      }
-    }
-  }
-  let jsxImportSource = undefined;
-  if (["react/", "react/jsx-runtime", "react/jsx-dev-runtime"].some(s => !!(imports?.[s]))) {
-    jsxImportSource = "react";
-  } else if (["preact/", "preact/jsx-runtime", "preact/jsx-dev-runtime"].some(s => !!(imports?.[s]))) {
-    jsxImportSource = "preact";
-  }
+async function tsx(filename, sourceCode, options) {
+  const { isDev, react, preact, jsxImportSource } = options ?? {};
   let lang = filename.endsWith(".md?jsx") ? "jsx" : undefined;
   let code = sourceCode ?? await Deno.readTextFile("." + filename);
-  let map = undefined;
+  let map = options?.map;
   if (filename.endsWith(".svelte") || filename.endsWith(".md?svelte")) {
-    [lang, code, map] = await transformSvelte(filename, code, importMap, isDev);
+    [lang, code, map] = await transformSvelte(filename, code, options);
   } else if (filename.endsWith(".vue") || filename.endsWith(".md?vue")) {
-    [lang, code, map] = await transformVue(filename, code, importMap, isDev);
+    [lang, code, map] = await transformVue(filename, code, options);
   }
   if (!once.tsxWasm) {
-    once.tsxWasm = import("npm:@esm.sh/tsx@1.5.2").then(async (m) => {
+    once.tsxWasm = import("npm:@esm.sh/tsx@1.5.3").then(async (m) => {
       await m.init();
       return m;
     });
   }
 
-  const react = imports?.react;
-  const preact = imports?.preact;
   const ret = (await once.tsxWasm).transform({
     filename,
     lang,
     code,
     jsxImportSource,
-    importMap: isDev ? { imports: devImports } : undefined,
     sourceMap: isDev ? (map ? "external" : "inline") : undefined,
     dev: isDev
       ? {
@@ -115,20 +75,23 @@ async function tsx(filename, importMap, sourceCode, isDev) {
       : undefined,
   });
   let js = dec.decode(ret.code);
-  if (ret.map) {
-    if (map) {
-      // todo: merge preprocess source map
-    }
+  if (map && ret.map) {
+    // todo: merge source maps
     js += "\n//# sourceMappingURL=data:application/json;base64," + btoa(dec.decode(ret.map));
   }
   return js;
 }
 
 // transform Vue SFC to JavaScript
-async function transformVue(filename, sourceCode, importMap, isDev) {
+async function transformVue(filename, sourceCode, options) {
+  const { isDev, vueVersion } = options ?? {};
+  if (!vueVersion) {
+    throw new Error("`vueVersion` option is required");
+  }
   const { transform } = await import("npm:@esm.sh/vue-compiler@1.0.1");
-  const ret = await transform(filename, sourceCode, {
-    imports: { "@vue/compiler-sfc": import("npm:@vue/compiler-sfc@" + getPackageVersion(importMap, "vue", "3")) },
+  const code = sourceCode ?? await Deno.readTextFile("." + filename);
+  const ret = await transform(filename, code, {
+    imports: { "@vue/compiler-sfc": import("npm:@vue/compiler-sfc@" + vueVersion) },
     isDev,
     devRuntime: isDev ? "/@vdr" : undefined,
   });
@@ -136,13 +99,18 @@ async function transformVue(filename, sourceCode, importMap, isDev) {
 }
 
 // transform Svelte SFC to JavaScript
-async function transformSvelte(filename, sourceCode, importMap, isDev) {
-  const { compile, VERSION } = await import("npm:svelte@" + getPackageVersion(importMap, "svelte", "5") + "/compiler");
+async function transformSvelte(filename, sourceCode, options) {
+  const { isDev, svelteVersion } = options ?? {};
+  if (!svelteVersion) {
+    throw new Error("`svelteVersion` option is required");
+  }
+  const { compile, VERSION } = await import("npm:svelte@" + svelteVersion + "/compiler");
+  const code = sourceCode ?? await Deno.readTextFile("." + filename);
   const majorVersion = parseInt(VERSION.split(".", 1)[0]);
   if (majorVersion < 5) {
-    throw new Error("Unsupported Svelte version: " + VERSION + ". Please use svelte@5 or higher.");
+    throw new Error("Unsupported svelte version: " + VERSION + ". Please use svelte@5 or higher.");
   }
-  const { js } = compile(sourceCode, {
+  const { js } = compile(code, {
     filename,
     css: "injected",
     dev: isDev,
@@ -151,20 +119,8 @@ async function transformSvelte(filename, sourceCode, importMap, isDev) {
   return ["js", js.code, js.map];
 }
 
-// get the package version from the import map
-function getPackageVersion(importMap, pkgName, defaultVersion) {
-  const url = importMap?.imports?.[pkgName];
-  if (url && (url.startsWith("https://") || url.startsWith("http://"))) {
-    const { pathname } = new URL(url);
-    const m = pathname.match(/^\/\*?(svelte|vue)@([~\^]?[\w\+\-\.]+)(\/|\?|&|$)/);
-    if (m) {
-      return m[2];
-    }
-  }
-  return defaultVersion;
-}
-
-async function tailwind(_id, content, config) {
+// generate css for the given content using tailwindcss
+async function tailwindCSS(_id, content, config) {
   const compilerId = config?.filename ?? ".";
   if (!once.tailwindCompilers) {
     once.tailwindCompilers = new Map();
@@ -214,7 +170,7 @@ async function tailwind(_id, content, config) {
   return (await compiler).build(extract(content));
 }
 
-// generate unocss for the given content
+// generate css for the given content using unocss
 async function unocss(_id, content, config) {
   const generatorId = config?.filename ?? ".";
   if (!once.unoGenerators) {
@@ -222,7 +178,7 @@ async function unocss(_id, content, config) {
   }
   let uno = once.unoGenerators.get(generatorId);
   if (!uno || uno.configCSS !== config?.css) {
-    uno = import("npm:@esm.sh/unocss@0.5.4").then(({ init }) => init({ configCSS: config?.css }));
+    uno = import("npm:@esm.sh/unocss@0.6.0").then(({ init }) => init({ configCSS: config?.css }));
     uno.configCSS = config?.css;
     once.unoGenerators.set(generatorId, uno);
   }

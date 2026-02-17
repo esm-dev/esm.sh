@@ -27,7 +27,7 @@ var (
 type Import struct {
 	Name     string `json:"name"`
 	Version  string `json:"version"`
-	SubPath  string `json:"subpath"`
+	SubPath  string `json:"-"`
 	Github   bool   `json:"-"`
 	Jsr      bool   `json:"-"`
 	External bool   `json:"-"`
@@ -66,6 +66,7 @@ func (im Import) RegistryPrefix() string {
 // ImportMeta represents the import metadata of a import.
 type ImportMeta struct {
 	Import
+	Module      string   `json:"module"`
 	Integrity   string   `json:"integrity"` // "sha384-..."
 	Exports     []string `json:"exports"`
 	Imports     []string `json:"imports"`
@@ -153,9 +154,11 @@ func fetchImportMeta(cdnOrigin string, imp Import, target string) (meta ImportMe
 			defer f.Close()
 			err = json.NewDecoder(f).Decode(&meta)
 			if err == nil {
-				meta.Name = imp.Name
+				meta.SubPath = imp.SubPath
 				meta.Github = imp.Github
 				meta.Jsr = imp.Jsr
+				meta.External = imp.External
+				meta.Dev = imp.Dev
 				fetchCache.Store(url, meta)
 				return meta, nil
 			}
@@ -193,9 +196,11 @@ func fetchImportMeta(cdnOrigin string, imp Import, target string) (meta ImportMe
 		return
 	}
 
-	meta.Name = imp.Name
+	meta.SubPath = imp.SubPath
 	meta.Github = imp.Github
 	meta.Jsr = imp.Jsr
+	meta.External = imp.External
+	meta.Dev = imp.Dev
 
 	// cache the metadata on disk
 	dirname := filepath.Dir(cachePath)
@@ -276,10 +281,7 @@ func ParseEsmPath(pathnameOrUrl string) (imp Import, err error) {
 		if len(segs) > 0 {
 			if hasTargetSegment && strings.HasSuffix(pathname, ".mjs") {
 				subPath := strings.TrimSuffix(strings.Join(segs, "/"), ".mjs")
-				if strings.HasSuffix(subPath, ".development") {
-					subPath = strings.TrimSuffix(subPath, ".development")
-					imp.Dev = true
-				}
+				subPath, imp.Dev = strings.CutSuffix(subPath, ".development")
 				if strings.ContainsRune(subPath, '/') || (subPath != imp.Name && !strings.HasSuffix(imp.Name, "/"+subPath)) {
 					imp.SubPath = subPath
 				}

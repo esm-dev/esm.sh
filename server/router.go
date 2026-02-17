@@ -889,12 +889,12 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 			return rex.Status(status, message)
 		}
 
-		if !config.AllowList.IsEmpty() && !config.AllowList.IsPackageAllowed(esmPath.ID()) {
+		if !config.AllowList.IsEmpty() && !config.AllowList.IsPackageAllowed(esmPath.PackageId()) {
 			ctx.SetHeader("Cache-Control", "public, max-age=3600")
 			return rex.Status(403, "forbidden")
 		}
 
-		if !config.BanList.IsEmpty() && config.BanList.IsPackageBanned(esmPath.ID()) {
+		if !config.BanList.IsEmpty() && config.BanList.IsPackageBanned(esmPath.PackageId()) {
 			ctx.SetHeader("Cache-Control", "public, max-age=3600")
 			return rex.Status(403, "forbidden")
 		}
@@ -932,7 +932,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 
 		// redirect to the main css path for CSS packages
 		if css := cssPackages[esmPath.PkgName]; css != "" && esmPath.SubPath == "" {
-			url := fmt.Sprintf("%s/%s/%s", origin, esmPath.ID(), css)
+			url := fmt.Sprintf("%s/%s/%s", origin, esmPath.PackageId(), css)
 			return redirect(ctx, url, isExactVersion)
 		}
 
@@ -1022,7 +1022,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 			if err != nil {
 				return rex.Status(500, err.Error())
 			}
-			filename := path.Join(npmrc.StoreDir(), esmPath.ID(), "node_modules", esmPath.PkgName, esmPath.SubPath)
+			filename := path.Join(npmrc.StoreDir(), esmPath.PackageId(), "node_modules", esmPath.PkgName, esmPath.SubPath)
 			stat, err := os.Lstat(filename)
 			if err != nil {
 				if os.IsNotExist(err) {
@@ -1042,7 +1042,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 		// redirect to the url with exact package version
 		if !isExactVersion {
 			if hasTargetSegment {
-				pkgName := esmPath.ID()
+				pkgName := esmPath.PackageId()
 				subPath := ""
 				query := ""
 				if asteriskPrefix {
@@ -1100,7 +1100,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 		// fix url that is related to `import.meta.url`
 		if hasTargetSegment && isExactVersion && pathKind == RawFile && !rawFlag {
 			extname := path.Ext(esmPath.SubPath)
-			dir := path.Join(npmrc.StoreDir(), esmPath.ID())
+			dir := path.Join(npmrc.StoreDir(), esmPath.PackageId())
 			if !existsDir(dir) {
 				_, err := npmrc.installPackage(esmPath.Package())
 				if err != nil {
@@ -1159,7 +1159,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 
 			// return css file as a `CSSStyleSheet` object when `?module` query is present
 			if pathKind == RawFile && strings.HasSuffix(esmPath.SubPath, ".css") && query.Has("module") {
-				filename := path.Join(npmrc.StoreDir(), esmPath.ID(), "node_modules", esmPath.PkgName, esmPath.SubPath)
+				filename := path.Join(npmrc.StoreDir(), esmPath.PackageId(), "node_modules", esmPath.PkgName, esmPath.SubPath)
 				css, err := os.ReadFile(filename)
 				if err != nil {
 					return rex.Status(500, err.Error())
@@ -1201,10 +1201,10 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 						query = "?" + rawQuery
 					}
 					// redirect to the 'main' JS file
-					return redirect(ctx, fmt.Sprintf("%s/%s%s%s", origin, esmPath.ID(), utils.NormalizePathname(entry.main), query), true)
+					return redirect(ctx, fmt.Sprintf("%s/%s%s%s", origin, esmPath.PackageId(), utils.NormalizePathname(entry.main), query), true)
 				}
 
-				filename := path.Join(npmrc.StoreDir(), esmPath.ID(), "node_modules", esmPath.PkgName, esmPath.SubPath)
+				filename := path.Join(npmrc.StoreDir(), esmPath.PackageId(), "node_modules", esmPath.PkgName, esmPath.SubPath)
 				stat, err := os.Lstat(filename)
 				if err != nil && os.IsNotExist(err) {
 					// if the file does not exist, try to install the package
@@ -1232,7 +1232,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 								query = "?" + rawQuery
 							}
 							// redirect to the resolved path
-							return redirect(ctx, fmt.Sprintf("%s/%s%s%s", origin, esmPath.ID(), utils.NormalizePathname(entry.main), query), true)
+							return redirect(ctx, fmt.Sprintf("%s/%s%s%s", origin, esmPath.PackageId(), utils.NormalizePathname(entry.main), query), true)
 						}
 						ctx.SetHeader("Cache-Control", ccImmutable)
 						return rex.Status(404, "File Not Found")
@@ -1521,7 +1521,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 				}
 				savePath := normalizeSavePath(path.Join(fmt.Sprintf(
 					"types/%s/%s",
-					esmPath.ID(),
+					esmPath.PackageId(),
 					args,
 				), esmPath.SubPath))
 				content, stat, err = esmStorage.Get(savePath)
@@ -1666,7 +1666,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 		}
 
 		if buildMeta.CSSEntry != "" {
-			url := strings.Join([]string{origin, esmPath.ID(), buildMeta.CSSEntry[2:]}, "/")
+			url := strings.Join([]string{origin, esmPath.PackageId(), buildMeta.CSSEntry[2:]}, "/")
 			return redirect(ctx, url, isExactVersion)
 		}
 
@@ -1700,6 +1700,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 			metaJson := map[string]any{
 				"name":    esmPath.PkgName,
 				"version": esmPath.PkgVersion,
+				"module":  build.Path(),
 			}
 			if esmPath.GhPrefix {
 				metaJson["gh"] = true
@@ -1707,9 +1708,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 			if esmPath.PrPrefix {
 				metaJson["pr"] = true
 			}
-			if esmPath.SubPath != "" {
-				metaJson["subpath"] = esmPath.SubPath
-			} else {
+			if esmPath.SubPath == "" {
 				packageJson, err := npmrc.getPackageInfo(esmPath.PkgName, esmPath.PkgVersion)
 				if err != nil {
 					return rex.Status(500, err.Error())

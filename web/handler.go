@@ -2,7 +2,6 @@ package web
 
 import (
 	"bytes"
-	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -113,25 +112,15 @@ func (s *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		query := r.URL.Query()
-		extname := filepath.Ext(filename)
-		if query.Has("url") && extname != ".html" {
+		if query.Has("url") {
 			header := w.Header()
 			header.Set("Content-Type", "application/javascript; charset=utf-8")
 			header.Set("Cache-Control", "public, max-age=31536000, immutable")
 			w.Write([]byte(`const url = new URL(import.meta.url);url.searchParams.delete("url");export default url.href;`))
 			return
 		}
-		switch extname {
+		switch filepath.Ext(filename) {
 		case ".html":
-			etag := fmt.Sprintf("w/\"%x-%x%s\"", fi.ModTime().UnixMilli(), fi.Size(), s.etagSuffix)
-			if r.Header.Get("If-None-Match") == etag {
-				w.WriteHeader(http.StatusNotModified)
-				return
-			}
-			header := w.Header()
-			header.Set("Content-Type", "text/html; charset=utf-8")
-			header.Set("Cache-Control", "public, max-age=0, must-revalidate")
-			header.Set("Etag", etag)
 			s.ServeHtml(w, r, pathname)
 			return
 
@@ -238,6 +227,27 @@ func (s *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Handler) ServeHtml(w http.ResponseWriter, r *http.Request, filename string) {
+	fi, err := os.Lstat(filepath.Join(s.config.AppDir, filename))
+	if err != nil {
+		if os.IsNotExist(err) {
+			http.Error(w, "Bad Request", 400)
+		} else {
+			http.Error(w, "Internal Server Error", 500)
+		}
+		return
+	}
+
+	etag := fmt.Sprintf("w/\"%x-%x%s\"", fi.ModTime().UnixMilli(), fi.Size(), s.etagSuffix)
+	if r.Header.Get("If-None-Match") == etag {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+
+	header := w.Header()
+	header.Set("Content-Type", "text/html; charset=utf-8")
+	header.Set("Cache-Control", "public, max-age=0, must-revalidate")
+	header.Set("Etag", etag)
+
 	htmlFile, err := os.Open(filepath.Join(s.config.AppDir, filename))
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -285,7 +295,85 @@ func (s *Handler) ServeHtml(w http.ResponseWriter, r *http.Request, filename str
 			case "script":
 				srcAttr := attrs["src"]
 				hrefAttr := attrs["href"]
-				if !isHttpSepcifier(srcAttr) {
+				typeAttr := attrs["type"]
+				if typeAttr == "importmap" {
+					if s.config.Dev {
+						w.Write(tokenizer.Raw())
+						if tokenizer.Next() == html.TextToken {
+							text := tokenizer.Text()
+							im, err := importmap.Parse(nil, text)
+							if err != nil {
+								fmt.Println(term.Yellow("[warn] invalid importmap: " + err.Error()))
+								w.Write(text)
+							} else {
+								// 1. add `dev` query for esm.sh imports in development mode
+								var devImports [][2]string
+								im.Imports.Range(func(specifier, modUrl string) bool {
+									if isHttpSepcifier(modUrl) {
+										imp, err := importmap.ParseEsmPath(modUrl)
+										if err == nil {
+											u, _ := url.Parse(modUrl)
+											switch imp.Name {
+											case "react", "react-dom", "preact", "solid-js", "vue":
+												if strings.HasSuffix(u.Path, ".mjs") {
+													u.Path = u.Path[0:len(u.Path)-4] + ".development.mjs"
+												} else if strings.HasSuffix(specifier, "/") {
+													if imp.Version == "" {
+														return true
+													}
+													// esm.sh specified route: "https://esm.sh/react@19.2.0&dev/"
+													u.Path = strings.Replace(u.Path, "@"+imp.Version, "@"+imp.Version+"&dev", 1)
+												} else {
+													q := u.Query()
+													q.Set("dev", "TRUE")
+													u.RawQuery = strings.Replace(q.Encode(), "dev=TRUE", "dev", 1)
+												}
+												devImports = append(devImports, [2]string{specifier, encodeUrl(u)})
+											}
+										}
+									}
+									return true
+								})
+
+								// 2. ensure `jsx-dev-runtime` is included in the import map
+								var jsxRuntime string
+								var jsxRuntimeUrl string
+								for _, pkg := range []string{"react", "preact", "solid-js", "mono-jsx/dom", "mono-jsx", "vue"} {
+									url, ok := im.Resolve(pkg+"/jsx-runtime", nil)
+									if ok {
+										jsxRuntime = pkg
+										jsxRuntimeUrl = url
+										break
+									}
+								}
+								if jsxRuntimeUrl != "" && isHttpSepcifier(jsxRuntimeUrl) && !im.Imports.Has(jsxRuntime+"/jsx-dev-runtime") {
+									u, err := url.Parse(jsxRuntimeUrl)
+									if err == nil {
+										if strings.HasSuffix(u.Path, "/jsx-runtime.mjs") {
+											u.Path = u.Path[0:len(u.Path)-16] + "/jsx-dev-runtime.development.mjs"
+										} else {
+											u.Path = strings.Replace(u.Path, "/jsx-runtime", "/jsx-dev-runtime", 1)
+										}
+										devImports = append(devImports, [2]string{jsxRuntime + "/jsx-dev-runtime", encodeUrl(u)})
+									}
+								}
+
+								// 3. override imports
+								for _, imp := range devImports {
+									im.Imports.Set(imp[0], imp[1])
+								}
+
+								// 4. send the modified importmap to client
+								w.Write([]byte{'\n'})
+								w.Write([]byte(im.FormatJSON(1)))
+								w.Write([]byte{'\n', ' ', ' '})
+							}
+						} else {
+							w.Write(tokenizer.Raw())
+						}
+						continue
+					}
+				} else if !isHttpSepcifier(srcAttr) {
 					srcAttr, _ = utils.SplitByFirstByte(srcAttr, '?')
 					srcAttr = u.ResolveReference(&url.URL{Path: srcAttr}).Path
 					w.Write([]byte("<script"))
@@ -421,13 +509,8 @@ func (s *Handler) ServeHtml(w http.ResponseWriter, r *http.Request, filename str
 	}
 }
 
-func (s *Handler) ServeModule(w http.ResponseWriter, r *http.Request, filename string, query url.Values, preTransform []byte) {
-	im, err := base64.RawURLEncoding.DecodeString(query.Get("im"))
-	if err != nil {
-		http.Error(w, "Bad Request", 400)
-		return
-	}
-	imfi, err := os.Lstat(filepath.Join(s.config.AppDir, string(im)))
+func (s *Handler) ServeModule(w http.ResponseWriter, r *http.Request, filename string, query url.Values, preTransformContent []byte) {
+	indexHtmlStat, err := os.Lstat(filepath.Join(s.config.AppDir, "index.html"))
 	if err != nil {
 		if os.IsNotExist(err) {
 			http.Error(w, "Bad Request", 400)
@@ -439,11 +522,11 @@ func (s *Handler) ServeModule(w http.ResponseWriter, r *http.Request, filename s
 
 	var modTime uint64
 	var size int64
-	if preTransform != nil {
+	if preTransformContent != nil {
 		xx := xxhash.New()
-		xx.Write(preTransform)
+		xx.Write(preTransformContent)
 		modTime = xx.Sum64()
-		size = int64(len(preTransform))
+		size = int64(len(preTransformContent))
 	} else {
 		fi, err := os.Lstat(filepath.Join(s.config.AppDir, filename))
 		if err != nil {
@@ -457,13 +540,13 @@ func (s *Handler) ServeModule(w http.ResponseWriter, r *http.Request, filename s
 		modTime = uint64(fi.ModTime().UnixMilli())
 		size = fi.Size()
 	}
-	etag := fmt.Sprintf("w/\"%x-%x-%x-%x%s\"", modTime, size, imfi.ModTime().UnixMilli(), imfi.Size(), s.etagSuffix)
+	etag := fmt.Sprintf("w/\"%x-%x-%x-%x%s\"", modTime, size, indexHtmlStat.ModTime().UnixMilli(), indexHtmlStat.Size(), s.etagSuffix)
 	if r.Header.Get("If-None-Match") == etag && !query.Has("t") {
 		w.WriteHeader(http.StatusNotModified)
 		return
 	}
-	cacheKey := fmt.Sprintf("module-%s", filename)
-	etagCacheKey := fmt.Sprintf("module-%s.etag", filename)
+	cacheKey := "module-" + filename
+	etagCacheKey := cacheKey + ".etag"
 	if js, ok := s.loaderCache.Load(cacheKey); ok {
 		if e, ok := s.loaderCache.Load(etagCacheKey); ok {
 			if e.(string) == etag {
@@ -487,13 +570,57 @@ func (s *Handler) ServeModule(w http.ResponseWriter, r *http.Request, filename s
 		http.Error(w, "could not parse import map: "+err.Error(), 500)
 		return
 	}
-	args := []any{"tsx", filename, importMap, nil, s.config.Dev}
-	if preTransform != nil {
-		args[3] = string(preTransform)
+	options := map[string]any{"isDev": s.config.Dev}
+	args := []any{"tsx", filename, nil, options}
+	if strings.HasSuffix(filename, ".vue") || strings.HasSuffix(filename, ".md?vue") {
+		if importMap != nil {
+			url, ok := importMap.Imports.Get("vue")
+			if ok {
+				im, err := importmap.ParseEsmPath(url)
+				if err != nil {
+					http.Error(w, "importmap: failed to parse vue import url: "+url, 500)
+					return
+				}
+				options["vueVersion"] = im.Version
+			}
+			// if use jsx in a vue app
+			if importMap.Imports.Has("vue/jsx-runtime") || importMap.Imports.Has("vue/") {
+				options["jsxImportSource"] = "vue"
+			}
+		}
+	} else if strings.HasSuffix(filename, ".svelte") || strings.HasSuffix(filename, ".md?svelte") {
+		if importMap != nil {
+			url, ok := importMap.Imports.Get("svelte")
+			if ok {
+				im, err := importmap.ParseEsmPath(url)
+				if err != nil {
+					http.Error(w, "importmap: failed to parse svelte import url: "+url, 500)
+					return
+				}
+				options["svelteVersion"] = im.Version
+			}
+		}
+	} else {
+		if importMap != nil {
+			for _, pkg := range []string{"react", "preact", "solid-js", "mono-jsx/dom", "mono-jsx"} {
+				if importMap.Imports.Has(pkg+"/jsx-runtime") || importMap.Imports.Has(pkg+"/") {
+					options["jsxImportSource"] = pkg
+					break
+				}
+			}
+			for _, pkg := range []string{"react", "preact"} {
+				if importMap.Imports.Has(pkg) {
+					options[pkg] = true
+				}
+			}
+		}
+	}
+	if preTransformContent != nil {
+		args[2] = string(preTransformContent)
 	}
 	_, js, err := s.loaderWorker.Call(args...)
 	if err != nil {
-		fmt.Println(term.Red("[error] " + err.Error()))
+		fmt.Println(term.Red("[error] loader(tsx) " + err.Error()))
 		http.Error(w, "Internal Server Error", 500)
 		return
 	}
@@ -880,7 +1007,19 @@ func (s *Handler) analyzeDependencyTree(entry string, importMap *importmap.Impor
 							if s.loaderWorker == nil {
 								return esbuild.OnLoadResult{}, errors.New("loader worker not started")
 							}
-							lang, code, err := s.loaderWorker.Call(ext[1:], pathname, contents, importMap)
+							framework := ext[1:]
+							options := map[string]any{}
+							if importMap != nil {
+								url, ok := importMap.Imports.Get(framework)
+								if ok {
+									im, err := importmap.ParseEsmPath(url)
+									if err != nil {
+										return esbuild.OnLoadResult{}, errors.New("failed to parse " + framework + " import url: " + url)
+									}
+									options[framework+"Version"] = im.Version
+								}
+							}
+							lang, code, err := s.loaderWorker.Call(framework, pathname, contents, options)
 							if err != nil {
 								return esbuild.OnLoadResult{}, err
 							}
@@ -1005,11 +1144,11 @@ func (s *Handler) preload() {
 		}
 	}
 	if len(entries) > 0 {
-		u := url.URL{Path: "/"}
-		im := base64.RawURLEncoding.EncodeToString([]byte("/index.html"))
+		rootUrl := url.URL{Path: "/"}
 		w := &dummyResponseWriter{}
+		q := url.Values{}
 		for entry := range entries {
-			pathname := u.ResolveReference(&url.URL{Path: entry}).Path
+			pathname := rootUrl.ResolveReference(&url.URL{Path: entry}).Path
 			r := &http.Request{
 				Method: "GET",
 				URL: &url.URL{
@@ -1017,14 +1156,11 @@ func (s *Handler) preload() {
 				},
 			}
 			if strings.HasSuffix(entry, "tailwind.css") {
-				r.URL.RawQuery = "ctx=" + im
-				s.ServeFrameworkCSS(w, r, r.URL.Query(), "tailwind")
+				s.ServeFrameworkCSS(w, r, q, "tailwind")
 			} else if strings.HasSuffix(entry, "uno.css") {
-				r.URL.RawQuery = "ctx=" + im
-				s.ServeFrameworkCSS(w, r, r.URL.Query(), "unocss")
+				s.ServeFrameworkCSS(w, r, q, "unocss")
 			} else {
-				r.URL.RawQuery = "im=" + im
-				s.ServeModule(w, r, pathname, r.URL.Query(), nil)
+				s.ServeModule(w, r, pathname, q, nil)
 			}
 		}
 	}

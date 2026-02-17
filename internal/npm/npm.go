@@ -194,39 +194,14 @@ func IsExactVersion(version string) bool {
 	return true
 }
 
+var dateRegexp = regexp.MustCompile(`^(\d{4})-(\d{1,2})-(\d{1,2})$`)
+
 // IsDateVersion returns true if the given version is a date in yyyy-mm-dd format.
-func IsDateVersion(version string) bool {
-	dateRegex := regexp.MustCompile(`^(\d{4})-(\d{1,2})-(\d{1,2})$`)
-	matches := dateRegex.FindStringSubmatch(version)
+func IsDateVersion(version string) (time.Time, bool, error) {
+	matches := dateRegexp.FindStringSubmatch(version)
 	if matches == nil {
-		return false
+		return time.Time{}, false, nil
 	}
-
-	year := matches[1]
-	month := matches[2]
-	day := matches[3]
-
-	if len(month) == 1 {
-		month = "0" + month
-	}
-	if len(day) == 1 {
-		day = "0" + day
-	}
-
-	// Parse and validate the date
-	dateStr := year + "-" + month + "-" + day + "T00:00:00Z"
-	_, err := time.Parse(time.RFC3339, dateStr)
-	return err == nil
-}
-
-// ConvertDateVersionToTime converts a date version (yyyy-mm-dd) to a time.Time.
-func ConvertDateVersionToTime(version string) (time.Time, error) {
-	if !IsDateVersion(version) {
-		return time.Time{}, errors.New("not a valid date version")
-	}
-
-	dateRegex := regexp.MustCompile(`^(\d{4})-(\d{1,2})-(\d{1,2})$`)
-	matches := dateRegex.FindStringSubmatch(version)
 
 	year := matches[1]
 	month := matches[2]
@@ -243,10 +218,9 @@ func ConvertDateVersionToTime(version string) (time.Time, error) {
 	dateStr := year + "-" + month + "-" + day + "T00:00:00Z"
 	t, err := time.Parse(time.RFC3339, dateStr)
 	if err != nil {
-		return time.Time{}, errors.New("invalid date format")
+		return time.Time{}, false, errors.New("invalid date format")
 	}
-
-	return t, nil
+	return t, true, nil
 }
 
 func isNumericString(s string) bool {

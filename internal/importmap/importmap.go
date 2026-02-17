@@ -48,6 +48,14 @@ func (i *Imports) Keys() []string {
 	return keys
 }
 
+// Has returns true if the key is in the imports map.
+func (i *Imports) Has(specifier string) bool {
+	i.lock.RLock()
+	defer i.lock.RUnlock()
+	_, ok := i.imports[specifier]
+	return ok
+}
+
 // Get returns the value of the key in the imports map.
 func (i *Imports) Get(specifier string) (string, bool) {
 	i.lock.RLock()

@@ -1,22 +1,32 @@
 # esm.sh CLI
 
-A _nobuild_ tool for modern web development.
+A _no-build_ tool for modern web development. Features include:
+
+- Initialize a new no-build web app with esm.sh CDN
+- Serve web apps with esm.sh CDN, HMR, transforming TS/Vue/Svelte on the fly
+- Maintain the `importmap` script in index.html
 
 ## Installation
 
-You can install `esm.sh` CLI from source code:
+Install `esm.sh` CLI via curl:
+
+```bash
+curl -fsSL https://esm.sh/install | bash
+```
+
+To install `esm.sh` CLI from source code, you need to have [Go](https://go.dev/dl) installed.
 
 ```bash
 go install github.com/esm-dev/esm.sh
 ```
 
-You can also install `esm.sh` CLI via `npm`:
+Or install `esm.sh` CLI via `npm`:
 
 ```bash
 npm install -g esm.sh
 ```
 
-Or use `npx` without installation:
+Or use `npx esm.sh` without installation:
 
 ```bash
 npx esm.sh [command]
@@ -26,12 +36,16 @@ npx esm.sh [command]
 
 ```
 $ esm.sh --help
-Usage: esm.sh [command] <options>
+Usage: esm.sh [command] [options]
 
 Commands:
-  i, add [...pakcage]   Alias to 'esm.sh im add'.
-  im, importmap         Manage "importmap" script.
-  init                  Create a new nobuild web app with esm.sh CDN.
-  serve                 Serve a nobuild web app with esm.sh CDN, HMR, transforming TS/Vue/Svelte on the fly.
-  build                 Build a nobuild web app with esm.sh CDN.
+  add [...imports]      Add imports to the "importmap" script in index.html
+  tidy                  Clean up and optimize the "importmap" script in index.html
+  init                  Initialize a new no-build web app
+  serve                 Serve the web app in "production" mode
+  dev                   Serve the web app in "development" mode with live reload
+
+Options:
+  --version, -v         Show the version
+  --help, -h            Display this help message
 ```

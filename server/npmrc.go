@@ -275,24 +275,20 @@ func (npmrc *NpmRC) getPackageInfo(pkgName string, version string) (packageJson 
 	})
 }
 
-func (npmrc *NpmRC) getPackageInfoByDate(pkgName string, dateVersion string) (packageJson *npm.PackageJSON, err error) {
-	targetTime, err := npm.ConvertDateVersionToTime(dateVersion)
-	if err != nil {
-		return nil, err
-	}
-
+func (npmrc *NpmRC) getPackageInfoByDate(pkgName string, targetDate time.Time) (packageJson *npm.PackageJSON, err error) {
 	reg := npmrc.getRegistryByPackageName(pkgName)
-	cacheKey := reg.Registry + pkgName + "@date=" + dateVersion
+	targetTimeStr := targetDate.Format(time.DateOnly)
+	cacheKey := reg.Registry + pkgName + "@date=" + targetTimeStr
 
 	return withCache(cacheKey, time.Duration(config.NpmQueryCacheTTL)*time.Second, func() (*npm.PackageJSON, string, error) {
-		metadata, _, err := npmrc.fetchPackageMetadata(pkgName, dateVersion, false)
+		metadata, _, err := npmrc.fetchPackageMetadata(pkgName, "", false)
 		if err != nil {
 			return nil, "", err
 		}
 
-		resolvedVersion, err := npm.ResolveVersionByTime(metadata, targetTime)
+		resolvedVersion, err := npm.ResolveVersionByTime(metadata, targetDate)
 		if err != nil {
-			return nil, "", fmt.Errorf("date-based version resolution failed for %s@%s: %s", pkgName, dateVersion, err.Error())
+			return nil, "", fmt.Errorf("date-based version resolution failed for %s@%s: %s", pkgName, targetTimeStr, err.Error())
 		}
 
 		raw, ok := metadata.Versions[resolvedVersion]

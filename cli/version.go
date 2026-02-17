@@ -1,3 +1,4 @@
 package cli
 
-const VERSION = "v136"
+// could be overridden by `-ldflags`
+var VERSION = "v0.1.0"
