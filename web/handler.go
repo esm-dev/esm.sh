@@ -112,25 +112,15 @@ func (s *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		query := r.URL.Query()
-		extname := filepath.Ext(filename)
-		if query.Has("url") && extname != ".html" {
+		if query.Has("url") {
 			header := w.Header()
 			header.Set("Content-Type", "application/javascript; charset=utf-8")
 			header.Set("Cache-Control", "public, max-age=31536000, immutable")
 			w.Write([]byte(`const url = new URL(import.meta.url);url.searchParams.delete("url");export default url.href;`))
 			return
 		}
-		switch extname {
+		switch filepath.Ext(filename) {
 		case ".html":
-			etag := fmt.Sprintf("w/\"%x-%x%s\"", fi.ModTime().UnixMilli(), fi.Size(), s.etagSuffix)
-			if r.Header.Get("If-None-Match") == etag {
-				w.WriteHeader(http.StatusNotModified)
-				return
-			}
-			header := w.Header()
-			header.Set("Content-Type", "text/html; charset=utf-8")
-			header.Set("Cache-Control", "public, max-age=0, must-revalidate")
-			header.Set("Etag", etag)
 			s.ServeHtml(w, r, pathname)
 			return
 
@@ -237,6 +227,27 @@ func (s *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Handler) ServeHtml(w http.ResponseWriter, r *http.Request, filename string) {
+	fi, err := os.Lstat(filepath.Join(s.config.AppDir, filename))
+	if err != nil {
+		if os.IsNotExist(err) {
+			http.Error(w, "Bad Request", 400)
+		} else {
+			http.Error(w, "Internal Server Error", 500)
+		}
+		return
+	}
+
+	etag := fmt.Sprintf("w/\"%x-%x%s\"", fi.ModTime().UnixMilli(), fi.Size(), s.etagSuffix)
+	if r.Header.Get("If-None-Match") == etag {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+
+	header := w.Header()
+	header.Set("Content-Type", "text/html; charset=utf-8")
+	header.Set("Cache-Control", "public, max-age=0, must-revalidate")
+	header.Set("Etag", etag)
+
 	htmlFile, err := os.Open(filepath.Join(s.config.AppDir, filename))
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -534,8 +545,8 @@ func (s *Handler) ServeModule(w http.ResponseWriter, r *http.Request, filename s
 		w.WriteHeader(http.StatusNotModified)
 		return
 	}
-	cacheKey := fmt.Sprintf("module-%s", filename)
-	etagCacheKey := fmt.Sprintf("module-%s.etag", filename)
+	cacheKey := "module-" + filename
+	etagCacheKey := cacheKey + ".etag"
 	if js, ok := s.loaderCache.Load(cacheKey); ok {
 		if e, ok := s.loaderCache.Load(etagCacheKey); ok {
 			if e.(string) == etag {
