@@ -295,7 +295,7 @@ func (s *Handler) ServeHtml(w http.ResponseWriter, r *http.Request, filename str
 								fmt.Println(term.Yellow("[warn] invalid importmap: " + err.Error()))
 								w.Write(text)
 							} else {
-								// 1. add `dev` query to `react`, `react-dom` and `vue` imports for development mode
+								// 1. add `dev` query for esm.sh imports in development mode
 								var devImports [][2]string
 								im.Imports.Range(func(specifier, modUrl string) bool {
 									if isHttpSepcifier(modUrl) {
@@ -303,7 +303,7 @@ func (s *Handler) ServeHtml(w http.ResponseWriter, r *http.Request, filename str
 										if err == nil {
 											u, _ := url.Parse(modUrl)
 											switch imp.Name {
-											case "react", "react-dom", "vue":
+											case "react", "react-dom", "preact", "solid-js", "vue":
 												if strings.HasSuffix(u.Path, ".mjs") {
 													u.Path = u.Path[0:len(u.Path)-4] + ".development.mjs"
 												} else if strings.HasSuffix(specifier, "/") {
@@ -327,7 +327,7 @@ func (s *Handler) ServeHtml(w http.ResponseWriter, r *http.Request, filename str
 								// 2. ensure `jsx-dev-runtime` is included in the import map
 								var jsxRuntime string
 								var jsxRuntimeUrl string
-								for _, pkg := range []string{"react", "preact", "solid-js", "mono-jsx/dom", "mono-jsx"} {
+								for _, pkg := range []string{"react", "preact", "solid-js", "mono-jsx/dom", "mono-jsx", "vue"} {
 									url, ok := im.Resolve(pkg+"/jsx-runtime", nil)
 									if ok {
 										jsxRuntime = pkg
