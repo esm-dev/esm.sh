@@ -1,5 +1,5 @@
-@import "@unocss/reset/tailwind.css";
-@import "@unocss/preset-wind3";
+@import "@unocss/reset/tailwind-v4.css";
+@import "@unocss/preset-wind4";
 @import "@unocss/preset-icons";
 @import "@unocss/preset-web-fonts";
 
