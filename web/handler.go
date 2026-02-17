@@ -346,7 +346,7 @@ func (s *Handler) ServeHtml(w http.ResponseWriter, r *http.Request, filename str
 										break
 									}
 								}
-								if jsxRuntimeUrl != "" && !im.Imports.Has(jsxRuntime+"/jsx-dev-runtime") {
+								if jsxRuntimeUrl != "" && isHttpSepcifier(jsxRuntimeUrl) && !im.Imports.Has(jsxRuntime+"/jsx-dev-runtime") {
 									u, err := url.Parse(jsxRuntimeUrl)
 									if err == nil {
 										if strings.HasSuffix(u.Path, "/jsx-runtime.mjs") {
