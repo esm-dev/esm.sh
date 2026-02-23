@@ -24,14 +24,14 @@ With [import maps](https://developer.mozilla.org/en-US/docs/Web/HTML/Element/scr
 <script type="importmap">
   {
     "imports": {
-      "react": "https://esm.sh/react@19.2.0",
-      "react-dom/": "https://esm.sh/react-dom@19.2.0/"
+      "react": "https://esm.sh/react@19.2.4",
+      "react-dom/": "https://esm.sh/react-dom@19.2.4/"
     }
   }
 </script>
 <script type="module">
-  import React from "react"; // → https://esm.sh/react@19.2.0
-  import { render } from "react-dom/client"; // → https://esm.sh/react-dom@19.2.0/client
+  import React from "react"; // → https://esm.sh/react@19.2.4
+  import { render } from "react-dom/client"; // → https://esm.sh/react-dom@19.2.4/client
 </script>
 ```
 
@@ -72,7 +72,7 @@ With [import maps](https://developer.mozilla.org/en-US/docs/Web/HTML/Element/scr
 esm.sh allows you to import `.ts(x)`, `.vue`, and `.svelte` files directly in the browser without any build steps.
 
 ```js
-import { Airplay } from "https://esm.sh/gh/phosphor-icons/react@v2.1.5/src/csr/Airplay.tsx?deps=react@19.2.0";
+import { Airplay } from "https://esm.sh/gh/phosphor-icons/react@v2.1.5/src/csr/Airplay.tsx?deps=react@19.2.4";
 import IconAirplay from "https://esm.sh/gh/phosphor-icons/vue@v2.2.0/src/icons/PhAirplay.vue?deps=vue@3.5.8";
 ```
 
@@ -295,8 +295,8 @@ you to use query params with trailing slash: change the query prefix `?` to `&` 
 ```json
 {
   "imports": {
-    "react-dom": "https://esm.sh/react-dom@19.2.0?dev",
-    "react-dom/": "https://esm.sh/react-dom@19.2.0&dev/"
+    "react-dom": "https://esm.sh/react-dom@19.2.4?dev",
+    "react-dom/": "https://esm.sh/react-dom@19.2.4&dev/"
   }
 }
 ```
@@ -314,6 +314,41 @@ The `raw` mode works just like other CDN services, unpkg.com(https://unpkg.com/)
 > [!TIP]
 > You may alternatively use `https://raw.esm.sh/<PATH>`, which is equivalent to `https://esm.sh/<PATH>?raw`,
 > that transitive references in the raw assets will also be raw requests.
+
+## Using `esm.sh/tsx`
+
+`esm.sh/tsx` is a lightweight **1KB** script that allows you to write `TSX` directly in HTML without any build steps. Your source code is sent to the server, compiled, cached at the edge, and served to the browser as a JavaScript module.
+
+`esm.sh/tsx` supports `<script>` tags with `type` set to `text/babel`, `text/jsx`, `text/ts`, or `text/tsx`.
+
+In development mode (open the page on localhost), `esm.sh/tsx` uses [@esm.sh/tsx](https://github.com/esm-dev/tsx) to transform JSX syntax into JavaScript.
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+  <script type="importmap">
+    {
+      "imports": {
+        "react/jsx-runtime": "https://esm.sh/react@19.2.4/jsx-runtime",
+        "react-dom/client": "https://esm.sh/react-dom@19.2.4/client"
+      }
+    }
+  </script>
+  <script type="module" src="https://esm.sh/tsx"></script>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    import { createRoot } from "react-dom/client"
+    createRoot(root).render(<h1>Hello, World!</h1>)
+  </script>
+</body>
+</html>
+```
+
+> [!TIP]
+> To transform JSX syntax, you need to specify the `[PKG]/jsx-runtime` import in the `importmap` script.
 
 ## Deno Compatibility
 

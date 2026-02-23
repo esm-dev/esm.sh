@@ -4,13 +4,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/url"
-	"path"
 	"strings"
 
-	"github.com/esm-dev/esm.sh/internal/fetch"
-	"github.com/esm-dev/esm.sh/internal/gfm"
 	"github.com/esm-dev/esm.sh/internal/importmap"
 	"github.com/esm-dev/esm.sh/internal/npm"
 	esbuild "github.com/ije/esbuild-internal/api"
@@ -78,8 +74,8 @@ func transform(options *ResolvedTransformOptions) (out *TransformOutput, err err
 
 	if jsxImportSource == "" && (loader == esbuild.LoaderJSX || loader == esbuild.LoaderTSX) && options.importMap != nil {
 		for _, key := range options.importMap.Imports.Keys() {
-			if strings.HasSuffix(key, "/jsx-runtime") {
-				jsxImportSource = strings.TrimSuffix(key, "/jsx-runtime")
+			if before, ok := strings.CutSuffix(key, "/jsx-runtime"); ok {
+				jsxImportSource = before
 				break
 			}
 		}
@@ -160,204 +156,6 @@ func transform(options *ResolvedTransformOptions) (out *TransformOutput, err err
 			out.Code = string(file.Contents)
 		} else if strings.HasSuffix(file.Path, ".map") {
 			out.Map = string(file.Contents)
-		}
-	}
-	return
-}
-
-// bundleHttpModule bundles the http module and it's submodules.
-func bundleHttpModule(npmrc *NpmRC, entry string, importMap *importmap.ImportMap, collectDependencies bool, fetchClient *fetch.FetchClient) (js []byte, jsx bool, css []byte, dependencyTree map[string][]byte, err error) {
-	if !isHttpSpecifier(entry) {
-		err = errors.New("require a http module")
-		return
-	}
-	entryUrl, err := url.Parse(entry)
-	if err != nil {
-		err = errors.New("invalid enrtry, require a valid url")
-		return
-	}
-	ret := esbuild.Build(esbuild.BuildOptions{
-		EntryPoints:      []string{entry},
-		Target:           esbuild.ESNext,
-		Format:           esbuild.FormatESModule,
-		Platform:         esbuild.PlatformBrowser,
-		JSX:              esbuild.JSXPreserve,
-		Bundle:           true,
-		MinifyWhitespace: true,
-		Outdir:           "/esbuild",
-		Write:            false,
-		Plugins: []esbuild.Plugin{
-			{
-				Name: "http-loader",
-				Setup: func(build esbuild.PluginBuild) {
-					build.OnResolve(esbuild.OnResolveOptions{Filter: ".*"}, func(args esbuild.OnResolveArgs) (esbuild.OnResolveResult, error) {
-						importerUrl, _ := url.Parse(args.Importer)
-						path := args.Path
-						if importMap != nil {
-							var ok bool
-							path, ok = importMap.Resolve(args.Path, importerUrl)
-							if ok && isHttpSpecifier(path) {
-								// ignore external modules in the import map
-								return esbuild.OnResolveResult{Path: args.Path, External: true}, nil
-							}
-						}
-						if isHttpSpecifier(args.Importer) && (isRelPathSpecifier(path) || isAbsPathSpecifier(path)) {
-							u, e := url.Parse(args.Importer)
-							if e == nil {
-								var query string
-								path, query = utils.SplitByFirstByte(path, '?')
-								if query != "" {
-									query = "?" + query
-								}
-								u = u.ResolveReference(&url.URL{Path: path})
-								path = u.Scheme + "://" + u.Host + u.Path + query
-							}
-						}
-						if isHttpSpecifier(path) && (args.Kind != esbuild.ResolveJSDynamicImport || collectDependencies) {
-							u, e := url.Parse(path)
-							if e == nil {
-								if u.Scheme == entryUrl.Scheme && u.Host == entryUrl.Host {
-									if (endsWith(u.Path, moduleExts...) || endsWith(u.Path, ".css", ".json", ".vue", ".svelte", ".md")) && !u.Query().Has("url") {
-										return esbuild.OnResolveResult{Path: path, Namespace: "http"}, nil
-									}
-									return esbuild.OnResolveResult{Path: path, Namespace: "url"}, nil
-								}
-							}
-						}
-						return esbuild.OnResolveResult{Path: path, External: true}, nil
-					})
-					build.OnLoad(esbuild.OnLoadOptions{Filter: ".*", Namespace: "url"}, func(args esbuild.OnLoadArgs) (esbuild.OnLoadResult, error) {
-						js := `export default ` + "`" + args.Path + "`"
-						return esbuild.OnLoadResult{Contents: &js, Loader: esbuild.LoaderJS}, nil
-					})
-					build.OnLoad(esbuild.OnLoadOptions{Filter: ".*", Namespace: "http"}, func(args esbuild.OnLoadArgs) (esbuild.OnLoadResult, error) {
-						url, err := url.Parse(args.Path)
-						if err != nil {
-							return esbuild.OnLoadResult{}, err
-						}
-						res, err := fetchClient.Fetch(url, nil)
-						if err != nil {
-							return esbuild.OnLoadResult{}, errors.New("failed to fetch module " + args.Path + ": " + err.Error())
-						}
-						defer res.Body.Close()
-						if res.StatusCode != 200 {
-							if res.StatusCode == 404 {
-								return esbuild.OnLoadResult{}, errors.New("module not found: " + args.Path)
-							}
-							if res.StatusCode == 301 || res.StatusCode == 302 || res.StatusCode == 307 || res.StatusCode == 308 {
-								return esbuild.OnLoadResult{}, errors.New("failed to fetch module " + args.Path + ": redirect not allowed")
-							}
-							return esbuild.OnLoadResult{}, errors.New("failed to fetch module " + args.Path + ": " + res.Status)
-						}
-						data, err := io.ReadAll(io.LimitReader(res.Body, 5*MB))
-						if err != nil {
-							return esbuild.OnLoadResult{}, errors.New("failed to fetch module " + args.Path + ": " + err.Error())
-						}
-						if collectDependencies {
-							if dependencyTree == nil {
-								dependencyTree = make(map[string][]byte)
-							}
-							dependencyTree[args.Path] = data
-						}
-						code := string(data)
-						loader := esbuild.LoaderJS
-						switch path.Ext(url.Path) {
-						case ".ts", ".mts", ".cts":
-							loader = esbuild.LoaderTS
-						case ".jsx":
-							loader = esbuild.LoaderJSX
-							jsx = true
-						case ".tsx":
-							loader = esbuild.LoaderTSX
-							jsx = true
-						case ".css":
-							loader = esbuild.LoaderCSS
-						case ".json":
-							loader = esbuild.LoaderJSON
-						case ".svelte":
-							svelteVersion, err := resolveSvelteVersion(npmrc, importMap)
-							if err != nil {
-								return esbuild.OnLoadResult{}, err
-							}
-							ret, err := transformSvelte(npmrc, svelteVersion, args.Path, code)
-							if err != nil {
-								return esbuild.OnLoadResult{}, err
-							}
-							code = ret.Code
-						case ".vue":
-							vueVersion, err := resolveVueVersion(npmrc, importMap)
-							if err != nil {
-								return esbuild.OnLoadResult{}, err
-							}
-							ret, err := transformVue(npmrc, vueVersion, args.Path, code)
-							if err != nil {
-								return esbuild.OnLoadResult{}, err
-							}
-							code = ret.Code
-							if ret.Lang == "ts" {
-								loader = esbuild.LoaderTS
-							}
-						case ".md":
-							query := url.Query()
-							if query.Has("jsx") {
-								jsxCode, err := gfm.Render([]byte(code), gfm.RenderFormatJSX)
-								if err != nil {
-									return esbuild.OnLoadResult{}, err
-								}
-								code = string(jsxCode)
-								loader = esbuild.LoaderJSX
-								jsx = true
-							} else if query.Has("svelte") {
-								svelteCode, err := gfm.Render([]byte(code), gfm.RenderFormatSvelte)
-								if err != nil {
-									return esbuild.OnLoadResult{}, err
-								}
-								svelteVersion, err := resolveSvelteVersion(npmrc, importMap)
-								if err != nil {
-									return esbuild.OnLoadResult{}, err
-								}
-								ret, err := transformSvelte(npmrc, svelteVersion, args.Path, string(svelteCode))
-								if err != nil {
-									return esbuild.OnLoadResult{}, err
-								}
-								code = ret.Code
-							} else if query.Has("vue") {
-								vueCode, err := gfm.Render([]byte(code), gfm.RenderFormatVue)
-								if err != nil {
-									return esbuild.OnLoadResult{}, err
-								}
-								vueVersion, err := resolveVueVersion(npmrc, importMap)
-								if err != nil {
-									return esbuild.OnLoadResult{}, err
-								}
-								ret, err := transformVue(npmrc, vueVersion, args.Path, string(vueCode))
-								if err != nil {
-									return esbuild.OnLoadResult{}, err
-								}
-								code = ret.Code
-							} else {
-								js, err := gfm.Render([]byte(code), gfm.RenderFormatJS)
-								if err != nil {
-									return esbuild.OnLoadResult{}, err
-								}
-								code = string(js)
-							}
-						}
-						return esbuild.OnLoadResult{Contents: &code, Loader: loader}, nil
-					})
-				},
-			},
-		},
-	})
-	if len(ret.Errors) > 0 {
-		err = errors.New(ret.Errors[0].Text)
-		return
-	}
-	for _, file := range ret.OutputFiles {
-		if strings.HasSuffix(file.Path, ".js") {
-			js = file.Contents
-		} else if strings.HasSuffix(file.Path, ".css") {
-			css = file.Contents
 		}
 	}
 	return
