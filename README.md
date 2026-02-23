@@ -341,6 +341,7 @@ In development mode (open the page on localhost), `esm.sh/tsx` uses [@esm.sh/tsx
   <div id="root"></div>
   <script type="text/babel">
     import { createRoot } from "react-dom/client"
+    const root = document.getElementById("root")
     createRoot(root).render(<h1>Hello, World!</h1>)
   </script>
 </body>

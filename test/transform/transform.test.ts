@@ -11,7 +11,7 @@ Deno.test("transform API", async () => {
     importMap: {
       imports: {
         "preact/jsx-runtime": "https://esm.sh/preact@10.13.2/jsx-runtime",
-        "preact-render-to-string": "https://esm.sh/preact-render-to-string6.0.2",
+        "preact-render-to-string": "https://esm.sh/preact-render-to-string@6.0.2",
       },
     },
     sourceMap: "external",
