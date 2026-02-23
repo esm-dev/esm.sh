@@ -2,14 +2,6 @@
 
 ## v137
 
-* Introduce `esm.sh/x` - ts/jsx/vue/svelte just works™️ in browser.
-  ```html
-  <!-- use build tools like Vite, Webpack, etc. -->
-  <script type="module" src="app.tsx"></script>
-
-  <!-- use esm.sh/x without build tools -->
-  <script src="https://esm.sh/x" href="app.tsx"></script>
-  ```
 * Introduce date(`yyyy-mm-dd`) versioning
   ```js
   import * as myPackage from "https://esm.sh/my-package@2026-01-02";
@@ -34,6 +26,7 @@
   * Support `.d.cts` types (#987)
   * Support namespace-based external marking (#1188)
   * Optimize storage (#1260)
+  * Remove `esm.sh/x` script
   * Remove unsafe `x-zone-id` and `x-npmrc` headers (#1235)
   * Ban urls with `/../` segments in path (#1271)
   * Reserve semantic version of dependencies (#1313)

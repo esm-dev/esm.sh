@@ -16,7 +16,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/esm-dev/esm.sh/internal/gfm"
 	"github.com/esm-dev/esm.sh/internal/importmap"
 	"github.com/esm-dev/esm.sh/internal/mime"
 	"github.com/gorilla/websocket"
@@ -145,60 +144,6 @@ func (s *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 			}
-
-		case ".md":
-			if !query.Has("raw") {
-				markdown, err := os.ReadFile(filename)
-				if err != nil {
-					http.Error(w, "Internal Server Error", 500)
-					return
-				}
-				if query.Has("jsx") {
-					jsxCode, err := gfm.Render(markdown, gfm.RenderFormatJSX)
-					if err != nil {
-						http.Error(w, "Failed to render markdown to jsx", 500)
-						return
-					}
-					s.ServeModule(w, r, pathname+"?jsx", query, jsxCode)
-				} else if query.Has("svelte") {
-					svelteCode, err := gfm.Render(markdown, gfm.RenderFormatSvelte)
-					if err != nil {
-						http.Error(w, "Failed to render markdown to svelte component", 500)
-						return
-					}
-					s.ServeModule(w, r, pathname+"?svelte", query, svelteCode)
-				} else if query.Has("vue") {
-					vueCode, err := gfm.Render(markdown, gfm.RenderFormatVue)
-					if err != nil {
-						http.Error(w, "Failed to render markdown to vue component", 500)
-						return
-					}
-					s.ServeModule(w, r, pathname+"?vue", query, vueCode)
-				} else {
-					js, err := gfm.Render(markdown, gfm.RenderFormatJS)
-					if err != nil {
-						http.Error(w, "Failed to render markdown", 500)
-						return
-					}
-					etag := fmt.Sprintf("w/\"%x-%x%s\"", fi.ModTime().UnixMilli(), fi.Size(), s.etagSuffix)
-					if r.Header.Get("If-None-Match") == etag && !query.Has("t") {
-						w.WriteHeader(http.StatusNotModified)
-						return
-					}
-					if r.Header.Get("If-None-Match") == etag && !query.Has("t") {
-						w.WriteHeader(http.StatusNotModified)
-						return
-					}
-					header := w.Header()
-					header.Set("Content-Type", "application/javascript; charset=utf-8")
-					if !query.Has("t") {
-						header.Set("Cache-Control", "public, max-age=0, must-revalidate")
-						header.Set("Etag", etag)
-					}
-					w.Write(js)
-				}
-				return
-			}
 		}
 
 		etag := fmt.Sprintf("w/\"%x-%x\"", fi.ModTime().UnixMilli(), fi.Size())
@@ -293,8 +238,6 @@ func (s *Handler) ServeHtml(w http.ResponseWriter, r *http.Request, filename str
 			}
 			switch string(tagName) {
 			case "script":
-				srcAttr := attrs["src"]
-				hrefAttr := attrs["href"]
 				typeAttr := attrs["type"]
 				if typeAttr == "importmap" {
 					if s.config.Dev {
@@ -370,66 +313,6 @@ func (s *Handler) ServeHtml(w http.ResponseWriter, r *http.Request, filename str
 							}
 						} else {
 							w.Write(tokenizer.Raw())
-						}
-						continue
-					}
-				} else if !isHttpSepcifier(srcAttr) {
-					srcAttr, _ = utils.SplitByFirstByte(srcAttr, '?')
-					srcAttr = u.ResolveReference(&url.URL{Path: srcAttr}).Path
-					w.Write([]byte("<script"))
-					for attrKey, attrVal := range attrs {
-						switch attrKey {
-						case "src":
-							w.Write([]byte(" src=\""))
-							w.Write([]byte(srcAttr))
-							w.Write([]byte{'"'})
-						default:
-							w.Write([]byte{' '})
-							w.Write([]byte(attrKey))
-							if attrVal != "" {
-								w.Write([]byte{'=', '"'})
-								w.Write([]byte(attrVal))
-								w.Write([]byte{'"'})
-							}
-						}
-					}
-					w.Write([]byte{'>'})
-					continue
-				} else if hrefAttr != "" {
-					// replace `<script src="https://esm.sh/x" href="..."></script>`
-					// with `<script type="module" src="..."></script>`
-					if srcUrl, parseErr := url.Parse(srcAttr); parseErr == nil && srcUrl.Path == "/x" {
-						href, _ := utils.SplitByFirstByte(hrefAttr, '?')
-						href = u.ResolveReference(&url.URL{Path: href}).Path
-						if href == "/tailwind.css" || strings.HasPrefix(href, "/tailwind.css") || href == "/uno.css" || strings.HasPrefix(href, "/uno.css") {
-							if frameworkCSS == "" {
-								w.Write([]byte("<link rel=\"stylesheet\" href=\""))
-								w.Write([]byte(href))
-								w.Write([]byte{'"', '>'})
-								frameworkCSS = href
-							}
-							overriding = "script"
-						} else {
-							w.Write([]byte("<script type=\"module\""))
-							for attrKey, attrVal := range attrs {
-								switch attrKey {
-								case "href", "type":
-									// strip
-								case "src":
-									w.Write([]byte(" src=\""))
-									w.Write([]byte(hrefAttr))
-									w.Write([]byte{'"'})
-								default:
-									w.Write([]byte{' '})
-									w.Write([]byte(attrKey))
-									if attrVal != "" {
-										w.Write([]byte{'=', '"'})
-										w.Write([]byte(attrVal))
-										w.Write([]byte{'"'})
-									}
-								}
-							}
-							w.Write([]byte{'>'})
 						}
 						continue
 					}
