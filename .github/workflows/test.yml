@@ -68,7 +68,7 @@ jobs:
         run: go build -o esm.sh${{ matrix.ext }} main.go
 
       - name: Run CLI
-        run: esm.sh${{ matrix.ext }} add react --no-prompt
+        run: ./esm.sh${{ matrix.ext }} add react --no-prompt
 
       - name: Check CLI Output
         run: cat index.html
