@@ -127,7 +127,7 @@ func normalizeConfig(config *Config) {
 		}
 	}
 	if v := os.Getenv("CORS_ALLOW_ORIGINS"); v != "" {
-		for _, p := range strings.Split(v, ",") {
+		for p := range strings.SplitSeq(v, ",") {
 			orig := strings.TrimSpace(p)
 			if orig != "" {
 				u, e := url.Parse(orig)
@@ -142,8 +142,8 @@ func normalizeConfig(config *Config) {
 		if v != "" {
 			config.CustomLandingPage.Origin = v
 			if v := os.Getenv("CUSTOM_LANDING_PAGE_ASSETS"); v != "" {
-				a := strings.Split(v, ",")
-				for _, p := range a {
+				a := strings.SplitSeq(v, ",")
+				for p := range a {
 					p = strings.TrimSpace(p)
 					if p != "" {
 						config.CustomLandingPage.Assets = append(config.CustomLandingPage.Assets, p)
