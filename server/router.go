@@ -984,6 +984,20 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 								moduleUrl,
 							)
 						}
+						buildMetaData, err := metaDB.Get(pathname)
+						if err != nil && err != storage.ErrNotFound {
+							return rex.Status(500, err.Error())
+						}
+						if err == nil {
+							buildMeta, err := decodeBuildMeta(buildMetaData)
+							if err != nil {
+								return rex.Status(500, err.Error())
+							}
+							if noDts := query.Has("no-dts") || query.Has("no-check"); !noDts && buildMeta.Dts != "" {
+								ctx.SetHeader("X-TypeScript-Types", origin+buildMeta.Dts)
+								ctx.SetHeader("Access-Control-Expose-Headers", "X-TypeScript-Types")
+							}
+						}
 						if len(exports) > 0 {
 							defer f.Close()
 							xxh := xxhash.New()
@@ -1002,20 +1016,20 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 							if err != nil {
 								return rex.Status(500, err.Error())
 							}
-							target := "es2022"
+							target := esbuild.ES2022
 							// check target in the pathname
 							for seg := range strings.SplitSeq(pathname, "/") {
-								if targets[seg] > 0 {
-									target = seg
+								if t, ok := targets[seg]; ok {
+									target = t
 									break
 								}
 							}
-							ret, err := treeShake(npmrc, esmPath.Package(), code, exports, targets[target])
+							ret, err := treeShake(npmrc, esmPath.Package(), code, exports, target)
 							if err != nil {
 								return rex.Status(500, err.Error())
 							}
-							go esmStorage.Put(savePath, bytes.NewReader(ret))
 							// note: the source map is dropped
+							go esmStorage.Put(savePath, bytes.NewReader(ret))
 							return ret
 						}
 					}
@@ -1252,15 +1266,15 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 
 		// get build args from the pathname
 		if pathKind == EsmBuild {
-			if strings.HasSuffix(esmPath.SubPath, ".bundle") {
-				esmPath.SubPath = strings.TrimSuffix(esmPath.SubPath, ".bundle")
+			if before, ok := strings.CutSuffix(esmPath.SubPath, ".bundle"); ok {
+				esmPath.SubPath = before
 				bundleMode = BundleDeps
-			} else if strings.HasSuffix(esmPath.SubPath, ".nobundle") {
-				esmPath.SubPath = strings.TrimSuffix(esmPath.SubPath, ".nobundle")
+			} else if before, ok := strings.CutSuffix(esmPath.SubPath, ".nobundle"); ok {
+				esmPath.SubPath = before
 				bundleMode = BundleFalse
 			}
-			if strings.HasSuffix(esmPath.SubPath, ".development") {
-				esmPath.SubPath = strings.TrimSuffix(esmPath.SubPath, ".development")
+			if before, ok := strings.CutSuffix(esmPath.SubPath, ".development"); ok {
+				esmPath.SubPath = before
 				dev = true
 			}
 			basename := strings.TrimSuffix(path.Base(esmPath.PkgName), ".js")
@@ -1491,6 +1505,10 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 						moduleUrl,
 						moduleUrl,
 					)
+				}
+				if noDts := query.Has("no-dts") || query.Has("no-check"); !noDts && buildMeta.Dts != "" {
+					ctx.SetHeader("X-TypeScript-Types", origin+buildMeta.Dts)
+					ctx.SetHeader("Access-Control-Expose-Headers", "X-TypeScript-Types")
 				}
 				if !buildMeta.CJS && len(exports) > 0 {
 					defer f.Close()

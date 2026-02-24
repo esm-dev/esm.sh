@@ -121,7 +121,7 @@ func (db *BuildMetaDB) Get(key string) (value []byte, err error) {
 	if cached {
 		return
 	}
-	r, _, err := db.storage.Get(getMetaStoreKey(key))
+	r, _, err := db.storage.Get(normalizeMetaStoreKey(key))
 	if err != nil {
 		if err == storage.ErrNotFound && db.oldDB != nil {
 			value, err := db.oldDB.Get(key)
@@ -147,7 +147,7 @@ func (db *BuildMetaDB) Get(key string) (value []byte, err error) {
 }
 
 func (storage *BuildMetaDB) Put(key string, value []byte) (err error) {
-	err = storage.storage.Put(getMetaStoreKey(key), bytes.NewReader(value))
+	err = storage.storage.Put(normalizeMetaStoreKey(key), bytes.NewReader(value))
 	if err == nil {
 		storage.cache.Add(key, value)
 	}
@@ -155,14 +155,14 @@ func (storage *BuildMetaDB) Put(key string, value []byte) (err error) {
 }
 
 func (storage *BuildMetaDB) Delete(key string) (err error) {
-	err = storage.storage.Delete(getMetaStoreKey(key))
+	err = storage.storage.Delete(normalizeMetaStoreKey(key))
 	if err == nil {
 		storage.cache.Remove(key)
 	}
 	return
 }
 
-func getMetaStoreKey(key string) string {
+func normalizeMetaStoreKey(key string) string {
 	data := sha256.Sum256([]byte(key))
 	return "meta/" + hex.EncodeToString(data[:])
 }
