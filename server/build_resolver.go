@@ -483,8 +483,8 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 								prefix, _ := utils.SplitByLastByte(path, '*')
 								if suffix != "" {
 									entry.types = prefix + suffix
-								} else if strings.HasPrefix(types, prefix) {
-									diff := strings.TrimPrefix(types, prefix)
+								} else if after, ok0 := strings.CutPrefix(types, prefix); ok0 {
+									diff := after
 									entry.types = strings.ReplaceAll(path, "*", diff)
 								} else {
 									entry.types = prefix + types[2:]

@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"maps"
 	"path"
 	"slices"
 	"sort"
@@ -26,10 +27,10 @@ func decodeBuildArgs(argsString string) (args BuildArgs, err error) {
 	s, err := atobUrl(strings.TrimPrefix(argsString, "X-"))
 	if err == nil {
 		args = BuildArgs{}
-		for _, p := range strings.Split(s, "\n") {
+		for p := range strings.SplitSeq(s, "\n") {
 			if strings.HasPrefix(p, "a") {
 				args.Alias = map[string]string{}
-				for _, p := range strings.Split(p[1:], ",") {
+				for p := range strings.SplitSeq(p[1:], ",") {
 					name, to := utils.SplitByFirstByte(p, ':')
 					name = strings.TrimSpace(name)
 					to = strings.TrimSpace(to)
@@ -276,12 +277,8 @@ func walkDeps(npmrc *NpmRC, installDir string, pkg npm.Package, mark *set.Set[st
 		return
 	}
 	pkgDeps := map[string]string{}
-	for name, version := range p.Dependencies {
-		pkgDeps[name] = version
-	}
-	for name, version := range p.PeerDependencies {
-		pkgDeps[name] = version
-	}
+	maps.Copy(pkgDeps, p.Dependencies)
+	maps.Copy(pkgDeps, p.PeerDependencies)
 	for name, version := range pkgDeps {
 		depPkg := npm.Package{Name: name, Version: version}
 		p, e := npm.ResolveDependencyVersion(version)

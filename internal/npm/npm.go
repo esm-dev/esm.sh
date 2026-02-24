@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/url"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -283,10 +284,8 @@ func IsStableVersion(version string) bool {
 				}
 			}
 			// Also check if the entire prerelease identifier is a known keyword
-			for _, keyword := range prereleaseKeywords {
-				if prereleaseId == keyword {
-					return false
-				}
+			if slices.Contains(prereleaseKeywords, prereleaseId) {
+				return false
 			}
 		}
 	}
