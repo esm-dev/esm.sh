@@ -1459,9 +1459,13 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 			if esmPath.SubPath != build.esmPath.SubPath {
 				buf, recycle := newBuffer()
 				defer recycle()
-				fmt.Fprintf(buf, "export * from \"%s\";\n", build.Path())
+				esmPath := build.Path()
+				if query.Has("no-dts") || query.Has("no-check") {
+					esmPath += "?no-dts"
+				}
+				fmt.Fprintf(buf, "export * from \"%s\";\n", esmPath)
 				if buildMeta.ExportDefault {
-					fmt.Fprintf(buf, "export { default } from \"%s\";\n", build.Path())
+					fmt.Fprintf(buf, "export { default } from \"%s\";\n", esmPath)
 				}
 				ctx.SetHeader("Content-Type", ctJavaScript)
 				ctx.SetHeader("Cache-Control", ccImmutable)
@@ -1561,19 +1565,26 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 					fmt.Fprintf(buf, "import \"%s\";\n", dep)
 				}
 			}
-			esm := build.Path()
+			esmPath := build.Path()
 			if !buildMeta.CJS && len(exports) > 0 {
-				esm += "?exports=" + strings.Join(exports, ",")
+				esmPath += "?exports=" + strings.Join(exports, ",")
 			}
-			fmt.Fprintf(buf, "export * from \"%s\";\n", esm)
+			if query.Has("no-dts") || query.Has("no-check") {
+				if strings.Contains(esmPath, "?") {
+					esmPath += "&no-dts"
+				} else {
+					esmPath += "?no-dts"
+				}
+			}
+			fmt.Fprintf(buf, "export * from \"%s\";\n", esmPath)
 			if buildMeta.ExportDefault && (len(exports) == 0 || slices.Contains(exports, "default")) {
-				fmt.Fprintf(buf, "export { default } from \"%s\";\n", esm)
+				fmt.Fprintf(buf, "export { default } from \"%s\";\n", esmPath)
 			}
 			if buildMeta.CJS && len(exports) > 0 {
-				fmt.Fprintf(buf, "import _ from \"%s\";\n", esm)
+				fmt.Fprintf(buf, "import _ from \"%s\";\n", esmPath)
 				fmt.Fprintf(buf, "export const { %s } = _;\n", strings.Join(exports, ", "))
 			}
-			ctx.SetHeader("X-ESM-Path", esm)
+			ctx.SetHeader("X-ESM-Path", esmPath)
 			if noDts := query.Has("no-dts") || query.Has("no-check"); !noDts && buildMeta.Dts != "" {
 				ctx.SetHeader("X-TypeScript-Types", origin+buildMeta.Dts)
 				ctx.SetHeader("Access-Control-Expose-Headers", "X-ESM-Path, X-TypeScript-Types")
