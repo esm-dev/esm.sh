@@ -8,7 +8,7 @@ import (
 )
 
 var taskPool = sync.Pool{
-	New: func() any {
+	New: func() interface{} {
 		return &BuildTask{}
 	},
 }

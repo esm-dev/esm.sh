@@ -63,8 +63,8 @@ func parseDts(r io.Reader, w *bytes.Buffer, resolve func(specifier string, kind 
 			} else {
 				w.Write(line)
 			}
-		} else if after, ok := bytes.CutPrefix(line, bytesStripleSlash); ok {
-			rest := after
+		} else if bytes.HasPrefix(line, bytesStripleSlash) {
+			rest := bytes.TrimPrefix(line, bytesStripleSlash)
 			if regexpTSReferenceTag.Match(rest) {
 				a := regexpTSReferenceTag.FindAllSubmatch(rest, 1)
 				format := string(a[0][1])
@@ -254,7 +254,7 @@ func splitJSStmt(data []byte, atEOF bool) (advance int, token []byte, err error)
 func trimSpace(line []byte) ([]byte, []byte) {
 	s := 0
 	l := len(line)
-	for i := range l {
+	for i := 0; i < l; i++ {
 		c := line[i]
 		if c != ' ' && c != '\t' && c != '\n' && c != '\r' {
 			break

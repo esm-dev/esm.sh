@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="version" content="1">
+  <title>Preact App</title>
+  <link rel="icon" href="./assets/favicon.svg">
+  <script type="importmap">
+    {
+      "imports": {
+        "preact": "https://esm.sh/preact@10.28.3/es2022/preact.mjs",
+        "preact/jsx-runtime": "https://esm.sh/preact@10.28.3/es2022/jsx-runtime.mjs",
+        "preact/hooks": "https://esm.sh/preact@10.28.3/es2022/hooks.mjs"
+      }
+    }
+  </script>
+  <link rel="stylesheet" href="./uno.css">
+</head>
+<body>
+  <div id="root">
+    <p class="center-box font-sans text-gray-400">Loading...</p>
+  </div>
+  <script type="module" src="./app/main.tsx"></script>
+</body>
+</html>

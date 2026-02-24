@@ -12,6 +12,9 @@ Usage: esm.sh [command] [options]
 Commands:
   add [...imports]      Add imports to the "importmap" script in index.html
   tidy                  Clean up and optimize the "importmap" script in index.html
+  init                  Initialize a new no-build web app
+  serve                 Serve the web app in "production" mode
+  dev                   Serve the web app in "development" mode with live reload
 
 Options:
   --version, -v         Show the version
@@ -28,6 +31,12 @@ func Run() {
 		Add()
 	case "tidy":
 		Tidy()
+	case "init":
+		Init()
+	case "serve":
+		Serve()
+	case "dev":
+		Dev()
 	case "version":
 		fmt.Println("esm.sh CLI " + VERSION)
 	default:

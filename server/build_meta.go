@@ -67,7 +67,7 @@ func decodeBuildMeta(data []byte) (*BuildMeta, error) {
 	if len(data) < 5 || !bytes.Equal(data[:5], []byte{'E', 'S', 'M', '\r', '\n'}) {
 		return nil, errors.New("invalid build meta")
 	}
-	for line := range bytes.SplitSeq(data[5:], []byte{'\n'}) {
+	for _, line := range bytes.Split(data[5:], []byte{'\n'}) {
 		switch len(line) {
 		case 0:
 			// ignore empty line

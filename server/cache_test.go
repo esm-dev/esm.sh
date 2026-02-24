@@ -20,7 +20,7 @@ func getCacheSize() int {
 }
 
 func TestCache(t *testing.T) {
-	for i := range 100 {
+	for i := 0; i < 100; i++ {
 		withCache(fmt.Sprintf("^0.0.%d", i), 10*time.Millisecond, func() ([]byte, string, error) {
 			return []byte{byte(i)}, fmt.Sprintf("0.0.%d", i), nil
 		})
@@ -48,7 +48,7 @@ func TestCache(t *testing.T) {
 func TestLRUCache(t *testing.T) {
 	cacheLRU, _ = lru.New[string, any](1000)
 
-	for i := range 2000 {
+	for i := 0; i < 2000; i++ {
 		withLRUCache(fmt.Sprintf("item-%d", i), func() ([]byte, error) {
 			return []byte{byte(i % 256)}, nil
 		})

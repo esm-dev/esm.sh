@@ -63,6 +63,16 @@ func isRelPathSpecifier(specifier string) bool {
 	return strings.HasPrefix(specifier, "./") || strings.HasPrefix(specifier, "../")
 }
 
+// isAbsPathSpecifier returns true if the specifier is an absolute path.
+func isAbsPathSpecifier(specifier string) bool {
+	return strings.HasPrefix(specifier, "/") || strings.HasPrefix(specifier, "file:///")
+}
+
+// checks if the given hostname is a local address.
+func isLocalhost(hostname string) bool {
+	return hostname == "localhost" || strings.HasSuffix(hostname, ".localhost") || hostname == "127.0.0.1" || (valid.IsIPv4(hostname) && strings.HasPrefix(hostname, "192.168."))
+}
+
 // semverLessThan returns true if the version a is less than the version b.
 func semverLessThan(a string, b string) bool {
 	va, err1 := semver.NewVersion(a)

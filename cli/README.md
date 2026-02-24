@@ -1,6 +1,10 @@
 # esm.sh CLI
 
-A CLI tool for managing `importmap` script in `index.html`.
+A _no-build_ tool for modern web development. Features include:
+
+- Initialize a new no-build web app with esm.sh CDN
+- Serve web apps with esm.sh CDN, HMR, transforming TS/Vue/Svelte on the fly
+- Maintain the `importmap` script in index.html
 
 ## Installation
 
@@ -37,6 +41,9 @@ Usage: esm.sh [command] [options]
 Commands:
   add [...imports]      Add imports to the "importmap" script in index.html
   tidy                  Clean up and optimize the "importmap" script in index.html
+  init                  Initialize a new no-build web app
+  serve                 Serve the web app in "production" mode
+  dev                   Serve the web app in "development" mode with live reload
 
 Options:
   --version, -v         Show the version
