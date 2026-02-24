@@ -26,6 +26,12 @@ jobs:
           - os: linux
             arch: amd64
             ext: ''
+          - os: windows
+            arch: arm64
+            ext: ''
+          - os: windows
+            arch: amd64
+            ext: ''
 
     permissions:
       contents: read
@@ -38,7 +44,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: 1.25.x
+          go-version: 1.26.x
 
       - name: Setup Node.js
         uses: actions/setup-node@v4

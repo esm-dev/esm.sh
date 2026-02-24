@@ -18,8 +18,8 @@
     "@esm.sh/cli-darwin-amd64": "*",
     "@esm.sh/cli-linux-arm64": "*",
     "@esm.sh/cli-linux-amd64": "*",
-    "@esm.sh/cli-win32-arm64": "*",
-    "@esm.sh/cli-win32-amd64": "*"
+    "@esm.sh/cli-windows-arm64": "*",
+    "@esm.sh/cli-windows-amd64": "*"
   },
   "engines": {
     "node": ">=18"

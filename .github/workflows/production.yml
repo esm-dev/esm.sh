@@ -19,7 +19,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: 1.25.x
+          go-version: 1.26.x
 
       - name: Run Deploy Script
         run: ./scripts/deploy-ci.sh
