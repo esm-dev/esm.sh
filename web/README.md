@@ -7,7 +7,7 @@ A golang `http.Handler` for serving _no-build_ web applications with esm.sh CDN.
 
 - Web applications are served _as-is_ without build step.
 - Transpiles TypeScript, JSX, Vue, Svelte _on-the-fly_.
-- Built-in [TailwindCSS](https://tailwindcss.com) and [UnoCSS](https://unocss.dev) generator.
+- Built-in [TailwindCSS](https://tailwindcss.com) generator.
 - Static files are served from the application directory.
 - Support Hot Module Replacement (HMR) for development.
 
@@ -62,7 +62,7 @@ Create a `index.html` file in the application directory:
 </head>
 <body class="flex justify-center items-center h-screen">
   <div id="app"></div>
-  <script type="module" src="/app.tsx"></script>
+  <script type="module" src="./app.tsx"></script>
 </body>
 </html>
 ```

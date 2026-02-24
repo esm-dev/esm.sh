@@ -139,10 +139,6 @@ func (s *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					s.ServeFrameworkCSS(w, r, query, "tailwind")
 					return
 				}
-				if strings.HasSuffix(pathname, "/uno.css") {
-					s.ServeFrameworkCSS(w, r, query, "unocss")
-					return
-				}
 			}
 		}
 
@@ -377,7 +373,7 @@ func (s *Handler) ServeHtml(w http.ResponseWriter, r *http.Request, filename str
 			w.Write([]byte(`]){const el=$("link[href='"+href+"']");hot.watch(href,kind=>{if(kind==="modify")el.href=href+"?t="+Date.now().toString(36)})}`))
 		}
 
-		// reload the unocss when the module dependency tree is changed
+		// reload the tailwindcss when the module dependency tree is changed
 		if frameworkCSS != "" {
 			w.Write([]byte(`{const href="` + frameworkCSS + `",link=$("link[href='"+href+"']");`))
 			w.Write([]byte(`hot.watch("*",(kind,filename)=>{if(/\.(js|mjs|jsx|ts|mts|tsx|vue|svelte)$/i.test(filename)){link.href=href+"?t="+Date.now().toString(36)}});`))
@@ -1040,8 +1036,6 @@ func (s *Handler) preload() {
 			}
 			if strings.HasSuffix(entry, "tailwind.css") {
 				s.ServeFrameworkCSS(w, r, q, "tailwind")
-			} else if strings.HasSuffix(entry, "uno.css") {
-				s.ServeFrameworkCSS(w, r, q, "unocss")
 			} else {
 				s.ServeModule(w, r, pathname, q, nil)
 			}

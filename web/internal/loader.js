@@ -28,10 +28,6 @@ for await (const line of Deno.stdin.readable.pipeThrough(new TextDecoderStream()
         output("css", await tailwindCSS(...args));
         break;
       }
-      case "unocss": {
-        output("css", await unocss(...args));
-        break;
-      }
       default: {
         error("Unknown loader: " + loader);
       }
@@ -126,10 +122,10 @@ async function tailwindCSS(_id, content, config) {
     once.tailwindCompilers = new Map();
   }
   if (!once.tailwind) {
-    once.tailwind = import("npm:tailwindcss@4.1.18");
+    once.tailwind = import("npm:tailwindcss@4.2.0");
   }
   if (!once.oxide) {
-    once.oxide = import("npm:@esm.sh/oxide-wasm@0.1.4").then(({ init, extract }) => init().then(() => ({ extract })));
+    once.oxide = import("npm:oxide-wasm@0.1.1").then(({ init, extract }) => init().then(() => ({ extract })));
   }
   let compiler = once.tailwindCompilers.get(compilerId);
   if (!compiler || compiler.configCSS !== config?.css) {
@@ -140,7 +136,7 @@ async function tailwindCSS(_id, content, config) {
           switch (id) {
             case "tailwindcss": {
               if (!once.tailwindIndexCSS) {
-                once.tailwindIndexCSS = fetch("https://esm.sh/tailwindcss@4.1.18/index.css").then(res => res.text());
+                once.tailwindIndexCSS = fetch("https://esm.sh/tailwindcss@4.2.0/index.css").then(res => res.text());
               }
               const css = await once.tailwindIndexCSS;
               return {
@@ -170,19 +166,3 @@ async function tailwindCSS(_id, content, config) {
   return (await compiler).build(extract(content));
 }
 
-// generate css for the given content using unocss
-async function unocss(_id, content, config) {
-  const generatorId = config?.filename ?? ".";
-  if (!once.unoGenerators) {
-    once.unoGenerators = new Map();
-  }
-  let uno = once.unoGenerators.get(generatorId);
-  if (!uno || uno.configCSS !== config?.css) {
-    uno = import("npm:@esm.sh/unocss@0.6.0").then(({ init }) => init({ configCSS: config?.css }));
-    uno.configCSS = config?.css;
-    once.unoGenerators.set(generatorId, uno);
-  }
-  const { update, generate } = await uno;
-  await update(content);
-  return generate();
-}
