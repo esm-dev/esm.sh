@@ -1,7 +1,7 @@
 {
   "name": "esm.sh",
   "version": "*",
-  "description": "A no-build tool for modern web development.",
+  "description": "A CLI tool for managing `importmap` script in index.html",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/esm-dev/esm.sh.git"
@@ -17,7 +17,9 @@
     "@esm.sh/cli-darwin-arm64": "*",
     "@esm.sh/cli-darwin-amd64": "*",
     "@esm.sh/cli-linux-arm64": "*",
-    "@esm.sh/cli-linux-amd64": "*"
+    "@esm.sh/cli-linux-amd64": "*",
+    "@esm.sh/cli-win32-arm64": "*",
+    "@esm.sh/cli-win32-amd64": "*"
   },
   "engines": {
     "node": ">=18"
