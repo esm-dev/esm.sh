@@ -8,16 +8,23 @@ import (
 	"golang.org/x/term"
 )
 
-// termRaw implements the github.com/ije/gox/term.Raw interface.
-type termRaw struct{}
+// termRaw implements the `term.Raw“ interface of github.com/ije/gox
+type termRaw struct {
+	fd int
+}
+
+func newTermRaw() *termRaw {
+	return &termRaw{
+		fd: int(os.Stdin.Fd()),
+	}
+}
 
 func (t *termRaw) Next() byte {
-	fd := int(os.Stdin.Fd())
-	oldState, err := term.MakeRaw(fd)
+	oldState, err := term.MakeRaw(t.fd)
 	if err != nil {
 		panic(err)
 	}
-	defer term.Restore(fd, oldState)
+	defer term.Restore(t.fd, oldState)
 
 	buf := make([]byte, 3)
 	n, err := os.Stdin.Read(buf)
@@ -35,11 +42,11 @@ func (t *termRaw) Next() byte {
 }
 
 func (t *termRaw) GetSize() (width int, height int, err error) {
-	return term.GetSize(int(os.Stdin.Fd()))
+	return term.GetSize(t.fd)
 }
 
 func (t *termRaw) isTTY() bool {
-	return term.IsTerminal(int(os.Stdin.Fd()))
+	return term.IsTerminal(t.fd)
 }
 
 // parseCommandFlags parses the command flags

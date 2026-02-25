@@ -276,7 +276,7 @@ func addImports(im *importmap.ImportMap, specifiers []string, all bool, noPrompt
 	spinner.Stop()
 
 	if !noPrompt {
-		term := &termRaw{}
+		term := newTermRaw()
 		if term.isTTY() {
 			for _, imp := range resolvedImports {
 				if imp.SubPath == "" && len(imp.Exports) > 0 {
