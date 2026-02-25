@@ -984,16 +984,6 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 								moduleUrl,
 							)
 						}
-						if !(query.Has("no-dts") || query.Has("no-check")) {
-							if buildMetaData, err := metaDB.Get(pathname); err == nil {
-								if buildMeta, err := decodeBuildMeta(buildMetaData); err == nil {
-									if buildMeta.Dts != "" {
-										ctx.SetHeader("X-TypeScript-Types", origin+buildMeta.Dts)
-										ctx.SetHeader("Access-Control-Expose-Headers", "X-TypeScript-Types")
-									}
-								}
-							}
-						}
 						if len(exports) > 0 {
 							defer f.Close()
 							xxh := xxhash.New()
@@ -1456,9 +1446,6 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 				buf, recycle := newBuffer()
 				defer recycle()
 				esmPath := build.Path()
-				if query.Has("no-dts") || query.Has("no-check") {
-					esmPath += "?no-dts"
-				}
 				fmt.Fprintf(buf, "export * from \"%s\";\n", esmPath)
 				if buildMeta.ExportDefault {
 					fmt.Fprintf(buf, "export { default } from \"%s\";\n", esmPath)
@@ -1564,13 +1551,6 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 			esmPath := build.Path()
 			if !buildMeta.CJS && len(exports) > 0 {
 				esmPath += "?exports=" + strings.Join(exports, ",")
-			}
-			if query.Has("no-dts") || query.Has("no-check") {
-				if strings.Contains(esmPath, "?") {
-					esmPath += "&no-dts"
-				} else {
-					esmPath += "?no-dts"
-				}
 			}
 			fmt.Fprintf(buf, "export * from \"%s\";\n", esmPath)
 			if buildMeta.ExportDefault && (len(exports) == 0 || slices.Contains(exports, "default")) {
