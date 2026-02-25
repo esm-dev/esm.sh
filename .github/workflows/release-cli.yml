@@ -9,7 +9,7 @@ jobs:
   build_cli:
     name: Build esm.sh CLI
     runs-on: ubuntu-latest
-    environment: release
+    environment: npm
 
     strategy:
       matrix:
@@ -91,7 +91,7 @@ jobs:
   publish_to_npm:
     name: Publish package "esm.sh" to NPM
     runs-on: ubuntu-latest
-    environment: release
+    environment: npm
     needs: [build_cli]
 
     permissions:
