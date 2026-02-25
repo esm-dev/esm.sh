@@ -15,11 +15,11 @@
   },
   "optionalDependencies": {
     "@esm.sh/cli-darwin-arm64": "*",
-    "@esm.sh/cli-darwin-amd64": "*",
+    "@esm.sh/cli-darwin-x64": "*",
     "@esm.sh/cli-linux-arm64": "*",
-    "@esm.sh/cli-linux-amd64": "*",
-    "@esm.sh/cli-windows-arm64": "*",
-    "@esm.sh/cli-windows-amd64": "*"
+    "@esm.sh/cli-linux-x64": "*",
+    "@esm.sh/cli-win32-arm64": "*",
+    "@esm.sh/cli-win32-x64": "*"
   },
   "engines": {
     "node": ">=18"
