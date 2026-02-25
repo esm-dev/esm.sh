@@ -984,11 +984,13 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 								moduleUrl,
 							)
 						}
-						if buildMetaData, err := metaDB.Get(pathname); err == nil {
-							if buildMeta, err := decodeBuildMeta(buildMetaData); err == nil {
-								if noDts := query.Has("no-dts") || query.Has("no-check"); !noDts && buildMeta.Dts != "" {
-									ctx.SetHeader("X-TypeScript-Types", origin+buildMeta.Dts)
-									ctx.SetHeader("Access-Control-Expose-Headers", "X-TypeScript-Types")
+						if !(query.Has("no-dts") || query.Has("no-check")) {
+							if buildMetaData, err := metaDB.Get(pathname); err == nil {
+								if buildMeta, err := decodeBuildMeta(buildMetaData); err == nil {
+									if buildMeta.Dts != "" {
+										ctx.SetHeader("X-TypeScript-Types", origin+buildMeta.Dts)
+										ctx.SetHeader("Access-Control-Expose-Headers", "X-TypeScript-Types")
+									}
 								}
 							}
 						}
