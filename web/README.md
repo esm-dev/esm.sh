@@ -41,7 +41,7 @@ func main() {
 }
 ```
 
-Create a `index.html` file in the application directory:
+Create a `index.html` file in the `webapp` directory:
 
 ```html
 <!DOCTYPE html>
@@ -67,7 +67,7 @@ Create a `index.html` file in the application directory:
 </html>
 ```
 
-Create a `app.tsx` file in the application directory:
+Create a `app.tsx` file in the `webapp` directory:
 
 ```tsx
 import { createRoot } from "react-dom/client"
@@ -79,7 +79,7 @@ function App() {
 createRoot(document.getElementById("app")).render(<App />)
 ```
 
-Create a `tailwind.css` file in the application directory:
+Create a `tailwind.css` file in the `webapp` directory:
 
 ```css
 @import "tailwindcss";
