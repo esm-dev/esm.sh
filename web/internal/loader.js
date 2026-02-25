@@ -1,4 +1,4 @@
-import { TextLineStream } from "jsr:@std/streams@1.0.9/text-line-stream";
+import { TextLineStream } from "jsr:@std/streams@1.0.17/text-line-stream";
 
 const once = {};
 const enc = new TextEncoder();
