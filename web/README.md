@@ -62,7 +62,7 @@ Create a `index.html` file in the application directory:
 </head>
 <body class="flex justify-center items-center h-screen">
   <div id="app"></div>
-  <script type="module" src="./app.tsx"></script>
+  <script type="module" src="/app.tsx"></script>
 </body>
 </html>
 ```
