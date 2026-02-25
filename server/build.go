@@ -693,7 +693,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 									if err == nil {
 										var exportFrom []string
 										var moreStmt bool
-										for _, line := range bytes.Split(data, []byte{'\n'}) {
+										for line := range bytes.SplitSeq(data, []byte{'\n'}) {
 											line = bytes.TrimSpace(line)
 											if len(line) == 0 || bytes.HasPrefix(line, []byte("//")) || (bytes.HasPrefix(line, []byte("/*")) && bytes.HasSuffix(line, []byte("*/"))) {
 												// skip comments
@@ -1280,13 +1280,13 @@ REBUILD:
 						imports.Add(r[1])
 					}
 					// if `require("module").default` found
-					if bytes.Contains(jsContent, []byte(fmt.Sprintf(`("%s").default`, specifier))) {
+					if bytes.Contains(jsContent, fmt.Appendf(nil, `("%s").default`, specifier)) {
 						isEsModule[i] = true
 						continue
 					}
 					// `var mod = require("module");...;mod()` -> cjs
 					// `var mod = require("module");...;mod.default` -> es module
-					if a := bytes.SplitN(jsContent, []byte(fmt.Sprintf(`("%s")`, specifier)), 2); len(a) >= 2 {
+					if a := bytes.SplitN(jsContent, fmt.Appendf(nil, `("%s")`, specifier), 2); len(a) >= 2 {
 						ret := regexpVarDecl.FindSubmatch(a[0])
 						if len(ret) == 2 {
 							r, e := regexp.Compile(fmt.Sprintf(`[^\w$]%s(\(|\.default[^\w$=])`, string(ret[1])))

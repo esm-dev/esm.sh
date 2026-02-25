@@ -7,8 +7,8 @@ on:
     branches: [main]
 
 jobs:
-  test:
-    name: Deno
+  server_integration_test:
+    name: Server Integration Test
     runs-on: ubuntu-latest
 
     strategy:
@@ -22,7 +22,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: 1.25.x
+          go-version: 1.26.x
 
       - name: Setup Deno
         uses: denoland/setup-deno@main
@@ -40,3 +40,35 @@ jobs:
 
       - name: Run Integration Tests
         run: test/bootstrap.ts -q
+
+  cli_test:
+    name: CLI Test
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            ext: ''
+          - os: ubuntu-latest
+            ext: ''
+          - os: windows-latest
+            ext: '.exe'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.26.x
+
+      - name: Build CLI
+        run: go build -o esm.sh${{ matrix.ext }} main.go
+
+      - name: Run CLI
+        run: ./esm.sh${{ matrix.ext }} add --no-prompt react react/jsx-runtime react-dom react-dom/client
+
+      - name: Check CLI Output
+        run: cat index.html

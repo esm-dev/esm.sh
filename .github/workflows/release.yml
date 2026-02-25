@@ -14,18 +14,36 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: darwin
+          - platform: darwin
             arch: arm64
+            goos: darwin
+            goarch: arm64
             ext: ''
-          - os: darwin
-            arch: amd64
+          - platform: darwin
+            arch: x64
+            goos: darwin
+            goarch: amd64
             ext: ''
-          - os: linux
+          - platform: linux
             arch: arm64
+            goos: linux
+            goarch: arm64
             ext: ''
-          - os: linux
-            arch: amd64
+          - platform: linux
+            arch: x64
+            goos: linux
+            goarch: amd64
             ext: ''
+          - platform: win32
+            arch: arm64
+            goos: windows
+            goarch: arm64
+            ext: '.exe'
+          - platform: win32
+            arch: x64
+            goos: windows
+            goarch: amd64
+            ext: '.exe'
 
     permissions:
       contents: read
@@ -38,35 +56,35 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: 1.25.x
+          go-version: 1.26.x
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           registry-url: 'https://registry.npmjs.org'
 
       - name: Build CLI
-        run: go build -ldflags="-s -w" -o cli/npm/tmp/bin/esm.sh main.go
+        run: go build -ldflags="-s -w" -o cli/npm/cli_package/bin/esm.sh${{ matrix.ext }} main.go
         env:
-          GOOS: ${{ matrix.os }}
-          GOARCH: ${{ matrix.arch }}
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: "0"
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: cli-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}
-          path: cli/npm/tmp/bin/esm.sh
+          name: cli-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.ext }}
+          path: cli/npm/cli_package/bin/esm.sh${{ matrix.ext }}
           if-no-files-found: error
 
       - name: Create package.json
-        run: echo "const p=JSON.parse(require('fs').readFileSync('../npm/package.json','utf8'));console.log(JSON.stringify({...p,name:'@esm.sh/cli-${{ matrix.os }}-${{ matrix.arch }}',version:'${{ github.ref_name }}'.slice(1),os:['${{ matrix.os }}'],cpu:['${{ matrix.arch }}'.replace('amd','x')],bin:void 0,scripts:void 0,optionalDependencies:void 0}))" | node > package.json
-        working-directory: cli/npm/tmp
+        run: echo "const p=JSON.parse(require('fs').readFileSync('../npm/package.json','utf8'));console.log(JSON.stringify({...p,name:'@esm.sh/cli-${{ matrix.platform }}-${{ matrix.arch }}',version:'${{ github.ref_name }}'.slice(1),os:['${{ matrix.platform }}'],cpu:['${{ matrix.arch }}'],bin:void 0,scripts:void 0,optionalDependencies:void 0}))" | node > package.json
+        working-directory: cli/npm/cli_package
 
       - name: Publish Package to NPM
         run: npm publish --provenance --access public
-        working-directory: cli/npm/tmp
+        working-directory: cli/npm/cli_package
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
@@ -87,7 +105,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           registry-url: 'https://registry.npmjs.org'
 
       - name: Update Version

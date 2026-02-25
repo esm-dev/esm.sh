@@ -172,8 +172,8 @@ func legacyGetBuildTargetByUA(ua string) string {
 	if ua == "" || strings.HasPrefix(ua, "curl/") {
 		return "esnext"
 	}
-	if strings.HasPrefix(ua, "Deno/") {
-		version, err := semver.NewVersion(strings.TrimPrefix(ua, "Deno/"))
+	if after, ok := strings.CutPrefix(ua, "Deno/"); ok {
+		version, err := semver.NewVersion(after)
 		// legacy target "deno" (< 1.33.2) doesn't support `node:` specific features
 		if err == nil && !(version.Major() > 1 || (version.Major() == 1 && (version.Minor() > 33 || (version.Minor() == 33 && version.Patch() >= 2)))) {
 			return "deno"
