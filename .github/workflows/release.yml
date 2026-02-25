@@ -28,10 +28,10 @@ jobs:
             ext: ''
           - os: windows
             arch: arm64
-            ext: ''
+            ext: '.exe'
           - os: windows
             arch: amd64
-            ext: ''
+            ext: '.exe'
 
     permissions:
       contents: read
@@ -49,11 +49,11 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           registry-url: 'https://registry.npmjs.org'
 
       - name: Build CLI
-        run: go build -ldflags="-s -w" -o cli/npm/tmp/bin/esm.sh main.go
+        run: go build -ldflags="-s -w" -o cli/npm/tmp/bin/esm.sh${{ matrix.ext }} main.go
         env:
           GOOS: ${{ matrix.os }}
           GOARCH: ${{ matrix.arch }}
@@ -63,7 +63,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: cli-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}
-          path: cli/npm/tmp/bin/esm.sh
+          path: cli/npm/tmp/bin/esm.sh${{ matrix.ext }}
           if-no-files-found: error
 
       - name: Create package.json
@@ -93,7 +93,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           registry-url: 'https://registry.npmjs.org'
 
       - name: Update Version
