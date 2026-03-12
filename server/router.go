@@ -17,7 +17,6 @@ import (
 	"slices"
 	"sort"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/esm-dev/esm.sh/internal/fetch"
@@ -79,6 +78,17 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 			}
 		}
 	}
+
+	// purge npm cache when disk is low
+	go func() {
+		ticker := time.NewTicker(1 * time.Hour)
+		defer ticker.Stop()
+		for range ticker.C {
+			if checkDiskStatus() == DiskStatusLow {
+				purgeNPMCache(npmrc)
+			}
+		}
+	}()
 
 	return func(ctx *rex.Context) any {
 		pathname := ctx.R.URL.Path
@@ -288,16 +298,12 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 			}
 
 			diskStatus := "ok"
-			var stat syscall.Statfs_t
-			err := syscall.Statfs(config.WorkDir, &stat)
-			if err == nil {
-				avail := stat.Bavail * uint64(stat.Bsize)
-				if avail < 100*MB {
-					diskStatus = "full"
-				} else if avail < 1024*MB {
-					diskStatus = "low"
-				}
-			} else {
+			switch checkDiskStatus() {
+			case DiskStatusFull:
+				diskStatus = "full"
+			case DiskStatusLow:
+				diskStatus = "low"
+			case DiskStatusError:
 				diskStatus = "error"
 			}
 
