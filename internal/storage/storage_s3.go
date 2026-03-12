@@ -107,7 +107,7 @@ func (s3 *s3Storage) Stat(name string) (stat Stat, err error) {
 	if name == "" {
 		return nil, errors.New("name is required")
 	}
-	if s3.fsCache != nil && !strings.HasSuffix(name, ".mjs.map") {
+	if s3.shouldUseFSCache(name) {
 		stat, err = s3.fsCache.Stat(name)
 		if err == nil {
 			return
@@ -160,7 +160,7 @@ func (s3 *s3Storage) Get(name string) (content io.ReadCloser, stat Stat, err err
 	if name == "" {
 		return nil, nil, errors.New("name is required")
 	}
-	if s3.fsCache != nil && !strings.HasSuffix(name, ".mjs.map") {
+	if s3.shouldUseFSCache(name) {
 		content, stat, err = s3.fsCache.Get(name)
 		if err == nil {
 			return
@@ -206,7 +206,7 @@ func (s3 *s3Storage) Get(name string) (content io.ReadCloser, stat Stat, err err
 		contentLength: size,
 		lastModified:  lastModified,
 	}
-	if s3.fsCache != nil && !strings.HasSuffix(name, ".mjs.map") {
+	if s3.shouldUseFSCache(name) {
 		pr, pw := io.Pipe()
 		go func() {
 			unlock := s3.fsCacheLock.Lock(name)
@@ -267,7 +267,7 @@ func (s3 *s3Storage) Put(name string, content io.Reader) (err error) {
 		err = errors.New("missing content length")
 		return
 	}
-	if s3.fsCache != nil && !strings.HasSuffix(name, ".mjs.map") {
+	if s3.shouldUseFSCache(name) {
 		pr, pw := io.Pipe()
 		go func(content io.Reader) {
 			unlock := s3.fsCacheLock.Lock(name)
@@ -295,7 +295,7 @@ func (s3 *s3Storage) Delete(name string) (err error) {
 	if name == "" {
 		return errors.New("key is required")
 	}
-	if s3.fsCache != nil && !strings.HasSuffix(name, ".mjs.map") {
+	if s3.shouldUseFSCache(name) {
 		go s3.fsCache.Delete(name)
 	}
 	req, _ := http.NewRequest("DELETE", s3.apiEndpoint+"/"+name, nil)
@@ -415,6 +415,16 @@ func (s3 *s3Storage) sign(req *http.Request) {
 	signingKey := hmacSum(hmacSum(hmacSum(hmacSum([]byte("AWS4"+s3.secretAccessKey), date), s3.region), "s3"), "aws4_request")
 	signature := hmacSum(signingKey, stringToSign)
 	req.Header.Set("Authorization", strings.Join([]string{"AWS4-HMAC-SHA256 Credential=" + s3.accessKeyID + "/" + scope, "SignedHeaders=" + strings.Join(signedHeaders, ";"), "Signature=" + toHex(signature)}, ", "))
+}
+
+func (s3 *s3Storage) shouldUseFSCache(name string) bool {
+	if s3.fsCache == nil {
+		return false
+	}
+	if strings.HasSuffix(name, ".mjs.map") || strings.HasSuffix(name, ".d.ts") || strings.HasSuffix(name, ".d.mts") || strings.HasSuffix(name, ".d.cts") {
+		return false
+	}
+	return true
 }
 
 func parseS3Error(resp *http.Response) error {
