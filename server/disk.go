@@ -40,6 +40,11 @@ func purgeNPMCacheWhenDiskIsLowOrFull(npmrc *NpmRC, logger *log.Logger) {
 	npmDir := npmrc.StoreDir()
 	oldDir := npmDir + "_old"
 
+	// Ensure any previous backup directory is removed so that the rename is idempotent.
+	if err := os.RemoveAll(oldDir); err != nil {
+		logger.Errorf("failed to remove previous npm cache backup directory %s: %v", oldDir, err)
+	}
+
 	if err := os.Rename(npmDir, oldDir); err != nil {
 		// If the directory does not exist, there's nothing to purge.
 		if !os.IsNotExist(err) {
