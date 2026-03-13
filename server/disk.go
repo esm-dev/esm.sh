@@ -3,7 +3,6 @@ package server
 import (
 	"os"
 	"sync"
-	"sync/atomic"
 	"syscall"
 
 	"github.com/ije/gox/log"
@@ -18,14 +17,9 @@ const (
 	DiskStatusFull
 )
 
-// npmStorePurgeMu serializes purge operations on the npm store to avoid
+// npmStorePurgeLock serializes purge operations on the npm store to avoid
 // concurrent rename/remove races within this process.
-var npmStorePurgeMu sync.Mutex
-
-// npmStorePurging is an atomic flag indicating that a purge of the npm store
-// is in progress. Other code paths that access the store can use this flag
-// to coordinate with purgeNPMCacheWhenDiskIsLowOrFull.
-var npmStorePurging int32
+var npmStorePurgeLock sync.Mutex
 
 func checkDiskStatus() DiskStatus {
 	var stat syscall.Statfs_t
@@ -48,15 +42,8 @@ func purgeNPMCacheWhenDiskIsLowOrFull(npmrc *NpmRC, logger *log.Logger) {
 		return
 	}
 
-	// Serialize purge operations and mark that a purge is in progress so that
-	// other code paths can coordinate and avoid racing with this destructive
-	// rename/remove of the npm store directory.
-	npmStorePurgeMu.Lock()
-	atomic.StoreInt32(&npmStorePurging, 1)
-	defer func() {
-		atomic.StoreInt32(&npmStorePurging, 0)
-		npmStorePurgeMu.Unlock()
-	}()
+	npmStorePurgeLock.Lock()
+	defer npmStorePurgeLock.Unlock()
 
 	npmDir := npmrc.StoreDir()
 	oldDir := npmDir + "_old"
