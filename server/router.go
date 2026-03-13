@@ -79,12 +79,17 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 		}
 	}
 
-	// purge npm cache when disk is low
+	// purge npm cache when disk is low or full
 	go func() {
+		// run an initial check before waiting for the first ticker event
+		if status := checkDiskStatus(); status == DiskStatusLow || status == DiskStatusFull {
+			purgeNPMCache(npmrc)
+		}
+
 		ticker := time.NewTicker(1 * time.Hour)
 		defer ticker.Stop()
 		for range ticker.C {
-			if checkDiskStatus() == DiskStatusLow {
+			if status := checkDiskStatus(); status == DiskStatusLow || status == DiskStatusFull {
 				purgeNPMCache(npmrc)
 			}
 		}
