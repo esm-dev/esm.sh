@@ -87,7 +87,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 		ticker := time.NewTicker(1 * time.Hour)
 		defer ticker.Stop()
 		for range ticker.C {
-			purgeNPMCacheWhenDiskIsLowOrFull(npmrc, logger)
+			go purgeNPMCacheWhenDiskIsLowOrFull(npmrc, logger)
 		}
 	}()
 
