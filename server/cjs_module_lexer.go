@@ -86,7 +86,7 @@ func cjsModuleLexer(b *BuildContext, cjsEntry string) (ret cjsModuleLexerResult,
 		if err != nil {
 			return
 		}
-		cancelCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		cancelCtx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
 		cmd := exec.CommandContext(cancelCtx,
 			denoPath,

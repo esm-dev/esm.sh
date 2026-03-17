@@ -23,7 +23,7 @@ type GitRef struct {
 // list refs of a github repository using `git ls-remote repo`
 func listGhRepoRefs(repo string) (refs []GitRef, err error) {
 	return withCache("git ls-remote "+repo, time.Duration(config.NpmQueryCacheTTL)*time.Second, func() ([]GitRef, string, error) {
-		cancelCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		cancelCtx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
 		stdout, recycle := newBuffer()
 		defer recycle()
