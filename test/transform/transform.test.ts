@@ -2,10 +2,11 @@ import { assertEquals, assertStringIncludes } from "jsr:@std/assert";
 
 Deno.test("transform API", async () => {
   const options = {
-    lang: "jsx",
+    lang: "tsx",
     code: `
       import { renderToString } from "preact-render-to-string";
-      export default () => renderToString(<h1>esm.sh</h1>);
+      const render: (() => string) = () => renderToString(<h1>esm.sh</h1>);
+      export default render;
     `,
     target: "es2022",
     importMap: {
@@ -27,7 +28,9 @@ Deno.test("transform API", async () => {
   });
   assertEquals(res1.status, 200);
   const transformOut = await res1.json();
-  assertStringIncludes(transformOut.code, `"preact/jsx-runtime"`);
+  assertStringIncludes(transformOut.code, `"https://esm.sh/preact-render-to-string@6.0.2"`);
+  assertStringIncludes(transformOut.code, `"https://esm.sh/preact@10.13.2/jsx-runtime"`);
+  assertStringIncludes(transformOut.code, `jsx as`);
   assertStringIncludes(transformOut.code, `("h1"`);
   assertStringIncludes(transformOut.code, `//# sourceMappingURL=+${hash}.mjs.map`);
   assertStringIncludes(transformOut.map, `"mappings":`);
