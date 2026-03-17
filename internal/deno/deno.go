@@ -145,6 +145,7 @@ func getDenoDownloadURL(version string) (string, error) {
 
 func validateDenoVersion(denoPath string) error {
 	cmd := exec.Command(denoPath, "eval", "console.log(Deno.version.deno)")
+	cmd.Env = append(os.Environ(), "DENO_NO_UPDATE_CHECK=1")
 	output, err := cmd.Output()
 	if err != nil {
 		return err

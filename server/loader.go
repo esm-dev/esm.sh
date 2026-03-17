@@ -1,10 +1,12 @@
 package server
 
 import (
+	"context"
 	"errors"
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/esm-dev/esm.sh/internal/deno"
 	esbuild "github.com/ije/esbuild-internal/api"
@@ -25,7 +27,9 @@ func runLoader(loaderJsPath string, filename string, code string) (out *LoaderOu
 		return
 	}
 
-	cmd := exec.Command(
+	cancelCtx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	cmd := exec.CommandContext(cancelCtx,
 		denoPath,
 		"run",
 		"--no-config",

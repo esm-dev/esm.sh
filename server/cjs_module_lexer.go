@@ -86,8 +86,9 @@ func cjsModuleLexer(b *BuildContext, cjsEntry string) (ret cjsModuleLexerResult,
 		if err != nil {
 			return
 		}
-		var data []byte
-		cmd := exec.Command(
+		cancelCtx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
+		cmd := exec.CommandContext(cancelCtx,
 			denoPath,
 			"run",
 			"--allow-env",
@@ -97,13 +98,10 @@ func cjsModuleLexer(b *BuildContext, cjsEntry string) (ret cjsModuleLexerResult,
 			"--quiet",
 			js)
 		cmd.Env = append(os.Environ(), "DENO_NO_UPDATE_CHECK=1")
-		data, err = cmd.CombinedOutput()
+		var data []byte
+		data, err = cmd.Output()
 		if err != nil {
-			msg := err.Error()
-			if data != nil {
-				msg = string(data)
-			}
-			err = errors.New("cjsModuleLexer(fallback mode): " + msg)
+			err = errors.New("cjsModuleLexer(fallback mode): " + err.Error())
 			return
 		}
 		var namedExports []string
