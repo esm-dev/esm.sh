@@ -756,7 +756,22 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 	}
 
 	// if it's `main` entry of current package
-	if pkgJson := ctx.pkgJson; specifier == pkgJson.Name || specifier == pkgJson.PkgName {
+	// Also handles scoped fork self-reference: e.g. `@scope/three` source importing `three`
+	// when `three` is not declared as a dependency — treat as self-reference.
+	pkgJson := ctx.pkgJson
+	isSelfRef := specifier == pkgJson.Name || specifier == pkgJson.PkgName
+	if !isSelfRef && strings.HasPrefix(pkgJson.Name, "@") {
+		_, baseName := utils.SplitByFirstByte(pkgJson.Name[1:], '/')
+		specPkgName := toPackageName(specifier)
+		if specPkgName == baseName {
+			_, inDeps := pkgJson.Dependencies[specPkgName]
+			_, inPeerDeps := pkgJson.PeerDependencies[specPkgName]
+			if !inDeps && !inPeerDeps {
+				isSelfRef = true
+			}
+		}
+	}
+	if isSelfRef {
 		esmPath := EsmPath{
 			GhPrefix:   ctx.esmPath.GhPrefix,
 			PrPrefix:   ctx.esmPath.PrPrefix,
@@ -777,10 +792,22 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 	}
 
 	// if it's a sub-module of current package
+	// Also handles scoped fork sub-paths: e.g. `@scope/three` source importing `three/tsl`
 	{
 		subPath, ok := strings.CutPrefix(specifier, ctx.pkgJson.Name+"/")
 		if !ok {
 			subPath, ok = strings.CutPrefix(specifier, ctx.pkgJson.PkgName+"/")
+		}
+		if !ok && strings.HasPrefix(ctx.pkgJson.Name, "@") {
+			_, baseName := utils.SplitByFirstByte(ctx.pkgJson.Name[1:], '/')
+			specPkgName := toPackageName(specifier)
+			if specPkgName == baseName {
+				_, inDeps := ctx.pkgJson.Dependencies[specPkgName]
+				_, inPeerDeps := ctx.pkgJson.PeerDependencies[specPkgName]
+				if !inDeps && !inPeerDeps {
+					subPath, ok = strings.CutPrefix(specifier, baseName+"/")
+				}
+			}
 		}
 		if ok {
 			subModule := EsmPath{

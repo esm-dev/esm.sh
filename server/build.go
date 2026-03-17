@@ -549,7 +549,20 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 
 					// externalize top-level module
 					// e.g. "react/jsx-runtime" imports "react"
-					if ctx.esmPath.SubPath != "" && specifier == ctx.esmPath.PkgName && ctx.bundleMode != BundleDeps {
+					// Also handles scoped fork self-reference: "@scope/three" importing "three"
+					isSelfRef := specifier == ctx.esmPath.PkgName
+					if !isSelfRef && strings.HasPrefix(ctx.esmPath.PkgName, "@") {
+						_, baseName := utils.SplitByFirstByte(ctx.esmPath.PkgName[1:], '/')
+						specPkgName := toPackageName(specifier)
+						if specPkgName == baseName {
+							_, inDeps := pkgJson.Dependencies[specPkgName]
+							_, inPeerDeps := pkgJson.PeerDependencies[specPkgName]
+							if !inDeps && !inPeerDeps {
+								isSelfRef = true
+							}
+						}
+					}
+					if ctx.esmPath.SubPath != "" && isSelfRef && ctx.bundleMode != BundleDeps {
 						externalPath, sideEffects, err := ctx.resolveExternalModule(ctx.esmPath.PkgName, args.Kind, withTypeJSON, analyzeMode)
 						if err != nil {
 							return esbuild.OnResolveResult{}, err
