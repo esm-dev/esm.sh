@@ -3,6 +3,7 @@ package server
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -22,11 +23,13 @@ type GitRef struct {
 // list refs of a github repository using `git ls-remote repo`
 func listGhRepoRefs(repo string) (refs []GitRef, err error) {
 	return withCache("git ls-remote "+repo, time.Duration(config.NpmQueryCacheTTL)*time.Second, func() ([]GitRef, string, error) {
+		cancelCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
 		stdout, recycle := newBuffer()
 		defer recycle()
 		errout, recycle := newBuffer()
 		defer recycle()
-		cmd := exec.Command("git", "ls-remote", repo)
+		cmd := exec.CommandContext(cancelCtx, "git", "ls-remote", repo)
 		cmd.Stdout = stdout
 		cmd.Stderr = errout
 		err = cmd.Run()
