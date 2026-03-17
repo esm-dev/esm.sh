@@ -3,7 +3,6 @@ package server
 import (
 	"bufio"
 	"compress/gzip"
-	"context"
 	"crypto/sha1"
 	"encoding/base64"
 	"encoding/json"
@@ -97,6 +96,7 @@ func cjsModuleLexer(b *BuildContext, cjsEntry string) (ret cjsModuleLexerResult,
 			"--quiet",
 			js)
 		cmd.Env = append(os.Environ(), "DENO_NO_UPDATE_CHECK=1")
+		cmd.WaitDelay = 10 * time.Second
 		data, err = cmd.CombinedOutput()
 		if err != nil {
 			msg := err.Error()
@@ -131,18 +131,18 @@ func cjsModuleLexer(b *BuildContext, cjsEntry string) (ret cjsModuleLexerResult,
 	retried := false
 RETRY:
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	stdout, recycle1 := newBuffer()
-	stderr, recycle2 := newBuffer()
-	defer cancel()
 	defer recycle1()
+
+	stderr, recycle2 := newBuffer()
 	defer recycle2()
 
-	cmd := exec.CommandContext(ctx, path.Join(config.WorkDir, fmt.Sprintf("bin/cjs-module-lexer-%s", cjsModuleLexerVersion)), path.Join(b.esmPath.PkgName, cjsEntry))
+	cmd := exec.Command(path.Join(config.WorkDir, fmt.Sprintf("bin/cjs-module-lexer-%s", cjsModuleLexerVersion)), path.Join(b.esmPath.PkgName, cjsEntry))
 	cmd.Dir = b.wd
+	cmd.WaitDelay = 30 * time.Second
+	cmd.Env = append(os.Environ(), "NODE_ENV="+b.getNodeEnv())
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
-	cmd.Env = append(os.Environ(), "NODE_ENV="+b.getNodeEnv())
 
 	err = cmd.Run()
 	if err != nil {

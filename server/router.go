@@ -290,6 +290,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 					m := map[string]any{
 						"waitClients": len(t.waitChans),
 						"createdAt":   t.createdAt.Format(http.TimeFormat),
+						"duration":    time.Since(t.startedAt).String(),
 						"path":        t.ctx.Path(),
 						"status":      t.ctx.status,
 					}

@@ -29,6 +29,7 @@ func listGhRepoRefs(repo string) (refs []GitRef, err error) {
 		cmd := exec.Command("git", "ls-remote", repo)
 		cmd.Stdout = stdout
 		cmd.Stderr = errout
+		cmd.WaitDelay = 30 * time.Second
 		err = cmd.Run()
 		if err != nil {
 			if errout.Len() > 0 {

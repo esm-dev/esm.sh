@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/esm-dev/esm.sh/internal/deno"
 	esbuild "github.com/ije/esbuild-internal/api"
@@ -39,6 +40,7 @@ func runLoader(loaderJsPath string, filename string, code string) (out *LoaderOu
 	)
 	cmd.Env = append(os.Environ(), "DENO_NO_UPDATE_CHECK=1", "DENO_NO_PACKAGE_JSON=1")
 	cmd.Stdin = strings.NewReader(code)
+	cmd.WaitDelay = 30 * time.Second
 	output, err := cmd.Output()
 	if err != nil {
 		return
