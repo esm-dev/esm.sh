@@ -130,8 +130,8 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 				h.Write([]byte(options.Lang))
 				h.Write([]byte(options.Code))
 				h.Write([]byte(options.Target))
-				h.Write(options.ImportMap)
-				h.Write([]byte(options.JsxImportSource))
+				h.Write(options.ImportMapRaw)
+				h.Write([]byte(options.JSXImportSource))
 				h.Write([]byte(options.SourceMap))
 				fmt.Fprintf(h, "%v", options.Minify)
 				hash := hex.EncodeToString(h.Sum(nil))
@@ -159,8 +159,8 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 				}
 
 				var importMap *importmap.ImportMap
-				if len(options.ImportMap) > 0 {
-					importMap, err = importmap.Parse(nil, options.ImportMap)
+				if len(options.ImportMapRaw) > 0 {
+					importMap, err = importmap.Parse(nil, options.ImportMapRaw)
 					if err != nil {
 						return rex.Err(400, "Invalid ImportMap")
 					}

@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/url"
 	"strings"
 
 	"github.com/esm-dev/esm.sh/internal/importmap"
@@ -17,8 +16,8 @@ type TransformOptions struct {
 	Filename        string          `json:"filename"`
 	Lang            string          `json:"lang"`
 	Code            string          `json:"code"`
-	ImportMap       json.RawMessage `json:"importMap"`
-	JsxImportSource string          `json:"jsxImportSource"`
+	ImportMapRaw    json.RawMessage `json:"importMap"`
+	JSXImportSource string          `json:"jsxImportSource"`
 	Target          string          `json:"target"`
 	SourceMap       string          `json:"sourceMap"`
 	Minify          bool            `json:"minify"`
@@ -26,8 +25,7 @@ type TransformOptions struct {
 
 type ResolvedTransformOptions struct {
 	TransformOptions
-	importMap     *importmap.ImportMap
-	globalVersion string
+	importMap *importmap.ImportMap
 }
 
 type TransformOutput struct {
@@ -49,7 +47,8 @@ func transform(options *ResolvedTransformOptions) (out *TransformOutput, err err
 
 	loader := esbuild.LoaderJS
 	sourceCode := options.Code
-	jsxImportSource := options.JsxImportSource
+	jsxImportSource := options.JSXImportSource
+	importMap := options.importMap
 
 	if options.Lang == "" && options.Filename != "" {
 		filename, _ := utils.SplitByFirstByte(options.Filename, '?')
@@ -72,8 +71,8 @@ func transform(options *ResolvedTransformOptions) (out *TransformOutput, err err
 		return
 	}
 
-	if jsxImportSource == "" && (loader == esbuild.LoaderJSX || loader == esbuild.LoaderTSX) && options.importMap != nil {
-		for _, key := range options.importMap.Imports.Keys() {
+	if jsxImportSource == "" && (loader == esbuild.LoaderJSX || loader == esbuild.LoaderTSX) && importMap != nil {
+		for _, key := range importMap.Imports.Keys() {
 			if before, ok := strings.CutSuffix(key, "/jsx-runtime"); ok {
 				jsxImportSource = before
 				break
@@ -81,7 +80,7 @@ func transform(options *ResolvedTransformOptions) (out *TransformOutput, err err
 		}
 		if jsxImportSource == "" {
 			for _, key := range []string{"react/", "preact/", "solid-js/", "mono-jsx/dom/", "mono-jsx/", "vue/"} {
-				if options.importMap.Imports.Has(key) {
+				if importMap.Imports.Has(key) {
 					jsxImportSource = strings.TrimSuffix(key, "/")
 					break
 				}
@@ -121,6 +120,7 @@ func transform(options *ResolvedTransformOptions) (out *TransformOutput, err err
 		MinifyIdentifiers: options.Minify,
 		Sourcemap:         sourceMap,
 		Bundle:            true,
+		TreeShaking:       esbuild.TreeShakingTrue,
 		Outdir:            "/esbuild",
 		Write:             false,
 		Plugins: []esbuild.Plugin{
@@ -128,11 +128,10 @@ func transform(options *ResolvedTransformOptions) (out *TransformOutput, err err
 				Name: "resolver",
 				Setup: func(build esbuild.PluginBuild) {
 					build.OnResolve(esbuild.OnResolveOptions{Filter: ".*"}, func(args esbuild.OnResolveArgs) (esbuild.OnResolveResult, error) {
-						importerUrl, _ := url.Parse(args.Importer)
-						if options.importMap != nil {
-							path, ok := options.importMap.Resolve(args.Path, importerUrl)
+						if importMap != nil {
+							path, ok := importMap.Resolve(args.Path, nil)
 							if ok && isHttpSpecifier(path) {
-								return esbuild.OnResolveResult{Path: args.Path, External: true}, nil
+								return esbuild.OnResolveResult{Path: path, External: true}, nil
 							}
 						}
 						return esbuild.OnResolveResult{Path: args.Path, External: true}, nil
