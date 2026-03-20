@@ -7,12 +7,6 @@ import (
 	"time"
 )
 
-var taskPool = sync.Pool{
-	New: func() any {
-		return &BuildTask{}
-	},
-}
-
 // BuildQueue schedules build tasks of esm.sh
 type BuildQueue struct {
 	lock      sync.Mutex
@@ -60,11 +54,12 @@ func (q *BuildQueue) Add(ctx *BuildContext) chan BuildOutput {
 		return ch
 	}
 
-	task = taskPool.Get().(*BuildTask)
-	task.ctx = ctx
-	task.createdAt = time.Now()
-	task.waitChans = []chan BuildOutput{ch}
-	task.pending = true
+	task = &BuildTask{
+		ctx:       ctx,
+		createdAt: time.Now(),
+		waitChans: []chan BuildOutput{ch},
+		pending:   true,
+	}
 	ctx.status = "pending"
 
 	task.el = q.queue.PushBack(task)
@@ -172,15 +167,6 @@ func (q *BuildQueue) run(task *BuildTask) {
 
 	// store wait channels before recycling the task
 	waitChans := task.waitChans
-
-	// recycle the task object
-	task.ctx = nil
-	task.el = nil
-	task.waitChans = nil
-	task.createdAt = time.Time{}
-	task.startedAt = time.Time{}
-	task.pending = false
-	taskPool.Put(task)
 
 	// send the build output
 	output := BuildOutput{meta, err}

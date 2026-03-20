@@ -271,8 +271,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 		if err != nil {
 			return
 		}
-		buffer, recycle := newBuffer()
-		defer recycle()
+		buffer := &bytes.Buffer{}
 		buffer.WriteString("export default ")
 		buffer.Write(jsonData)
 		err = ctx.storage.Put(ctx.getSavePath(), buffer)
@@ -354,8 +353,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 	if entry.module {
 		entryPoint = entryModuleFilename
 	} else {
-		buf, recycle := newBuffer()
-		defer recycle()
+		buf := &bytes.Buffer{}
 		fmt.Fprintf(buf, `import * as cjsm from "%s";`, entrySpecifier)
 		if len(cjsExports) > 0 {
 			fmt.Fprintf(buf, `export const { %s } = cjsm;`, strings.Join(cjsExports, ","))
@@ -1155,10 +1153,7 @@ REBUILD:
 
 	for _, file := range res.OutputFiles {
 		if strings.HasSuffix(file.Path, ".js") {
-			header, recycle := newBuffer()
-			defer recycle()
-
-			header.WriteString("/* esm.sh - ")
+			header := bytes.NewBufferString("/* esm.sh - ")
 			if ctx.esmPath.GhPrefix {
 				header.WriteString("github:")
 			} else if ctx.esmPath.PrPrefix {
@@ -1370,9 +1365,7 @@ REBUILD:
 			// apply rewrites
 			jsContent, dropSourceMap := ctx.rewriteJS(jsContent)
 
-			finalJS, recycle := newBuffer()
-			defer recycle()
-
+			finalJS := &bytes.Buffer{}
 			io.Copy(finalJS, header)
 			finalJS.Write(jsContent)
 
@@ -1435,8 +1428,7 @@ REBUILD:
 					copy(fixedMapping[ctx.smOffset:], mapping)
 					sourceMap["mappings"] = string(fixedMapping)
 				}
-				buf, recycle := newBuffer()
-				defer recycle()
+				buf := &bytes.Buffer{}
 				if json.NewEncoder(buf).Encode(sourceMap) == nil {
 					err = ctx.storage.Put(ctx.getSavePath()+".map", buf)
 					if err != nil {

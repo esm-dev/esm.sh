@@ -258,12 +258,10 @@ func legacyESM(ctx *rex.Context, fs storage.Storage, buildVersionPrefix string) 
 		return rex.Status(http.StatusBadRequest, "Invalid url")
 	}
 
-	client, recycle := fetch.NewClient(ctx.UserAgent(), 60, true, nil)
-	defer recycle()
-
+	client := fetch.NewClient(ctx.UserAgent(), 60, true)
 	res, err := client.Fetch(url, nil)
 	if err != nil {
-		return rex.Status(http.StatusBadGateway, "Failed to connect the lagecy esm.sh server")
+		return rex.Status(http.StatusBadGateway, "Failed to connect the legacy esm.sh server")
 	}
 	defer res.Body.Close()
 

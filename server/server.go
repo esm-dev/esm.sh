@@ -163,8 +163,7 @@ func customLandingPage(options *LandingPageOptions) rex.Handle {
 			if err != nil {
 				return rex.Err(http.StatusBadRequest, "Invalid url")
 			}
-			fetchClient, recycle := fetch.NewClient(ctx.UserAgent(), 15, false, nil)
-			defer recycle()
+			fetchClient := fetch.NewClient(ctx.UserAgent(), 15, false)
 			res, err := fetchClient.Fetch(url, nil)
 			if err != nil {
 				return rex.Err(http.StatusBadGateway, "Failed to fetch custom landing page")

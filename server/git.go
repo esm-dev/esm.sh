@@ -23,12 +23,10 @@ type GitRef struct {
 // list refs of a github repository using `git ls-remote repo`
 func listGhRepoRefs(repo string) (refs []GitRef, err error) {
 	return withCache("git ls-remote "+repo, time.Duration(config.NpmQueryCacheTTL)*time.Second, func() ([]GitRef, string, error) {
+		stdout := &bytes.Buffer{}
+		errout := &bytes.Buffer{}
 		cancelCtx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
-		stdout, recycle := newBuffer()
-		defer recycle()
-		errout, recycle := newBuffer()
-		defer recycle()
 		cmd := exec.CommandContext(cancelCtx, "git", "ls-remote", repo)
 		cmd.Stdout = stdout
 		cmd.Stderr = errout
@@ -66,8 +64,7 @@ func ghInstall(wd, name, tag string) (err error) {
 	if err != nil {
 		return
 	}
-	client, recycle := fetch.NewClient("esmd/"+VERSION, 30, false, nil)
-	defer recycle()
+	client := fetch.NewClient("esmd/"+VERSION, 30, false)
 	res, err := client.Fetch(u, nil)
 	if err != nil {
 		return

@@ -133,8 +133,7 @@ func (npmrc *NpmRC) fetchPackageMetadata(pkgName string, version string, isWellk
 		fmt.Println(term.Dim(fmt.Sprintf("Fetching %s...", regUrl.String())))
 	}
 
-	fetchClient, recycle := fetch.NewClient("esmd/"+VERSION, 15, false, nil)
-	defer recycle()
+	fetchClient := fetch.NewClient("esmd/"+VERSION, 15, false)
 
 	retryTimes := 0
 RETRY:
@@ -501,8 +500,7 @@ func (reg *NpmRegistry) isSupportVersionRoute(urlStr string) bool {
 		return true
 	}
 
-	fetchClient, recycle := fetch.NewClient("esmd/"+VERSION, 15, false, nil)
-	defer recycle()
+	fetchClient := fetch.NewClient("esmd/"+VERSION, 15, false)
 
 	u.Path = "/react/19.0.0"
 	res, err := fetchClient.Fetch(u, nil)
@@ -543,8 +541,7 @@ func fetchPackageTarball(reg *NpmRegistry, installDir string, pkgName string, ta
 		header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(reg.User+":"+reg.Password)))
 	}
 
-	fetchClient, recycle := fetch.NewClient("esmd/"+VERSION, 30, false, nil)
-	defer recycle()
+	fetchClient := fetch.NewClient("esmd/"+VERSION, 30, false)
 
 	retryTimes := 0
 RETRY:

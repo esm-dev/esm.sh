@@ -118,8 +118,7 @@ func parseDts(r io.Reader, w *bytes.Buffer, resolve func(specifier string, kind 
 								a = bytes.Split(importCallExpr, q)
 							}
 							if len(a) == 3 {
-								tmp, recycle := newBuffer()
-								defer recycle()
+								tmp := &bytes.Buffer{}
 								tmp.Write(a[0])
 								tmp.Write(q)
 								var res string
