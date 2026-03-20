@@ -30,7 +30,7 @@ func NewClient(userAgent string, timeout int, reserveRedirect bool) (client *Fet
 	return client
 }
 
-// Do sends an HTTP request and returns the response.
+// Fetch sends an HTTP GET request to the specified URL and returns the response.
 func (c *FetchClient) Fetch(url *url.URL, header http.Header) (resp *http.Response, err error) {
 	if c.userAgent != "" {
 		if header == nil {
