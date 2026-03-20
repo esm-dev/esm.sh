@@ -2,6 +2,7 @@ package server
 
 import (
 	"bufio"
+	"bytes"
 	"compress/gzip"
 	"context"
 	"crypto/sha1"
@@ -130,11 +131,9 @@ func cjsModuleLexer(b *BuildContext, cjsEntry string) (ret cjsModuleLexerResult,
 RETRY:
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	stdout, recycle1 := newBuffer()
-	stderr, recycle2 := newBuffer()
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
 	defer cancel()
-	defer recycle1()
-	defer recycle2()
 
 	cmd := exec.CommandContext(ctx, path.Join(config.WorkDir, fmt.Sprintf("bin/cjs-module-lexer-%s", cjsModuleLexerVersion)), path.Join(b.esmPath.PkgName, cjsEntry))
 	cmd.Dir = b.wd

@@ -236,8 +236,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 			indexHTML, err := withCache("index.html", time.Duration(cacheTtl)*time.Second, func() (indexHTML []byte, _ string, err error) {
 				readme, err := os.ReadFile("README.md")
 				if err != nil {
-					fetchClient, recycle := fetch.NewClient(ctx.UserAgent(), 15, false, nil)
-					defer recycle()
+					fetchClient := fetch.NewClient(ctx.UserAgent(), 15, false)
 					readmeUrl, _ := url.Parse("https://raw.githubusercontent.com/esm-dev/esm.sh/refs/heads/main/README.md")
 					var res *http.Response
 					res, err = fetchClient.Fetch(readmeUrl, nil)
@@ -1450,8 +1449,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 		// if the path is `ESMBuild`, return the built js/css content
 		if pathKind == EsmBuild {
 			if esmPath.SubPath != build.esmPath.SubPath {
-				buf, recycle := newBuffer()
-				defer recycle()
+				buf := &bytes.Buffer{}
 				esmPath := build.Path()
 				fmt.Fprintf(buf, "export * from \"%s\";\n", esmPath)
 				if buildMeta.ExportDefault {
@@ -1535,8 +1533,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 			return f // auto closed
 		}
 
-		buf, recycle := newBuffer()
-		defer recycle()
+		buf := &bytes.Buffer{}
 		fmt.Fprintf(buf, "/* esm.sh - %s */\n", esmPath.String())
 
 		if query.Has("worker") {
@@ -1621,8 +1618,7 @@ func redirect(ctx *rex.Context, url string, isMovedPermanently bool) any {
 }
 
 func errorJS(ctx *rex.Context, message string) any {
-	buf, recycle := newBuffer()
-	defer recycle()
+	buf := &bytes.Buffer{}
 	buf.WriteString("/* esm.sh - error */\n")
 	buf.WriteString("throw new Error(")
 	buf.Write(utils.MustEncodeJSON(message))

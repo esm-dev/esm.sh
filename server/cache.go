@@ -1,24 +1,13 @@
 package server
 
 import (
-	"bytes"
 	"time"
 
 	lru "github.com/hashicorp/golang-lru/v2"
 	"github.com/ije/gox/sync"
 )
 
-var bufferPool = sync.Pool{New: func() any { return new(bytes.Buffer) }}
 var onceMap = sync.Map{}
-
-// newBuffer returns a new buffer from the buffer pool.
-func newBuffer() (buffer *bytes.Buffer, recycle func()) {
-	buf := bufferPool.Get().(*bytes.Buffer)
-	return buf, func() {
-		buf.Reset()
-		bufferPool.Put(buf)
-	}
-}
 
 // doOnce executes a function only once for a given id.
 func doOnce(id string, fn func() error) (err error) {

@@ -357,7 +357,7 @@ func resolvePrPackageVersion(esm EsmPath) (version string, err error) {
 			return
 		}
 		versionRegex := regexp.MustCompile(`[^/]@([\da-f]{7,})$`)
-		client, recycle := fetch.NewClient("esmd/"+VERSION, 30, false, nil)
+		client := fetch.NewClient("esmd/"+VERSION, 30, false)
 		version = esm.PkgVersion
 		client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 			match := versionRegex.FindStringSubmatch(req.URL.Path)
@@ -369,7 +369,6 @@ func resolvePrPackageVersion(esm EsmPath) (version string, err error) {
 			}
 			return nil
 		}
-		defer recycle()
 
 		_, err = client.Fetch(u, nil)
 		return

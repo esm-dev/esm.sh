@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path"
@@ -62,8 +63,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 	}
 	defer dtsContent.Close()
 
-	buffer, recycle := newBuffer()
-	defer recycle()
+	buffer := &bytes.Buffer{}
 
 	deps := set.New[string]()
 
