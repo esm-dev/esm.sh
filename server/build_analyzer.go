@@ -141,6 +141,7 @@ func (ctx *BuildContext) analyzeSplitting() (err error) {
 				dev:         ctx.dev,
 				wd:          ctx.wd,
 				pkgJson:     ctx.pkgJson,
+				ctx:         ctx.ctx,
 			}
 			_, includes, err := b.buildModule(true)
 			if err != nil {

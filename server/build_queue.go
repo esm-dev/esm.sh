@@ -2,6 +2,9 @@ package server
 
 import (
 	"container/list"
+	"context"
+	"errors"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -142,7 +145,17 @@ func (q *BuildQueue) run(task *BuildTask) {
 		q.lock.Unlock()
 	}()
 
-	meta, err := task.ctx.Build()
+	buildTimeout := 10 * time.Minute
+	if config != nil && config.BuildTimeout > 0 {
+		buildTimeout = time.Duration(config.BuildTimeout) * time.Second
+	}
+	buildCtx, cancel := context.WithTimeout(context.Background(), buildTimeout)
+	defer cancel()
+
+	meta, err := task.ctx.Build(buildCtx)
+	if errors.Is(err, context.DeadlineExceeded) {
+		err = fmt.Errorf("build timeout after %d seconds", buildTimeout/time.Second)
+	}
 	if err == nil {
 		task.ctx.status = "done"
 		if task.ctx.target == "types" {

@@ -87,7 +87,7 @@ func cjsModuleLexer(b *BuildContext, cjsEntry string) (ret cjsModuleLexerResult,
 		if err != nil {
 			return
 		}
-		cancelCtx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		cancelCtx, cancel := context.WithTimeout(b.Context(), time.Minute)
 		defer cancel()
 		cmd := exec.CommandContext(cancelCtx,
 			denoPath,
@@ -120,7 +120,7 @@ func cjsModuleLexer(b *BuildContext, cjsEntry string) (ret cjsModuleLexerResult,
 	}
 
 	err = doOnce("install-cjs-module-lexer", func() (err error) {
-		err = installCjsModuleLexer()
+		err = installCjsModuleLexerContext(b.Context())
 		return
 	})
 	if err != nil {
@@ -130,7 +130,7 @@ func cjsModuleLexer(b *BuildContext, cjsEntry string) (ret cjsModuleLexerResult,
 	retried := false
 RETRY:
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	ctx, cancel := context.WithTimeout(b.Context(), time.Minute)
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
 	defer cancel()
@@ -150,7 +150,10 @@ RETRY:
 				if strings.HasPrefix(formattedMessage, "failed to resolve reexport: NotFound(") && !retried {
 					retried = true
 					// install dependencies and retry
-					b.npmrc.installDependencies(b.wd, b.pkgJson, true, nil)
+					err = b.npmrc.installDependenciesContext(b.Context(), b.wd, b.pkgJson, true, nil)
+					if err != nil {
+						return
+					}
 					goto RETRY
 				}
 				err = fmt.Errorf("cjsModuleLexer: %s", formattedMessage)
@@ -180,7 +183,7 @@ RETRY:
 	return
 }
 
-func installCjsModuleLexer() (err error) {
+func installCjsModuleLexerContext(ctx context.Context) (err error) {
 	installDir := path.Join(config.WorkDir, "bin")
 	installPath := path.Join(installDir, fmt.Sprintf("cjs-module-lexer-%s", cjsModuleLexerVersion))
 
@@ -211,7 +214,11 @@ func installCjsModuleLexer() (err error) {
 		fmt.Println(term.Dim(fmt.Sprintf("Downloading %s...", path.Base(url))))
 	}
 
-	res, err := http.Get(url)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return err
+	}
+	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return
 	}
@@ -221,7 +228,7 @@ func installCjsModuleLexer() (err error) {
 		return fmt.Errorf("failed to download cjs-module-lexer: %s", res.Status)
 	}
 
-	gr, err := gzip.NewReader(res.Body)
+	gr, err := gzip.NewReader(&contextReader{ctx: ctx, reader: res.Body})
 	if err != nil {
 		return fmt.Errorf("failed to decompress cjs-module-lexer: %v", err)
 	}
@@ -234,7 +241,7 @@ func installCjsModuleLexer() (err error) {
 	}
 	defer f.Close()
 
-	_, err = io.Copy(f, gr)
+	_, err = io.Copy(f, &contextReader{ctx: ctx, reader: gr})
 	return
 }
 

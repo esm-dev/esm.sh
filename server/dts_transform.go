@@ -224,6 +224,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 			esmPath: dtsModule,
 			args:    args,
 			target:  "types",
+			ctx:     ctx.ctx,
 		}
 		err = b.install()
 		if err != nil {

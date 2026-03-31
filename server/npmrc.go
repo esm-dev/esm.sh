@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -100,7 +101,7 @@ func (npmrc *NpmRC) getRegistryByPackageName(packageName string) *NpmRegistry {
 	return npmrc.globalRegistry
 }
 
-func (npmrc *NpmRC) fetchPackageMetadata(pkgName string, version string, isWellknownVersion bool) (*npm.PackageMetadata, *npm.PackageJSONRaw, error) {
+func (npmrc *NpmRC) fetchPackageMetadataContext(ctx context.Context, pkgName string, version string, isWellknownVersion bool) (*npm.PackageMetadata, *npm.PackageJSONRaw, error) {
 	reg := npmrc.getRegistryByPackageName(pkgName)
 	regUrlStr := reg.Registry
 	if reg.isRateLimited() && reg.BackupRegistry != "" {
@@ -137,11 +138,16 @@ func (npmrc *NpmRC) fetchPackageMetadata(pkgName string, version string, isWellk
 
 	retryTimes := 0
 RETRY:
-	res, err := fetchClient.Fetch(regUrl, header)
+	if err := ctx.Err(); err != nil {
+		return nil, nil, err
+	}
+	res, err := fetchClient.FetchWithContext(ctx, regUrl, header)
 	if err != nil {
 		if retryTimes < 3 {
 			retryTimes++
-			time.Sleep(time.Duration(retryTimes) * 100 * time.Millisecond)
+			if sleepErr := sleepWithContext(ctx, time.Duration(retryTimes)*100*time.Millisecond); sleepErr != nil {
+				return nil, nil, sleepErr
+			}
 			goto RETRY
 		}
 		return nil, nil, err
@@ -158,7 +164,7 @@ RETRY:
 
 	if res.StatusCode == 429 && reg.BackupRegistry != "" && !reg.isRateLimited() {
 		reg.hitRateLimit()
-		return npmrc.fetchPackageMetadata(pkgName, version, isWellknownVersion)
+		return npmrc.fetchPackageMetadataContext(ctx, pkgName, version, isWellknownVersion)
 	}
 
 	if res.StatusCode != 200 {
@@ -228,6 +234,10 @@ CHECK:
 }
 
 func (npmrc *NpmRC) getPackageInfo(pkgName string, version string) (packageJson *npm.PackageJSON, err error) {
+	return npmrc.getPackageInfoContext(context.Background(), pkgName, version)
+}
+
+func (npmrc *NpmRC) getPackageInfoContext(ctx context.Context, pkgName string, version string) (packageJson *npm.PackageJSON, err error) {
 	if pkgName == "" {
 		return nil, errors.New("package name is empty")
 	}
@@ -248,7 +258,7 @@ func (npmrc *NpmRC) getPackageInfo(pkgName string, version string) (packageJson 
 			}
 		}
 
-		metadata, raw, err := npmrc.fetchPackageMetadata(pkgName, version, npm.IsExactVersion(version) || npm.IsDistTag(version))
+		metadata, raw, err := npmrc.fetchPackageMetadataContext(ctx, pkgName, version, npm.IsExactVersion(version) || npm.IsDistTag(version))
 		if err != nil {
 			if msg := err.Error(); strings.HasSuffix(msg, "not found") {
 				setCacheItem("404:"+pkgName+"@"+version, msg, ttl)
@@ -275,12 +285,16 @@ func (npmrc *NpmRC) getPackageInfo(pkgName string, version string) (packageJson 
 }
 
 func (npmrc *NpmRC) getPackageInfoByDate(pkgName string, targetDate time.Time) (packageJson *npm.PackageJSON, err error) {
+	return npmrc.getPackageInfoByDateContext(context.Background(), pkgName, targetDate)
+}
+
+func (npmrc *NpmRC) getPackageInfoByDateContext(ctx context.Context, pkgName string, targetDate time.Time) (packageJson *npm.PackageJSON, err error) {
 	reg := npmrc.getRegistryByPackageName(pkgName)
 	targetTimeStr := targetDate.Format(time.DateOnly)
 	cacheKey := reg.Registry + pkgName + "@date=" + targetTimeStr
 
 	return withCache(cacheKey, time.Duration(config.NpmQueryCacheTTL)*time.Second, func() (*npm.PackageJSON, string, error) {
-		metadata, _, err := npmrc.fetchPackageMetadata(pkgName, "", false)
+		metadata, _, err := npmrc.fetchPackageMetadataContext(ctx, pkgName, "", false)
 		if err != nil {
 			return nil, "", err
 		}
@@ -301,6 +315,13 @@ func (npmrc *NpmRC) getPackageInfoByDate(pkgName string, targetDate time.Time) (
 }
 
 func (npmrc *NpmRC) installPackage(pkg npm.Package) (packageJson *npm.PackageJSON, err error) {
+	return npmrc.installPackageContext(context.Background(), pkg)
+}
+
+func (npmrc *NpmRC) installPackageContext(ctx context.Context, pkg npm.Package) (packageJson *npm.PackageJSON, err error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	installDir := filepath.Join(npmrc.StoreDir(), pkg.String())
 	packageJsonPath := filepath.Join(installDir, "node_modules", pkg.Name, "package.json")
 
@@ -314,6 +335,9 @@ func (npmrc *NpmRC) installPackage(pkg npm.Package) (packageJson *npm.PackageJSO
 	// only one installation process is allowed at the same time for the same package
 	unlock := installMutex.Lock(pkg.String())
 	defer unlock()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 
 	// skip installation if the package has been installed by another request
 	if utils.ParseJSONFile(packageJsonPath, &raw) == nil {
@@ -322,7 +346,7 @@ func (npmrc *NpmRC) installPackage(pkg npm.Package) (packageJson *npm.PackageJSO
 	}
 
 	if pkg.Github {
-		err = ghInstall(installDir, pkg.Name, pkg.Version)
+		err = ghInstallContext(ctx, installDir, pkg.Name, pkg.Version)
 		// ensure 'package.json' file if not exists after installing from github
 		if err == nil && !existsFile(packageJsonPath) {
 			buf := bytes.NewBuffer(nil)
@@ -373,16 +397,16 @@ func (npmrc *NpmRC) installPackage(pkg npm.Package) (packageJson *npm.PackageJSO
 			}
 		}
 	} else if pkg.PkgPrNew {
-		err = fetchPackageTarball(&NpmRegistry{}, installDir, pkg.Name, "https://pkg.pr.new/"+pkg.Name+"@"+pkg.Version)
+		err = fetchPackageTarballContext(ctx, &NpmRegistry{}, installDir, pkg.Name, "https://pkg.pr.new/"+pkg.Name+"@"+pkg.Version)
 	} else {
-		info, fetchErr := npmrc.getPackageInfo(pkg.Name, pkg.Version)
+		info, fetchErr := npmrc.getPackageInfoContext(ctx, pkg.Name, pkg.Version)
 		if fetchErr != nil {
 			return nil, fetchErr
 		}
 		if info.Deprecated != "" {
 			os.WriteFile(filepath.Join(installDir, "deprecated.txt"), []byte(info.Deprecated), 0644)
 		}
-		err = fetchPackageTarball(npmrc.getRegistryByPackageName(pkg.Name), installDir, info.Name, info.Dist.Tarball)
+		err = fetchPackageTarballContext(ctx, npmrc.getRegistryByPackageName(pkg.Name), installDir, info.Name, info.Dist.Tarball)
 	}
 	if err != nil {
 		return
@@ -400,6 +424,10 @@ func (npmrc *NpmRC) installPackage(pkg npm.Package) (packageJson *npm.PackageJSO
 }
 
 func (npmrc *NpmRC) installDependencies(wd string, pkgJson *npm.PackageJSON, npmMode bool, mark *set.Set[string]) {
+	_ = npmrc.installDependenciesContext(context.Background(), wd, pkgJson, npmMode, mark)
+}
+
+func (npmrc *NpmRC) installDependenciesContext(ctx context.Context, wd string, pkgJson *npm.PackageJSON, npmMode bool, mark *set.Set[string]) error {
 	wg := sync.WaitGroup{}
 	dependencies := map[string]string{}
 	maps.Copy(dependencies, pkgJson.Dependencies)
@@ -411,9 +439,15 @@ func (npmrc *NpmRC) installDependencies(wd string, pkgJson *npm.PackageJSON, npm
 		mark = set.New[string]()
 	}
 	for name, version := range dependencies {
+		if err := ctx.Err(); err != nil {
+			break
+		}
 		wg.Add(1)
 		go func(name, version string) {
 			defer wg.Done()
+			if ctx.Err() != nil {
+				return
+			}
 			pkg := npm.Package{Name: name, Version: version}
 			p, err := npm.ResolveDependencyVersion(version)
 			if err != nil || p.Url != "" {
@@ -427,7 +461,7 @@ func (npmrc *NpmRC) installDependencies(wd string, pkgJson *npm.PackageJSON, npm
 				return
 			}
 			if !npm.IsExactVersion(pkg.Version) && !pkg.Github && !pkg.PkgPrNew {
-				p, e := npmrc.getPackageInfo(pkg.Name, pkg.Version)
+				p, e := npmrc.getPackageInfoContext(ctx, pkg.Name, pkg.Version)
 				if e != nil {
 					return
 				}
@@ -438,7 +472,7 @@ func (npmrc *NpmRC) installDependencies(wd string, pkgJson *npm.PackageJSON, npm
 				return
 			}
 			mark.Add(markId)
-			installed, err := npmrc.installPackage(pkg)
+			installed, err := npmrc.installPackageContext(ctx, pkg)
 			if err != nil {
 				return
 			}
@@ -453,11 +487,15 @@ func (npmrc *NpmRC) installDependencies(wd string, pkgJson *npm.PackageJSON, npm
 			}
 			// install dependencies recursively
 			if len(installed.Dependencies) > 0 || (len(installed.PeerDependencies) > 0 && npmMode) {
-				npmrc.installDependencies(wd, installed, npmMode, mark)
+				_ = npmrc.installDependenciesContext(ctx, wd, installed, npmMode, mark)
 			}
 		}(name, version)
 	}
 	wg.Wait()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return nil
 }
 
 // If the package is deprecated, a depreacted.txt file will be created by the `intallPackage` function
@@ -516,7 +554,7 @@ func (reg *NpmRegistry) isSupportVersionRoute(urlStr string) bool {
 	return false
 }
 
-func fetchPackageTarball(reg *NpmRegistry, installDir string, pkgName string, tarballUrlStr string) (err error) {
+func fetchPackageTarballContext(ctx context.Context, reg *NpmRegistry, installDir string, pkgName string, tarballUrlStr string) (err error) {
 	tarballUrl, err := url.Parse(tarballUrlStr)
 	if err != nil {
 		return
@@ -545,11 +583,16 @@ func fetchPackageTarball(reg *NpmRegistry, installDir string, pkgName string, ta
 
 	retryTimes := 0
 RETRY:
-	res, err := fetchClient.Fetch(tarballUrl, header)
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	res, err := fetchClient.FetchWithContext(ctx, tarballUrl, header)
 	if err != nil {
 		if retryTimes < 3 {
 			retryTimes++
-			time.Sleep(time.Duration(retryTimes) * 100 * time.Millisecond)
+			if sleepErr := sleepWithContext(ctx, time.Duration(retryTimes)*100*time.Millisecond); sleepErr != nil {
+				return sleepErr
+			}
 			goto RETRY
 		}
 		err = fmt.Errorf("failed to download tarball of package '%s': %v", pkgName, err)
@@ -581,7 +624,7 @@ RETRY:
 		return
 	}
 
-	err = extractPackageTarball(installDir, pkgName, io.LimitReader(res.Body, maxPackageTarballSize))
+	err = extractPackageTarballContext(ctx, installDir, pkgName, io.LimitReader(res.Body, maxPackageTarballSize))
 	if err != nil {
 		err = fmt.Errorf("failed to extract tarball of package '%s': %v", pkgName, err)
 		// clear installDir if failed to extract tarball
@@ -591,7 +634,11 @@ RETRY:
 }
 
 func extractPackageTarball(installDir string, pkgName string, tarball io.Reader) (err error) {
-	unziped, err := gzip.NewReader(tarball)
+	return extractPackageTarballContext(context.Background(), installDir, pkgName, tarball)
+}
+
+func extractPackageTarballContext(ctx context.Context, installDir string, pkgName string, tarball io.Reader) (err error) {
+	unziped, err := gzip.NewReader(&contextReader{ctx: ctx, reader: tarball})
 	if err != nil {
 		return
 	}
@@ -601,6 +648,9 @@ func extractPackageTarball(installDir string, pkgName string, tarball io.Reader)
 	// extract tarball
 	tr := tar.NewReader(unziped)
 	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		h, err := tr.Next()
 		if err == io.EOF {
 			break
@@ -632,7 +682,7 @@ func extractPackageTarball(installDir string, pkgName string, tarball io.Reader)
 			return err
 		}
 		defer f.Close()
-		n, err := io.Copy(f, tr)
+		n, err := io.Copy(f, &contextReader{ctx: ctx, reader: tr})
 		if err != nil {
 			return err
 		}
@@ -642,4 +692,33 @@ func extractPackageTarball(installDir string, pkgName string, tarball io.Reader)
 	}
 
 	return nil
+}
+
+type contextReader struct {
+	ctx    context.Context
+	reader io.Reader
+}
+
+func (r *contextReader) Read(p []byte) (int, error) {
+	if err := r.ctx.Err(); err != nil {
+		return 0, err
+	}
+	n, err := r.reader.Read(p)
+	if err == nil {
+		if ctxErr := r.ctx.Err(); ctxErr != nil {
+			return n, ctxErr
+		}
+	}
+	return n, err
+}
+
+func sleepWithContext(ctx context.Context, d time.Duration) error {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }

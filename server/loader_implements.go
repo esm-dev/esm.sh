@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"path"
@@ -9,7 +10,7 @@ import (
 	"github.com/ije/gox/term"
 )
 
-func transformSvelte(npmrc *NpmRC, svelteVersion string, filename string, code string) (output *LoaderOutput, err error) {
+func transformSvelte(ctx context.Context, npmrc *NpmRC, svelteVersion string, filename string, code string) (output *LoaderOutput, err error) {
 	loaderExecPath := path.Join(npmrc.StoreDir(), "svelte@"+svelteVersion, "loader.js")
 
 	err = doOnce(loaderExecPath, func() (err error) {
@@ -17,7 +18,7 @@ func transformSvelte(npmrc *NpmRC, svelteVersion string, filename string, code s
 			if DEBUG {
 				fmt.Println(term.Dim("Compiling svelte loader..."))
 			}
-			err = compileSvelteLoader(npmrc, svelteVersion, loaderExecPath)
+			err = compileSvelteLoader(ctx, npmrc, svelteVersion, loaderExecPath)
 		}
 		return
 	})
@@ -26,18 +27,21 @@ func transformSvelte(npmrc *NpmRC, svelteVersion string, filename string, code s
 		return
 	}
 
-	return runLoader(loaderExecPath, filename, code)
+	return runLoaderContext(ctx, loaderExecPath, filename, code)
 }
 
-func compileSvelteLoader(npmrc *NpmRC, svelteVersion string, loaderExecPath string) (err error) {
+func compileSvelteLoader(ctx context.Context, npmrc *NpmRC, svelteVersion string, loaderExecPath string) (err error) {
 	wd := path.Join(npmrc.StoreDir(), "svelte@"+svelteVersion)
 
 	// install svelte and its dependencies
-	p, err := npmrc.installPackage(npm.Package{Name: "svelte", Version: svelteVersion})
+	p, err := npmrc.installPackageContext(ctx, npm.Package{Name: "svelte", Version: svelteVersion})
 	if err != nil {
 		return
 	}
-	npmrc.installDependencies(wd, p, false, nil)
+	err = npmrc.installDependenciesContext(ctx, wd, p, false, nil)
+	if err != nil {
+		return
+	}
 
 	loaderJS := `
 	  import { compile } from "svelte/compiler";
@@ -58,7 +62,7 @@ func compileSvelteLoader(npmrc *NpmRC, svelteVersion string, loaderExecPath stri
 	return
 }
 
-func transformVue(npmrc *NpmRC, vueVersion string, filename string, code string) (output *LoaderOutput, err error) {
+func transformVue(ctx context.Context, npmrc *NpmRC, vueVersion string, filename string, code string) (output *LoaderOutput, err error) {
 	loaderVersion := "1.0.1" // @esm.sh/vue-compiler
 	loaderExecPath := path.Join(npmrc.StoreDir(), "@vue/compiler-sfc@"+vueVersion, "loader-"+loaderVersion+".js")
 
@@ -67,7 +71,7 @@ func transformVue(npmrc *NpmRC, vueVersion string, filename string, code string)
 			if DEBUG {
 				fmt.Println(term.Dim("Compiling vue loader..."))
 			}
-			err = compileVueLoader(npmrc, vueVersion, loaderVersion, loaderExecPath)
+			err = compileVueLoader(ctx, npmrc, vueVersion, loaderVersion, loaderExecPath)
 		}
 		return
 	})
@@ -76,19 +80,25 @@ func transformVue(npmrc *NpmRC, vueVersion string, filename string, code string)
 		return
 	}
 
-	return runLoader(loaderExecPath, filename, code)
+	return runLoaderContext(ctx, loaderExecPath, filename, code)
 }
 
-func compileVueLoader(npmrc *NpmRC, vueVersion string, loaderVersion, loaderExecPath string) (err error) {
+func compileVueLoader(ctx context.Context, npmrc *NpmRC, vueVersion string, loaderVersion, loaderExecPath string) (err error) {
 	wd := path.Join(npmrc.StoreDir(), "@vue/compiler-sfc@"+vueVersion)
 
 	// install vue sfc compiler
-	pkgJson, err := npmrc.installPackage(npm.Package{Name: "@vue/compiler-sfc", Version: vueVersion})
+	pkgJson, err := npmrc.installPackageContext(ctx, npm.Package{Name: "@vue/compiler-sfc", Version: vueVersion})
 	if err != nil {
 		return
 	}
-	npmrc.installDependencies(wd, pkgJson, false, nil)
-	npmrc.installDependencies(wd, &npm.PackageJSON{Dependencies: map[string]string{"@esm.sh/vue-compiler": loaderVersion}}, false, nil)
+	err = npmrc.installDependenciesContext(ctx, wd, pkgJson, false, nil)
+	if err != nil {
+		return
+	}
+	err = npmrc.installDependenciesContext(ctx, wd, &npm.PackageJSON{Dependencies: map[string]string{"@esm.sh/vue-compiler": loaderVersion}}, false, nil)
+	if err != nil {
+		return
+	}
 
 	loaderJS := `
 	  import * as vueCompilerSFC from "@vue/compiler-sfc";

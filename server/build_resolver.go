@@ -907,7 +907,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 	// fetch the latest tag as the version of the repository
 	if dep.GhPrefix && dep.PkgVersion == "" {
 		var refs []GitRef
-		refs, err = listGhRepoRefs(fmt.Sprintf("https://github.com/%s", dep.PkgName))
+		refs, err = listGhRepoRefsContext(ctx.Context(), fmt.Sprintf("https://github.com/%s", dep.PkgName))
 		if err != nil {
 			return
 		}
@@ -931,6 +931,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 				npmrc:   ctx.npmrc,
 				logger:  ctx.logger,
 				esmPath: dep,
+				ctx:     ctx.ctx,
 			}
 			err = b.install()
 			if err != nil {
@@ -1051,7 +1052,7 @@ func (ctx *BuildContext) resolveDTS(entry BuildEntry) (string, error) {
 			versions = append([]string{pkgVersion}, versions...)
 		}
 		for _, version := range versions {
-			p, err := ctx.npmrc.getPackageInfo(typesPkgName, version)
+			p, err := ctx.npmrc.getPackageInfoContext(ctx.Context(), typesPkgName, version)
 			if err == nil {
 				dtsModule := EsmPath{
 					PkgName:    typesPkgName,
@@ -1065,6 +1066,7 @@ func (ctx *BuildContext) resolveDTS(entry BuildEntry) (string, error) {
 					args:        ctx.args,
 					externalAll: ctx.externalAll,
 					target:      "types",
+					ctx:         ctx.ctx,
 				}
 				err := b.install()
 				if err != nil {
@@ -1165,7 +1167,7 @@ func (ctx *BuildContext) resolveDependency(specifier string, isDts bool) (esm Es
 	pkgName, version, subPath := splitEsmPath(specifier)
 lookup:
 	if v, ok := ctx.args.Deps[pkgName]; ok {
-		packageJson, err = ctx.npmrc.getPackageInfo(pkgName, v)
+		packageJson, err = ctx.npmrc.getPackageInfoContext(ctx.Context(), pkgName, v)
 		if err == nil {
 			esm = EsmPath{
 				PkgName:    pkgName,
@@ -1206,7 +1208,7 @@ lookup:
 		}
 	}
 
-	packageJson, err = ctx.npmrc.getPackageInfo(pkgName, version)
+	packageJson, err = ctx.npmrc.getPackageInfoContext(ctx.Context(), pkgName, version)
 	if err == nil {
 		esm = EsmPath{
 			PkgName:    pkgName,
