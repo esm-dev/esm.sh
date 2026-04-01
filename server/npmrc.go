@@ -423,8 +423,8 @@ func (npmrc *NpmRC) installPackageContext(ctx context.Context, pkg npm.Package) 
 	return
 }
 
-func (npmrc *NpmRC) installDependencies(wd string, pkgJson *npm.PackageJSON, npmMode bool, mark *set.Set[string]) {
-	_ = npmrc.installDependenciesContext(context.Background(), wd, pkgJson, npmMode, mark)
+func (npmrc *NpmRC) installDependencies(wd string, pkgJson *npm.PackageJSON, npmMode bool, mark *set.Set[string]) error {
+	return npmrc.installDependenciesContext(context.Background(), wd, pkgJson, npmMode, mark)
 }
 
 func (npmrc *NpmRC) installDependenciesContext(ctx context.Context, wd string, pkgJson *npm.PackageJSON, npmMode bool, mark *set.Set[string]) error {
@@ -454,8 +454,13 @@ func (npmrc *NpmRC) installDependenciesContext(ctx context.Context, wd string, p
 		}
 		errMu.Unlock()
 	}
+	getFirstErr := func() error {
+		errMu.Lock()
+		defer errMu.Unlock()
+		return firstErr
+	}
 	for name, version := range dependencies {
-		if ctx.Err() != nil || firstErr != nil {
+		if ctx.Err() != nil || getFirstErr() != nil {
 			break
 		}
 		wg.Add(1)
@@ -502,7 +507,14 @@ func (npmrc *NpmRC) installDependenciesContext(ctx context.Context, wd string, p
 				if strings.ContainsRune(name, '/') {
 					ensureDir(filepath.Dir(linkDir))
 				}
-				os.Symlink(filepath.Join(npmrc.StoreDir(), pkg.String(), "node_modules", pkg.Name), linkDir)
+				err = os.Symlink(filepath.Join(npmrc.StoreDir(), pkg.String(), "node_modules", pkg.Name), linkDir)
+				if err != nil && !os.IsExist(err) {
+					setErr(err)
+					return
+				}
+			} else if err != nil {
+				setErr(err)
+				return
 			}
 			// install dependencies recursively
 			if len(installed.Dependencies) > 0 || (len(installed.PeerDependencies) > 0 && npmMode) {

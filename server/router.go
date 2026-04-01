@@ -175,9 +175,17 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 				}
 				if len(output.Map) > 0 {
 					output.Code = fmt.Sprintf("%s//# sourceMappingURL=+%s", output.Code, path.Base(savePath)+".map")
-					go esmStorage.Put(savePath+".map", strings.NewReader(output.Map))
+					err = esmStorage.Put(savePath+".map", strings.NewReader(output.Map))
+					if err != nil {
+						logger.Errorf("storage.put(%s): %v", savePath+".map", err)
+						return rex.Err(500, "failed to store source map")
+					}
 				}
-				go esmStorage.Put(savePath, strings.NewReader(output.Code))
+				err = esmStorage.Put(savePath, strings.NewReader(output.Code))
+				if err != nil {
+					logger.Errorf("storage.put(%s): %v", savePath, err)
+					return rex.Err(500, "failed to store transformed code")
+				}
 				ctx.SetHeader("Cache-Control", ccMustRevalidate)
 				return output
 
