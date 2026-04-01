@@ -280,23 +280,6 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 			return indexHTML
 
 		case "/status.json":
-			q := make([]map[string]any, buildQueue.queue.Len())
-			i := 0
-
-			for el := buildQueue.queue.Front(); el != nil; el = el.Next() {
-				t, ok := el.Value.(*BuildTask)
-				if ok {
-					m := map[string]any{
-						"waitClients": len(t.waitChans),
-						"createdAt":   t.createdAt.Format(http.TimeFormat),
-						"path":        t.ctx.Path(),
-						"status":      t.ctx.status,
-					}
-					q[i] = m
-					i++
-				}
-			}
-
 			diskStatus := "ok"
 			switch checkDiskStatus() {
 			case DiskStatusFull:
@@ -309,7 +292,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 
 			ctx.SetHeader("Cache-Control", ccMustRevalidate)
 			return map[string]any{
-				"buildQueue": q[:i],
+				"buildQueue": buildQueue.Snapshot(),
 				"version":    VERSION,
 				"uptime":     time.Since(startTime).String(),
 				"disk":       diskStatus,
