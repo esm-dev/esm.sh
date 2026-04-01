@@ -428,7 +428,12 @@ func (npmrc *NpmRC) installDependencies(wd string, pkgJson *npm.PackageJSON, npm
 }
 
 func (npmrc *NpmRC) installDependenciesContext(ctx context.Context, wd string, pkgJson *npm.PackageJSON, npmMode bool, mark *set.Set[string]) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	wg := sync.WaitGroup{}
+	var errMu sync.Mutex
+	var firstErr error
 	dependencies := map[string]string{}
 	maps.Copy(dependencies, pkgJson.Dependencies)
 	// install peer dependencies if `npmMode` is true
@@ -438,8 +443,19 @@ func (npmrc *NpmRC) installDependenciesContext(ctx context.Context, wd string, p
 	if mark == nil {
 		mark = set.New[string]()
 	}
+	setErr := func(err error) {
+		if err == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return
+		}
+		errMu.Lock()
+		if firstErr == nil {
+			firstErr = err
+			cancel()
+		}
+		errMu.Unlock()
+	}
 	for name, version := range dependencies {
-		if err := ctx.Err(); err != nil {
+		if ctx.Err() != nil || firstErr != nil {
 			break
 		}
 		wg.Add(1)
@@ -451,6 +467,7 @@ func (npmrc *NpmRC) installDependenciesContext(ctx context.Context, wd string, p
 			pkg := npm.Package{Name: name, Version: version}
 			p, err := npm.ResolveDependencyVersion(version)
 			if err != nil || p.Url != "" {
+				setErr(err)
 				return
 			}
 			if p.Name != "" {
@@ -463,6 +480,7 @@ func (npmrc *NpmRC) installDependenciesContext(ctx context.Context, wd string, p
 			if !npm.IsExactVersion(pkg.Version) && !pkg.Github && !pkg.PkgPrNew {
 				p, e := npmrc.getPackageInfoContext(ctx, pkg.Name, pkg.Version)
 				if e != nil {
+					setErr(e)
 					return
 				}
 				pkg.Version = p.Version
@@ -474,6 +492,7 @@ func (npmrc *NpmRC) installDependenciesContext(ctx context.Context, wd string, p
 			mark.Add(markId)
 			installed, err := npmrc.installPackageContext(ctx, pkg)
 			if err != nil {
+				setErr(err)
 				return
 			}
 			// link the installed package to the node_modules directory of current build context
@@ -487,11 +506,16 @@ func (npmrc *NpmRC) installDependenciesContext(ctx context.Context, wd string, p
 			}
 			// install dependencies recursively
 			if len(installed.Dependencies) > 0 || (len(installed.PeerDependencies) > 0 && npmMode) {
-				_ = npmrc.installDependenciesContext(ctx, wd, installed, npmMode, mark)
+				if err := npmrc.installDependenciesContext(ctx, wd, installed, npmMode, mark); err != nil {
+					setErr(err)
+				}
 			}
 		}(name, version)
 	}
 	wg.Wait()
+	if firstErr != nil {
+		return firstErr
+	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -681,10 +705,13 @@ func extractPackageTarballContext(ctx context.Context, installDir string, pkgNam
 		if err != nil {
 			return err
 		}
-		defer f.Close()
 		n, err := io.Copy(f, &contextReader{ctx: ctx, reader: tr})
+		closeErr := f.Close()
 		if err != nil {
 			return err
+		}
+		if closeErr != nil {
+			return closeErr
 		}
 		if n != h.Size {
 			return errors.New("extractPackageTarball: incomplete file: " + savepath)
