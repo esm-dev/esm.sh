@@ -76,7 +76,10 @@ func buildUnenvNodeRuntime() (err error) {
 	if err != nil {
 		return
 	}
-	npmrc.installDependencies(wd, pkgJson, false, nil)
+	err = npmrc.installDependencies(wd, pkgJson, false, nil)
+	if err != nil {
+		return err
+	}
 
 	endpoints := make([]esbuild.EntryPoint, 0, len(nodeBuiltinModules))
 	for name := range nodeBuiltinModules {

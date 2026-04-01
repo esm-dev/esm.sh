@@ -34,6 +34,7 @@ type Config struct {
 	BanList             BanList                      `json:"banList"`
 	BuildConcurrency    uint16                       `json:"buildConcurrency"`
 	BuildWaitTime       uint16                       `json:"buildWaitTime"`
+	BuildTimeout        uint16                       `json:"buildTimeout"`
 	Storage             storage.StorageOptions       `json:"storage"`
 	LogDir              string                       `json:"logDir"`
 	LogLevel            string                       `json:"logLevel"`
@@ -166,6 +167,9 @@ func normalizeConfig(config *Config) {
 	}
 	if config.BuildWaitTime == 0 {
 		config.BuildWaitTime = 30 // seconds
+	}
+	if config.BuildTimeout == 0 {
+		config.BuildTimeout = 600 // seconds
 	}
 	if config.Storage.Type == "" {
 		storageType := os.Getenv("STORAGE_TYPE")

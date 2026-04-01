@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha512"
 	"encoding/base64"
 	"encoding/json"
@@ -33,6 +34,7 @@ const (
 )
 
 type BuildContext struct {
+	ctx         context.Context
 	npmrc       *NpmRC
 	logger      *log.Logger
 	metaDB      *BuildMetaDB
@@ -119,7 +121,25 @@ func (ctx *BuildContext) Exists() (meta *BuildMeta, ok bool, err error) {
 	return
 }
 
-func (ctx *BuildContext) Build() (meta *BuildMeta, err error) {
+func (ctx *BuildContext) Context() context.Context {
+	if ctx.ctx != nil {
+		return ctx.ctx
+	}
+	return context.Background()
+}
+
+func (ctx *BuildContext) checkCanceled() error {
+	return ctx.Context().Err()
+}
+
+func (ctx *BuildContext) Build(buildCtx context.Context) (meta *BuildMeta, err error) {
+	if buildCtx == nil {
+		buildCtx = context.Background()
+	}
+	ctx.ctx = buildCtx
+	if err = ctx.checkCanceled(); err != nil {
+		return
+	}
 	if ctx.target == "types" {
 		return ctx.buildTypes()
 	}
@@ -127,6 +147,9 @@ func (ctx *BuildContext) Build() (meta *BuildMeta, err error) {
 	// check previous build
 	meta, ok, err := ctx.Exists()
 	if err != nil || ok {
+		return
+	}
+	if err = ctx.checkCanceled(); err != nil {
 		return
 	}
 
@@ -140,6 +163,9 @@ func (ctx *BuildContext) Build() (meta *BuildMeta, err error) {
 	// check previous build again after installation (in case the sub-module path has been changed by the `install` function)
 	meta, ok, err = ctx.Exists()
 	if err != nil || ok {
+		return
+	}
+	if err = ctx.checkCanceled(); err != nil {
 		return
 	}
 
@@ -156,6 +182,9 @@ func (ctx *BuildContext) Build() (meta *BuildMeta, err error) {
 	ctx.status = "build"
 	meta, _, err = ctx.buildModule(false)
 	if err != nil {
+		return
+	}
+	if err = ctx.checkCanceled(); err != nil {
 		return
 	}
 
@@ -225,6 +254,9 @@ func (ctx *BuildContext) buildPath() {
 }
 
 func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, includes [][2]string, err error) {
+	if err = ctx.checkCanceled(); err != nil {
+		return
+	}
 	entry := ctx.resolveEntry(ctx.esmPath)
 	if entry.isEmpty() {
 		err = errors.New("could not resolve build entry")
@@ -313,6 +345,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 			externalAll: ctx.externalAll,
 			target:      ctx.target,
 			dev:         ctx.dev,
+			ctx:         ctx.ctx,
 		}
 		err = b.install()
 		if err != nil {
@@ -939,7 +972,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 						svelteVersion = version
 					}
 					if !npm.IsExactVersion(svelteVersion) {
-						info, err := ctx.npmrc.getPackageInfo("svelte", svelteVersion)
+						info, err := ctx.npmrc.getPackageInfoContext(ctx.Context(), "svelte", svelteVersion)
 						if err != nil {
 							return esbuild.OnLoadResult{}, errors.New("failed to get svelte package info")
 						}
@@ -948,7 +981,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 					if semverLessThan(svelteVersion, "4.0.0") {
 						return esbuild.OnLoadResult{}, errors.New("svelte version must be greater than 4.0.0")
 					}
-					out, err := transformSvelte(ctx.npmrc, svelteVersion, ctx.esmPath.String(), string(code))
+					out, err := transformSvelte(ctx.Context(), ctx.npmrc, svelteVersion, ctx.esmPath.String(), string(code))
 					if err != nil {
 						return esbuild.OnLoadResult{}, err
 					}
@@ -973,7 +1006,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 						vueVersion = version
 					}
 					if !npm.IsExactVersion(vueVersion) {
-						info, err := ctx.npmrc.getPackageInfo("vue", vueVersion)
+						info, err := ctx.npmrc.getPackageInfoContext(ctx.Context(), "vue", vueVersion)
 						if err != nil {
 							return esbuild.OnLoadResult{}, errors.New("failed to get vue package info")
 						}
@@ -982,7 +1015,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 					if semverLessThan(vueVersion, "3.0.0") {
 						return esbuild.OnLoadResult{}, errors.New("vue version must be greater than 3.0.0")
 					}
-					out, err := transformVue(ctx.npmrc, vueVersion, ctx.esmPath.String(), string(code))
+					out, err := transformVue(ctx.Context(), ctx.npmrc, vueVersion, ctx.esmPath.String(), string(code))
 					if err != nil {
 						return esbuild.OnLoadResult{}, err
 					}
@@ -993,6 +1026,10 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 				},
 			)
 		},
+	}
+
+	if err = ctx.checkCanceled(); err != nil {
+		return
 	}
 
 	nodeFilename := ctx.Path()
@@ -1323,6 +1360,7 @@ REBUILD:
 									externalAll: ctx.externalAll,
 									target:      ctx.target,
 									dev:         ctx.dev,
+									ctx:         ctx.ctx,
 								}
 								err = b.install()
 								if err == nil {
@@ -1461,6 +1499,9 @@ func (ctx *BuildContext) buildTypes() (ret *BuildMeta, err error) {
 	if err != nil {
 		return
 	}
+	if err = ctx.checkCanceled(); err != nil {
+		return
+	}
 
 	var dts string
 	if endsWith(ctx.esmPath.SubPath, ".ts", ".mts", ".tsx", ".cts") {
@@ -1486,7 +1527,7 @@ func (ctx *BuildContext) buildTypes() (ret *BuildMeta, err error) {
 
 func (ctx *BuildContext) install() (err error) {
 	if ctx.wd == "" || ctx.pkgJson == nil {
-		p, err := ctx.npmrc.installPackage(ctx.esmPath.Package())
+		p, err := ctx.npmrc.installPackageContext(ctx.Context(), ctx.esmPath.Package())
 		if err != nil {
 			return err
 		}
@@ -1540,14 +1581,19 @@ func (ctx *BuildContext) install() (err error) {
 	// - install '@babel/runtime' and '@swc/helpers' if they are present in the dependencies in `BundleDefault` mode
 	switch ctx.bundleMode {
 	case BundleDeps:
-		ctx.npmrc.installDependencies(ctx.wd, ctx.pkgJson, false, nil)
+		err = ctx.npmrc.installDependenciesContext(ctx.Context(), ctx.wd, ctx.pkgJson, false, nil)
 	case BundleDefault:
 		if v, ok := ctx.pkgJson.Dependencies["@babel/runtime"]; ok {
-			ctx.npmrc.installDependencies(ctx.wd, &npm.PackageJSON{Dependencies: map[string]string{"@babel/runtime": v}}, false, nil)
+			err = ctx.npmrc.installDependenciesContext(ctx.Context(), ctx.wd, &npm.PackageJSON{Dependencies: map[string]string{"@babel/runtime": v}}, false, nil)
 		}
-		if v, ok := ctx.pkgJson.Dependencies["@swc/helpers"]; ok {
-			ctx.npmrc.installDependencies(ctx.wd, &npm.PackageJSON{Dependencies: map[string]string{"@swc/helpers": v}}, false, nil)
+		if err == nil {
+			if v, ok := ctx.pkgJson.Dependencies["@swc/helpers"]; ok {
+				err = ctx.npmrc.installDependenciesContext(ctx.Context(), ctx.wd, &npm.PackageJSON{Dependencies: map[string]string{"@swc/helpers": v}}, false, nil)
+			}
 		}
+	}
+	if err != nil {
+		return
 	}
 	return
 }

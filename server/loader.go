@@ -18,7 +18,7 @@ type LoaderOutput struct {
 	Error string `json:"error"`
 }
 
-func runLoader(loaderJsPath string, filename string, code string) (out *LoaderOutput, err error) {
+func runLoaderContext(ctx context.Context, loaderJsPath string, filename string, code string) (out *LoaderOutput, err error) {
 	denoPath := deno.ResolveDenoPath(config.WorkDir)
 	err = doOnce("check-deno", func() (err error) {
 		return deno.CheckDenoPath(denoPath)
@@ -27,7 +27,7 @@ func runLoader(loaderJsPath string, filename string, code string) (out *LoaderOu
 		return
 	}
 
-	cancelCtx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	cancelCtx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
 	cmd := exec.CommandContext(cancelCtx,
 		denoPath,

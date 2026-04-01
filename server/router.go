@@ -175,9 +175,17 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 				}
 				if len(output.Map) > 0 {
 					output.Code = fmt.Sprintf("%s//# sourceMappingURL=+%s", output.Code, path.Base(savePath)+".map")
-					go esmStorage.Put(savePath+".map", strings.NewReader(output.Map))
+					err = esmStorage.Put(savePath+".map", strings.NewReader(output.Map))
+					if err != nil {
+						logger.Errorf("storage.put(%s): %v", savePath+".map", err)
+						return rex.Err(500, "failed to store source map")
+					}
 				}
-				go esmStorage.Put(savePath, strings.NewReader(output.Code))
+				err = esmStorage.Put(savePath, strings.NewReader(output.Code))
+				if err != nil {
+					logger.Errorf("storage.put(%s): %v", savePath, err)
+					return rex.Err(500, "failed to store transformed code")
+				}
 				ctx.SetHeader("Cache-Control", ccMustRevalidate)
 				return output
 
@@ -280,23 +288,6 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 			return indexHTML
 
 		case "/status.json":
-			q := make([]map[string]any, buildQueue.queue.Len())
-			i := 0
-
-			for el := buildQueue.queue.Front(); el != nil; el = el.Next() {
-				t, ok := el.Value.(*BuildTask)
-				if ok {
-					m := map[string]any{
-						"waitClients": len(t.waitChans),
-						"createdAt":   t.createdAt.Format(http.TimeFormat),
-						"path":        t.ctx.Path(),
-						"status":      t.ctx.status,
-					}
-					q[i] = m
-					i++
-				}
-			}
-
 			diskStatus := "ok"
 			switch checkDiskStatus() {
 			case DiskStatusFull:
@@ -309,7 +300,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 
 			ctx.SetHeader("Cache-Control", ccMustRevalidate)
 			return map[string]any{
-				"buildQueue": q[:i],
+				"buildQueue": buildQueue.Snapshot(),
 				"version":    VERSION,
 				"uptime":     time.Since(startTime).String(),
 				"disk":       diskStatus,

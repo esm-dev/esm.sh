@@ -22,10 +22,14 @@ type GitRef struct {
 
 // list refs of a github repository using `git ls-remote repo`
 func listGhRepoRefs(repo string) (refs []GitRef, err error) {
+	return listGhRepoRefsContext(context.Background(), repo)
+}
+
+func listGhRepoRefsContext(ctx context.Context, repo string) (refs []GitRef, err error) {
 	return withCache("git ls-remote "+repo, time.Duration(config.NpmQueryCacheTTL)*time.Second, func() ([]GitRef, string, error) {
 		stdout := &bytes.Buffer{}
 		errout := &bytes.Buffer{}
-		cancelCtx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		cancelCtx, cancel := context.WithTimeout(ctx, time.Minute)
 		defer cancel()
 		cmd := exec.CommandContext(cancelCtx, "git", "ls-remote", repo)
 		cmd.Stdout = stdout
@@ -60,12 +64,16 @@ func listGhRepoRefs(repo string) (refs []GitRef, err error) {
 }
 
 func ghInstall(wd, name, tag string) (err error) {
+	return ghInstallContext(context.Background(), wd, name, tag)
+}
+
+func ghInstallContext(ctx context.Context, wd, name, tag string) (err error) {
 	u, err := url.Parse(fmt.Sprintf("https://codeload.github.com/%s/tar.gz/%s", name, tag))
 	if err != nil {
 		return
 	}
 	client := fetch.NewClient("esmd/"+VERSION, 30, false)
-	res, err := client.Fetch(u, nil)
+	res, err := client.FetchWithContext(ctx, u, nil)
 	if err != nil {
 		return
 	}
@@ -79,6 +87,6 @@ func ghInstall(wd, name, tag string) (err error) {
 		return fmt.Errorf("fetch %s failed: %s", u, res.Status)
 	}
 
-	err = extractPackageTarball(wd, name, io.LimitReader(res.Body, maxPackageTarballSize))
+	err = extractPackageTarballContext(ctx, wd, name, io.LimitReader(res.Body, maxPackageTarballSize))
 	return
 }

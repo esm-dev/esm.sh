@@ -17,6 +17,9 @@
   // The wait time for incoming requests to wait for the build process to finish, default is 30 seconds.
   "buildWaitTime": 30,
 
+  // Maximum time allowed for a single build task before it is canceled, default is 10 minutes.
+  "buildTimeout": 600,
+
   // Compress http response body with gzip/brotli, default is true.
   "compress": true,
 

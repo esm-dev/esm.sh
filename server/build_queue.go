@@ -2,8 +2,10 @@ package server
 
 import (
 	"container/list"
+	"context"
+	"errors"
+	"fmt"
 	"sync"
-	"sync/atomic"
 	"time"
 )
 
@@ -11,18 +13,17 @@ import (
 type BuildQueue struct {
 	lock      sync.Mutex
 	tasks     map[string]*BuildTask
-	queue     *list.List
-	chann     uint16
-	scheduler int32 // scheduler state (0=not running, 1=running)
+	queue     map[*BuildTask]struct{}
+	pending   *list.List
+	chann     int
+	scheduler bool
 }
 
 type BuildTask struct {
 	ctx       *BuildContext
-	el        *list.Element
 	waitChans []chan BuildOutput
 	createdAt time.Time
 	startedAt time.Time
-	pending   bool
 }
 
 type BuildOutput struct {
@@ -35,9 +36,10 @@ func NewBuildQueue(concurrency int) *BuildQueue {
 		concurrency = 1 // ensure at least 1 concurrent task
 	}
 	return &BuildQueue{
-		queue: list.New(),
-		tasks: map[string]*BuildTask{},
-		chann: uint16(concurrency),
+		queue:   map[*BuildTask]struct{}{},
+		pending: list.New(),
+		tasks:   map[string]*BuildTask{},
+		chann:   concurrency,
 	}
 }
 
@@ -58,91 +60,118 @@ func (q *BuildQueue) Add(ctx *BuildContext) chan BuildOutput {
 		ctx:       ctx,
 		createdAt: time.Now(),
 		waitChans: []chan BuildOutput{ch},
-		pending:   true,
 	}
 	ctx.status = "pending"
 
-	task.el = q.queue.PushBack(task)
+	q.pending.PushBack(task)
 	q.tasks[ctx.Path()] = task
 
-	// start scheduler if not already running
-	if atomic.CompareAndSwapInt32(&q.scheduler, 0, 1) {
-		go q.schedule()
-	}
+	q.startSchedulerLocked()
 
 	return ch
 }
 
-func (q *BuildQueue) schedule() {
-	defer func() {
-		// ensure scheduler state is reset even if panic occurs
-		if r := recover(); r != nil {
-			// TODO: log panic
-		}
-		atomic.StoreInt32(&q.scheduler, 0)
-	}()
+func (q *BuildQueue) Snapshot() []map[string]any {
+	q.lock.Lock()
+	defer q.lock.Unlock()
 
+	items := make([]map[string]any, 0, len(q.queue)+q.pending.Len())
+	for task := range q.queue {
+		items = append(items, map[string]any{
+			"waitClients": len(task.waitChans),
+			"createdAt":   task.createdAt.Format(time.RFC1123),
+			"path":        task.ctx.Path(),
+			"status":      task.ctx.status,
+		})
+	}
+	for el := q.pending.Front(); el != nil; el = el.Next() {
+		task, ok := el.Value.(*BuildTask)
+		if !ok {
+			continue
+		}
+		items = append(items, map[string]any{
+			"waitClients": len(task.waitChans),
+			"createdAt":   task.createdAt.Format(time.RFC1123),
+			"path":        task.ctx.Path(),
+			"status":      task.ctx.status,
+		})
+	}
+	return items
+}
+
+func (q *BuildQueue) startSchedulerLocked() {
+	if q.scheduler || q.chann == 0 || q.pending.Len() == 0 {
+		return
+	}
+	q.scheduler = true
+	go q.schedule()
+}
+
+func (q *BuildQueue) schedule() {
 	for {
 		q.lock.Lock()
-
-		var task *BuildTask
-		if q.chann > 0 {
-			for el := q.queue.Front(); el != nil; el = el.Next() {
-				t, ok := el.Value.(*BuildTask)
-				if ok && t.pending {
-					task = t
-					break
-				}
-			}
+		if q.chann == 0 || q.pending.Len() == 0 {
+			q.scheduler = false
+			q.lock.Unlock()
+			return
 		}
 
-		if task != nil {
-			q.chann -= 1
-			task.pending = false
-			task.startedAt = time.Now()
-			q.lock.Unlock()
+		task, _ := q.pending.Remove(q.pending.Front()).(*BuildTask)
+		q.queue[task] = struct{}{}
+		task.startedAt = time.Now()
+		q.chann--
+		q.lock.Unlock()
 
-			go q.run(task)
-		} else {
-			// no more tasks to schedule, exit the loop
-			q.lock.Unlock()
-			break
-		}
+		go q.run(task)
 	}
 }
 
 func (q *BuildQueue) run(task *BuildTask) {
+	var output BuildOutput
+
 	defer func() {
-		// ensure channel counter is always incremented, even if panic occurs
 		if r := recover(); r != nil {
-			// TODO: log panic
+			output.err = fmt.Errorf("build panic: %v", r)
+			task.ctx.status = "error"
+			task.ctx.logger.Errorf("build '%s' panicked: %v", task.ctx.Path(), r)
 		}
+
+		waitChans := task.waitChans
 
 		q.lock.Lock()
-		q.chann += 1
+		q.chann++
+		delete(q.queue, task)
+		delete(q.tasks, task.ctx.Path())
+		if task.ctx.rawPath != "" {
+			// the `Build` function may have changed the path
+			delete(q.tasks, task.ctx.rawPath)
+		}
+		q.startSchedulerLocked()
+		q.lock.Unlock()
 
-		// check if there are more pending tasks and restart scheduler if needed
-		// do this check atomically while holding the lock
-		hasPending := false
-		for el := q.queue.Front(); el != nil; el = el.Next() {
-			if t, ok := el.Value.(*BuildTask); ok && t.pending {
-				hasPending = true
-				break
+		for _, ch := range waitChans {
+			if ch == nil {
+				continue
+			}
+			select {
+			case ch <- output:
+			default:
+				// the request may have already timed out while waiting on the build
 			}
 		}
-
-		// only restart scheduler if we're not already running one
-		if hasPending && atomic.CompareAndSwapInt32(&q.scheduler, 0, 1) {
-			// start scheduler in a separate goroutine to avoid deadlock
-			go func() {
-				q.schedule()
-			}()
-		}
-
-		q.lock.Unlock()
 	}()
 
-	meta, err := task.ctx.Build()
+	buildTimeout := 10 * time.Minute
+	if config != nil && config.BuildTimeout > 0 {
+		buildTimeout = time.Duration(config.BuildTimeout) * time.Second
+	}
+	buildCtx, cancel := context.WithTimeout(context.Background(), buildTimeout)
+	defer cancel()
+
+	meta, err := task.ctx.Build(buildCtx)
+	if errors.Is(err, context.DeadlineExceeded) {
+		err = fmt.Errorf("build timeout after %d seconds", buildTimeout/time.Second)
+	}
 	if err == nil {
 		task.ctx.status = "done"
 		if task.ctx.target == "types" {
@@ -154,31 +183,5 @@ func (q *BuildQueue) run(task *BuildTask) {
 		task.ctx.status = "error"
 		task.ctx.logger.Errorf("build '%s': %v", task.ctx.Path(), err)
 	}
-
-	// clean up task while holding the lock to prevent race conditions
-	q.lock.Lock()
-	q.queue.Remove(task.el)
-	delete(q.tasks, task.ctx.Path())
-	if task.ctx.rawPath != "" {
-		// the `Build` function may have changed the path
-		delete(q.tasks, task.ctx.rawPath)
-	}
-	q.lock.Unlock()
-
-	// store wait channels before recycling the task
-	waitChans := task.waitChans
-
-	// send the build output
-	output := BuildOutput{meta, err}
-	for _, ch := range waitChans {
-		if ch != nil {
-			select {
-			case ch <- output:
-				// successfully sent
-			default:
-				// channel is full or closed, log the drop
-				// Note: task.ctx might be nil here due to recycling, so we can't log the path
-			}
-		}
-	}
+	output = BuildOutput{meta: meta, err: err}
 }
