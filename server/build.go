@@ -170,7 +170,7 @@ func (ctx *BuildContext) Build(buildCtx context.Context) (meta *BuildMeta, err e
 	}
 
 	// analyze splitting modules if bundling
-	if ctx.pkgJson.Exports.Len() > 1 && !ctx.isNoBundle() {
+	if ctx.pkgJson.Exports.Len() > 1 && ctx.shouldBundle() {
 		ctx.status = "analyze"
 		err = ctx.analyzeSplitting()
 		if err != nil {
@@ -400,7 +400,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 
 	browserExclude := map[string]*set.Set[string]{}
 	implicitExternal := set.New[string]()
-	noBundle := ctx.isNoBundle()
+	noBundle := !ctx.shouldBundle()
 	esmifyPlugin := esbuild.Plugin{
 		Name: "esmify",
 		Setup: func(build esbuild.PluginBuild) {
@@ -1083,6 +1083,20 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 		// disable minification for development build
 		minify = false
 	}
+	keepNames := ctx.args.KeepNames
+	ignoreAnnotations := ctx.args.IgnoreAnnotations
+	if esmsh := ctx.pkgJson.Esmsh; esmsh != nil {
+		if v, ok := esmsh["keepNames"]; ok {
+			if b, ok := v.(bool); ok {
+				keepNames = b
+			}
+		}
+		if v, ok := esmsh["ignoreAnnotations"]; ok {
+			if b, ok := v.(bool); ok {
+				ignoreAnnotations = b
+			}
+		}
+	}
 	options := esbuild.BuildOptions{
 		AbsWorkingDir:     ctx.wd,
 		PreserveSymlinks:  true,
@@ -1097,8 +1111,8 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 		MinifyWhitespace:  minify,
 		MinifyIdentifiers: minify,
 		MinifySyntax:      minify,
-		KeepNames:         ctx.args.KeepNames,         // prevent class/function names erasing
-		IgnoreAnnotations: ctx.args.IgnoreAnnotations, // some libs maybe use wrong side-effect annotations
+		KeepNames:         keepNames,
+		IgnoreAnnotations: ignoreAnnotations,
 		Conditions:        conditions,
 		Loader:            loaders,
 		Plugins:           []esbuild.Plugin{esmifyPlugin},
@@ -1598,14 +1612,16 @@ func (ctx *BuildContext) install() (err error) {
 	return
 }
 
-func (ctx *BuildContext) isNoBundle() bool {
-	noBundle := ctx.bundleMode == BundleFalse || ctx.pkgJson.SideEffects.Len() > 0
+func (ctx *BuildContext) shouldBundle() bool {
+	if ctx.bundleMode == BundleFalse || ctx.pkgJson.SideEffects.Len() > 0 {
+		return false
+	}
 	if ctx.pkgJson.Esmsh != nil {
 		if v, ok := ctx.pkgJson.Esmsh["bundle"]; ok {
 			if b, ok := v.(bool); ok && !b {
-				noBundle = true
+				return false
 			}
 		}
 	}
-	return noBundle
+	return true
 }

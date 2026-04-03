@@ -382,6 +382,24 @@ import unescape from "https://esm.sh/lodash/unescape?no-dts";
 This will prevent the `X-TypeScript-Types` header from being included in the network request, and you can manually
 specify the types for the imported module.
 
+## esm.sh Configuration
+
+esm.sh supports configuring the build options by adding the `esm.sh` field to your `package.json`:
+
+```jsonc
+{
+  "name": "your-package",
+  "esm.sh": {
+    // set to false to disable the default bundling behavior
+    "bundle": true,
+    // set to true to prevent class/function names erasing
+    "keepNames": false,
+    // set to true to ignore side-effect annotations
+    "ignoreAnnotations": false
+  }
+}
+```
+
 ## Supporting Node.js/Bun
 
 esm.sh is not supported by Node.js/Bun currently.

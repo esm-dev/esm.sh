@@ -227,8 +227,6 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 			if entry.types == "" {
 				if p.Types != "" && ctx.existsPkgFile(subPath, p.Types) {
 					entry.types = "./" + path.Join(subPath, p.Types)
-				} else if p.Typings != "" && ctx.existsPkgFile(subPath, p.Typings) {
-					entry.types = "./" + path.Join(subPath, p.Typings)
 				}
 			}
 		}
@@ -307,8 +305,6 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 		}
 		if pkgJson.Types != "" {
 			entry.types = normalizeEntryPath(pkgJson.Types)
-		} else if pkgJson.Typings != "" {
-			entry.types = normalizeEntryPath(pkgJson.Typings)
 		}
 		if len(pkgJson.Browser) > 0 && ctx.isBrowserTarget() {
 			if path, ok := pkgJson.Browser["."]; ok && ctx.existsPkgFile(path) {
@@ -1034,7 +1030,7 @@ func (ctx *BuildContext) resolveDTS(entry BuildEntry) (string, error) {
 		), nil
 	}
 
-	if ctx.esmPath.SubPath != "" && (ctx.pkgJson.Types != "" || ctx.pkgJson.Typings != "") {
+	if ctx.esmPath.SubPath != "" && ctx.pkgJson.Types != "" {
 		return "", nil
 	}
 
