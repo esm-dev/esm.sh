@@ -557,8 +557,6 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 			types := "index.d.ts"
 			if info.Types != "" {
 				types = info.Types
-			} else if info.Typings != "" {
-				types = info.Typings
 			} else if info.Main != "" && endsWith(info.Main, ".d.ts", ".d.mts", ".d.cts") {
 				types = info.Main
 			}

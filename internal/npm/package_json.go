@@ -56,7 +56,6 @@ type PackageJSON struct {
 	Main             string
 	Module           string
 	Types            string
-	Typings          string
 	SideEffectsFalse bool
 	SideEffects      set.ReadOnlySet[string]
 	Browser          map[string]string
@@ -173,7 +172,6 @@ func (a *PackageJSONRaw) ToNpmPackage() *PackageJSON {
 		Main:             a.Main.String(),
 		Module:           a.Module.String(),
 		Types:            a.Types.String(),
-		Typings:          a.Typings.String(),
 		Browser:          browser,
 		SideEffectsFalse: sideEffectsFalse,
 		SideEffects:      *sideEffects.ReadOnly(),
@@ -185,6 +183,10 @@ func (a *PackageJSONRaw) ToNpmPackage() *PackageJSON {
 		Esmsh:            asMap(a.Esmsh),
 		Deprecated:       depreacted,
 		Dist:             dist,
+	}
+
+	if p.Types == "" {
+		p.Types = a.Typings.String()
 	}
 
 	// normalize package module field
