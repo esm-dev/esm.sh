@@ -390,11 +390,11 @@ esm.sh supports configuring the build options by adding the `esm.sh` field to yo
 {
   "name": "your-package",
   "esm.sh": {
-    // disable the default bundling behavior
-    "bundle": false,
-    // prevent class/function names erasing
+    // set to false to disable the default bundling behavior
+    "bundle": true,
+    // set to true to prevent class/function names erasing
     "keepNames": false,
-    // some libs maybe use wrong side-effect annotations
+    // set to true to ignore side-effect annotations
     "ignoreAnnotations": false
   }
 }
