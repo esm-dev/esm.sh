@@ -9,7 +9,6 @@ jobs:
   build_cli:
     name: Build esm.sh CLI
     runs-on: ubuntu-latest
-    environment: npm
 
     strategy:
       matrix:
@@ -71,11 +70,16 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: "0"
 
+      # Flat, unique names so merge-multiple does not overwrite the same nested path
+      # (cli/npm/cli_package/bin/esm.sh) across matrix jobs.
+      - name: Stage release binary
+        run: cp "cli/npm/cli_package/bin/esm.sh${{ matrix.ext }}" "cli-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.ext }}"
+
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: cli-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.ext }}
-          path: cli/npm/cli_package/bin/esm.sh${{ matrix.ext }}
+          path: cli-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.ext }}
           if-no-files-found: error
 
       - name: Create package.json
@@ -85,13 +89,10 @@ jobs:
       - name: Publish Package to NPM
         run: npm publish --provenance --access public
         working-directory: cli/npm/cli_package
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   publish_to_npm:
     name: Publish package "esm.sh" to NPM
     runs-on: ubuntu-latest
-    environment: npm
     needs: [build_cli]
 
     permissions:
@@ -115,8 +116,6 @@ jobs:
       - name: Publish Package
         run: npm publish --provenance --access public
         working-directory: cli/npm
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   release:
     name: Release
