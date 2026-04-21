@@ -48,7 +48,6 @@ jobs:
     name: Deploy server to production
     runs-on: ubuntu-latest
     environment: esm.sh
-    needs: [push_docker_image]
 
     steps:
       - name: Checkout
@@ -74,7 +73,7 @@ jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
-    needs: [deploy_server]
+    needs: [push_docker_image,deploy_server]
 
     steps:
       - name: Checkout
