@@ -1304,7 +1304,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 		}
 
 		if buildMeta.CSSEntry != "" {
-			url := strings.Join([]string{origin, esmPath.PackageId(), buildMeta.CSSEntry[2:]}, "/")
+			url := getCSSEntryRedirectURL(origin, esmPath, buildMeta.CSSEntry)			
 			return redirect(ctx, url, isExactVersion)
 		}
 
@@ -1616,4 +1616,8 @@ func errorJS(ctx *rex.Context, message string) any {
 	ctx.SetHeader("Content-Type", ctJavaScript)
 	ctx.SetHeader("Cache-Control", ccImmutable)
 	return buf.Bytes()
+}
+
+func getCSSEntryRedirectURL(origin string, esmPath EsmPath, cssEntry string) string {
+	return origin + "/" + esmPath.PackageId() + utils.NormalizePathname(cssEntry)
 }
