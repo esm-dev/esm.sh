@@ -1,5 +1,16 @@
 # Server Changelog
 
+## v137_1
+
+* Support `keepNames` and `ignoreAnnotations` options in the `esm.sh` field of `package.json`. (#1341)
+* Other Changes:
+  * Add disk status checking and npm cache purging functionality. (#1329)
+  * Add build timeout handling and improve command execution stability. (#1334, #1339)
+  * Upgrade `esbuild` to 0.28.0. (#1342)
+  * Fix bare import self-reference resolution in scoped fork packages. (#1330)
+  * Fix the transform API. (#1333)
+  * Fix a path handling bug caused by assuming a removable 2-character prefix. (#1345)
+
 ## v137
 
 * Introduce date(`yyyy-mm-dd`) versioning
