@@ -370,7 +370,31 @@ func resolvePrPackageVersion(esm EsmPath) (version string, err error) {
 			return nil
 		}
 
-		_, err = client.Fetch(u, nil)
+		resp, err := client.Fetch(u, nil)
+		if resp != nil && resp.Body != nil {
+			defer resp.Body.Close()
+		}
+		if err == nil && resp != nil {
+			if commit := prCommitFromHeader(resp.Header); commit != "" {
+				version = commit
+			}
+		}
 		return
 	})
+}
+
+func prCommitFromHeader(header http.Header) string {
+	key := header.Get("x-commit-key")
+	if key == "" {
+		return ""
+	}
+	idx := strings.LastIndexByte(key, ':')
+	if idx < 0 || idx == len(key)-1 {
+		return ""
+	}
+	commit := key[idx+1:]
+	if !isCommitish(commit) {
+		return ""
+	}
+	return commit[:7]
 }
