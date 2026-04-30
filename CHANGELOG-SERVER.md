@@ -2,7 +2,7 @@
 
 ## v137_2
 
-**We are shutting down the legacy build server, previous builds remain to work.** New legacy _pinned_ urls now will be redirected to the new routes:
+**We are shutting down the legacy build server; existing builds will continue to work.** Legacy _pinned_ URLs will now be redirected to the new routes:
 
 ```
 https://esm.sh/v135/react-dom@19.2.5 -> https://esm.sh/react-dom@19.2.5
