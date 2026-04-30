@@ -259,7 +259,7 @@ func legacyESM(ctx *rex.Context, fs storage.Storage, buildVersionPrefix string) 
 		} else if pathname == "/node.ns.d.ts" {
 			return rex.Status(404, "Not Found")
 		}
-		return redirect(ctx, fmt.Sprintf("%s%s", origin, pathname), true)
+		return redirect(ctx, fmt.Sprintf("%s%s%s", origin, pathname, query), true)
 	}
 
 	return rex.Next()

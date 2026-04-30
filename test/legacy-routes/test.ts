@@ -35,7 +35,7 @@ Deno.test("legacy deprecated routes", async () => {
   }
 });
 
-Deno.test("legacy routes (hit cache)", async () => {
+Deno.test("legacy routes (cache hit)", async () => {
   // fake cache
   await writeTextFile(
     ".esmd/storage/legacy/v135/react@19.0.0.meta",
@@ -104,7 +104,7 @@ Deno.test("legacy routes (hit cache)", async () => {
   }
 });
 
-Deno.test("legacy routes (miss cache)", async () => {
+Deno.test("legacy routes (cache miss)", async () => {
   {
     const res = await fetch("http://localhost:8080/stable/react@18.3.1", {
       redirect: "manual",
@@ -120,6 +120,14 @@ Deno.test("legacy routes (miss cache)", async () => {
     res.body?.cancel();
     assertEquals(res.status, 301);
     assert(res.headers.get("Location")?.startsWith("http://localhost:8080/react@18.3.1"));
+  }
+  {
+    const res = await fetch("http://localhost:8080/v135/react@18.3.1?target=2018", {
+      redirect: "manual",
+    });
+    res.body?.cancel();
+    assertEquals(res.status, 301);
+    assert(res.headers.get("Location")?.startsWith("http://localhost:8080/react@18.3.1?target=2018"));
   }
   {
     const res = await fetch("http://localhost:8080/stable/react", {
