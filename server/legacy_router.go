@@ -254,7 +254,7 @@ func legacyESM(ctx *rex.Context, fs storage.Storage, buildVersionPrefix string) 
 	// strip leading `/stable/*` and `/v<build-version>/*`
 	if buildVersionPrefix != "" {
 		origin := getOrigin(ctx)
-		if strings.HasPrefix(pathname, "/node_") || strings.HasSuffix(pathname, ".js") {
+		if strings.HasPrefix(pathname, "/node_") && strings.HasSuffix(pathname, ".js") {
 			pathname = "/node/" + strings.TrimSuffix(strings.TrimPrefix(pathname, "/node_"), ".js") + ".mjs"
 		} else if pathname == "/node.ns.d.ts" {
 			return rex.Status(404, "Not Found")
