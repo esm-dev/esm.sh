@@ -79,7 +79,7 @@ func Start() {
 		rex.Optional(rex.AccessLogger(accessLogger), config.AccessLog),
 		rex.Optional(rex.Compress(), config.Compress),
 		rex.Optional(customLandingPage(&config.CustomLandingPage), config.CustomLandingPage.Origin != ""),
-		rex.Optional(esmLegacyRouter(esmStorage), config.LegacyServer != ""),
+		esmLegacyRouter(esmStorage),
 		esmRouter(esmStorage, logger),
 	)
 

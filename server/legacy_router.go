@@ -6,13 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
 	"net/url"
 	"path"
 	"strconv"
 	"strings"
 
-	"github.com/esm-dev/esm.sh/internal/fetch"
 	"github.com/esm-dev/esm.sh/internal/npm"
 	"github.com/esm-dev/esm.sh/internal/storage"
 	"github.com/ije/esbuild-internal/xxhash"
@@ -201,7 +199,7 @@ func legacyESM(ctx *rex.Context, fs storage.Storage, buildVersionPrefix string) 
 							return rex.Status(500, "Failed to read data from storage")
 						}
 						data = bytes.ReplaceAll(data, []byte("https://esm.sh/v"), []byte(origin+"/v"))
-						data = bytes.ReplaceAll(data, []byte(config.LegacyServer+"/v"), []byte(origin+"/v"))
+						data = bytes.ReplaceAll(data, []byte("https://legacy.esm.sh/v"), []byte(origin+"/v"))
 						return data
 					}
 				}
@@ -253,90 +251,16 @@ func legacyESM(ctx *rex.Context, fs storage.Storage, buildVersionPrefix string) 
 		}
 	}
 
-	url, err := ctx.R.URL.Parse(config.LegacyServer + ctx.R.URL.Path + query)
-	if err != nil {
-		return rex.Status(http.StatusBadRequest, "Invalid url")
+	// strip leading `/stable/*` and `/v<build-version>/*`
+	if buildVersionPrefix != "" {
+		origin := getOrigin(ctx)
+		if strings.HasPrefix(pathname, "/node_") || strings.HasSuffix(pathname, ".js") {
+			pathname = "/node/" + strings.TrimSuffix(strings.TrimPrefix(pathname, "/node_"), ".js") + ".mjs"
+		} else if pathname == "/node.ns.d.ts" {
+			return rex.Status(404, "Not Found")
+		}
+		return redirect(ctx, fmt.Sprintf("%s%s", origin, pathname), true)
 	}
 
-	client := fetch.NewClient(ctx.UserAgent(), 60, true)
-	res, err := client.Fetch(url, nil)
-	if err != nil {
-		return rex.Status(http.StatusBadGateway, "Failed to connect the legacy esm.sh server")
-	}
-	defer res.Body.Close()
-
-	if res.StatusCode == 301 || res.StatusCode == 302 {
-		url := res.Header.Get("Location")
-		if after, ok := strings.CutPrefix(url, "https://legacy.esm.sh"); ok {
-			url = getOrigin(ctx) + after
-		}
-		return redirect(ctx, url, res.StatusCode == 301)
-	}
-
-	if res.StatusCode != 200 {
-		data, err := io.ReadAll(res.Body)
-		if err != nil {
-			return rex.Status(500, "Failed to fetch data from the legacy esm.sh server")
-		}
-		ctx.SetHeader("Cache-Control", "public, max-age=600")
-		return rex.Status(res.StatusCode, data)
-	}
-
-	if (buildVersionPrefix != "" && isStatic) || endsWith(pathname, ".d.ts", ".d.mts") {
-		data, err := io.ReadAll(res.Body)
-		if err != nil {
-			return rex.Status(500, "Failed to fetch data from the legacy esm.sh server")
-		}
-		err = fs.Put(savePath, bytes.NewReader(data))
-		if err != nil {
-			return rex.Status(500, "Storage error: "+err.Error())
-		}
-		ctx.SetHeader("Content-Type", res.Header.Get("Content-Type"))
-		ctx.SetHeader("Cache-Control", ccImmutable)
-		// resolve hostname in typescript definition files if the origin is not "https://esm.sh"
-		if endsWith(pathname, ".d.ts", ".d.mts") {
-			origin := getOrigin(ctx)
-			if origin != "https://esm.sh" {
-				data = bytes.ReplaceAll(data, []byte("https://esm.sh/v"), []byte(origin+"/v"))
-				data = bytes.ReplaceAll(data, []byte(config.LegacyServer+"/v"), []byte(origin+"/v"))
-			}
-		}
-		return data
-	} else {
-		code, err := io.ReadAll(res.Body)
-		if err != nil {
-			return rex.Status(500, "Failed to fetch data from the legacy esm.sh server")
-		}
-		esmId := res.Header.Get("X-Esm-Id")
-		dts := res.Header.Get("X-TypeScript-Types")
-		if dts != "" {
-			u, err := url.Parse(dts)
-			if err != nil {
-				dts = ""
-			} else {
-				dts = u.Path
-			}
-		}
-		ret := LegacyBuildMeta{
-			EsmId: esmId,
-			Dts:   dts,
-			Code:  string(code),
-		}
-		err = fs.Put(savePath, bytes.NewReader(utils.MustEncodeJSON(ret)))
-		if err != nil {
-			return rex.Status(500, "Storage error: "+err.Error())
-		}
-		ctx.SetHeader("Content-Type", res.Header.Get("Content-Type"))
-		ctx.SetHeader("Cache-Control", ccImmutable)
-		if query != "" && !ctx.R.URL.Query().Has("target") {
-			appendVaryHeader(ctx.W.Header(), "User-Agent")
-		}
-		if esmId != "" {
-			ctx.SetHeader("X-ESM-Id", esmId)
-		}
-		if dts != "" {
-			ctx.SetHeader("X-TypeScript-Types", getOrigin(ctx)+dts)
-		}
-		return code
-	}
+	return rex.Next()
 }

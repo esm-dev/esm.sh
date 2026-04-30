@@ -17,7 +17,6 @@ async function startServer(onStart: () => Promise<void>) {
       {
         "port": 8080,
         "workDir": ".esmd",
-        "legacyServer": "https://legacy.esm.sh",
         ...configJson,
       },
       undefined,

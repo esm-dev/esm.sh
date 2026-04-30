@@ -49,7 +49,6 @@ type Config struct {
 	MinifyRaw           json.RawMessage              `json:"minify"`
 	SourceMapRaw        json.RawMessage              `json:"sourceMap"`
 	CompressRaw         json.RawMessage              `json:"compress"`
-	LegacyServer        string                       `json:"legacyServer"`
 	Minify              bool                         `json:"-"`
 	SourceMap           bool                         `json:"-"`
 	Compress            bool                         `json:"-"`
