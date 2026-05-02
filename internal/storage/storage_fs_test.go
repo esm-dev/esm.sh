@@ -115,3 +115,49 @@ func TestFSStorage(t *testing.T) {
 		t.Fatalf("invalid keys count(%d), shoud be 0", len(keys))
 	}
 }
+
+func TestFSStorageRejectPathTraversal(t *testing.T) {
+	root := path.Join(os.TempDir(), "storage_traversal_"+rand.Hex.String(8))
+	fs, err := NewFSStorage(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(root)
+
+	attackKeys := []string{
+		"../outside.txt",
+		"legacy/../../../tmp/pwned",
+		`legacy/v111/react@19.2.0/esnext/../../../gh/a/exp@cafe/foo.md#/../../../../../../../../../../tmp/pwned`,
+		"safe/../../etc/passwd",
+		"bad\x00surprise",
+	}
+	for _, k := range attackKeys {
+		err = fs.Put(k, bytes.NewBufferString("evil"))
+		if err != ErrInvalidStorageKey {
+			t.Fatalf("Put(%q): want ErrInvalidStorageKey, got %v", k, err)
+		}
+		if _, err = fs.Stat(k); err != ErrInvalidStorageKey {
+			t.Fatalf("Stat(%q): want ErrInvalidStorageKey, got %v", k, err)
+		}
+		if _, _, err = fs.Get(k); err != ErrInvalidStorageKey {
+			t.Fatalf("Get(%q): want ErrInvalidStorageKey, got %v", k, err)
+		}
+		if err = fs.Delete(k); err != ErrInvalidStorageKey {
+			t.Fatalf("Delete(%q): want ErrInvalidStorageKey, got %v", k, err)
+		}
+	}
+
+	err = fs.Put("ok/sub/file.txt", bytes.NewBufferString("hi"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, _, err := fs.Get("ok/sub/file.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer got.Close()
+	b, err := io.ReadAll(got)
+	if err != nil || string(b) != "hi" {
+		t.Fatalf("Get ok path: content %q err %v", string(b), err)
+	}
+}

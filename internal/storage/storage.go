@@ -7,7 +7,8 @@ import (
 )
 
 var (
-	ErrNotFound = errors.New("file not found")
+	ErrNotFound          = errors.New("file not found")
+	ErrInvalidStorageKey = errors.New("invalid storage key")
 )
 
 type StorageOptions struct {
