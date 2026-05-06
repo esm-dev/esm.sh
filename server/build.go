@@ -728,6 +728,10 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 							}
 
 							filename = path.Join(ctx.wd, "node_modules", ctx.esmPath.PkgName, modulePath)
+							// check if the filename is within the working directory
+							if !strings.HasPrefix(filename, ctx.wd+string(os.PathSeparator)) {
+								return esbuild.OnResolveResult{}, fmt.Errorf("could not resolve module %s", specifier)
+							}
 
 							// split the module that includes `export * from "external"` statement
 							if entry.module && len(pkgJson.Dependencies)+len(pkgJson.PeerDependencies) > 0 && args.Kind == esbuild.ResolveJSImportStatement {
