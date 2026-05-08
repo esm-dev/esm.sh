@@ -1,5 +1,11 @@
 # Server Changelog
 
+## v137_3
+
+* Security hardening for path traversal:
+  * Prevent path traversal in module resolution. (#1353)
+  * Reject path-traversal keys in filesystem storage. (#1351)
+
 ## v137_2
 
 **We are shutting down the legacy build server; existing builds will continue to work.** Legacy _pinned_ URLs will now be redirected to the new routes:
