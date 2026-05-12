@@ -989,7 +989,11 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 					if err != nil {
 						return esbuild.OnLoadResult{}, err
 					}
-					return esbuild.OnLoadResult{Contents: &out.Code, Loader: esbuild.LoaderJS}, nil
+					return esbuild.OnLoadResult{
+						Contents:   &out.Code,
+						ResolveDir: path.Join(ctx.wd, "node_modules", ctx.esmPath.PkgName),
+						Loader:     esbuild.LoaderJS,
+					}, nil
 				},
 			)
 
@@ -1024,9 +1028,17 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 						return esbuild.OnLoadResult{}, err
 					}
 					if out.Lang == "ts" {
-						return esbuild.OnLoadResult{Contents: &out.Code, Loader: esbuild.LoaderTS}, nil
+						return esbuild.OnLoadResult{
+							Contents:   &out.Code,
+							ResolveDir: path.Join(ctx.wd, "node_modules", ctx.esmPath.PkgName),
+							Loader:     esbuild.LoaderTS,
+						}, nil
 					}
-					return esbuild.OnLoadResult{Contents: &out.Code, Loader: esbuild.LoaderJS}, nil
+					return esbuild.OnLoadResult{
+						Contents:   &out.Code,
+						ResolveDir: path.Join(ctx.wd, "node_modules", ctx.esmPath.PkgName),
+						Loader:     esbuild.LoaderJS,
+					}, nil
 				},
 			)
 		},
