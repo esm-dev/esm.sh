@@ -1,5 +1,9 @@
 # Server Changelog
 
+## v137_4
+
+* Fix `*.svelte` transformer. (#1357)
+
 ## v137_3
 
 * Security hardening for path traversal:
