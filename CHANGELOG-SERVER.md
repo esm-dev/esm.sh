@@ -2,7 +2,7 @@
 
 ## v137_4
 
-* Fix `*.svelte` transformer (#1357)
+* Fix `*.svelte` transformer. (#1357)
 
 ## v137_3
 
