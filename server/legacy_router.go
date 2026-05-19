@@ -92,7 +92,7 @@ func esmLegacyRouter(fs storage.Storage) rex.Handle {
 
 		// packages created by the `/build` API
 		if len(pathname) == 42 && strings.HasPrefix(pathname, "/~") && valid.IsHexString(pathname[2:]) {
-			return redirect(ctx, fmt.Sprintf("/v135%s@0.0.0/%s/mod.mjs", pathname, legacyGetBuildTargetByUA(ctx.UserAgent())), true)
+			return redirect(ctx, fmt.Sprintf("/v135%s@0.0.0/%s/mod.mjs", pathname, getBuildTargetByUA(ctx.UserAgent())), true)
 		}
 
 		return ctx.Next()
@@ -220,7 +220,7 @@ func legacyESM(ctx *rex.Context, fs storage.Storage, buildVersionPrefix string) 
 		if query != "" {
 			if !ctx.R.URL.Query().Has("target") {
 				varyUA = true
-				savePath += "." + legacyGetBuildTargetByUA(ctx.UserAgent())
+				savePath += "." + getBuildTargetByUA(ctx.UserAgent())
 			}
 			h := xxhash.New()
 			h.Write([]byte(query))
