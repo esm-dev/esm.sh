@@ -1427,6 +1427,16 @@ func validateJSFile(filename string) (isESM bool, namedExports []string, err err
 		return
 	}
 	isESM = ast.ExportsKind == js_ast.ExportsESM || ast.ExportsKind == js_ast.ExportsESMWithDynamicFallback
+	// A module with no import/export/CommonJS markers (e.g. an empty file that
+	// contains only comments, as shipped by some types-only packages) is parsed
+	// as `ExportsNone`. For explicit ES module files (`.mjs`/`.mts`) such a file
+	// is still a valid—if empty—ES module and must be treated as ESM. Otherwise
+	// it would be misclassified as a "fake CommonJS module" and handed to the
+	// cjs-module-lexer, which can panic while resolving the entry's `exports`
+	// subpath under non-matching conditions (e.g. a `browser`-only build).
+	if !isESM && ast.ExportsKind == js_ast.ExportsNone && endsWith(filename, ".mjs", ".mts") {
+		isESM = true
+	}
 	namedExports = make([]string, len(ast.NamedExports))
 	i := 0
 	for name := range ast.NamedExports {
