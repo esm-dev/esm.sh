@@ -1,5 +1,8 @@
 # esm.sh CLI
 
+> [!WARNING]
+> The `esm.sh` CLI is still in development. Use it at your own risk.
+
 A CLI tool for managing `importmap` script in `index.html`.
 
 ## Installation
