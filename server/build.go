@@ -786,11 +786,12 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 
 						// bundle the sub module if:
 						// - it's the entry point
+						// - it's not a conditional export
 						// - it's not a dynamic import and the `?bundle=false` flag is not present
 						// - it's not in the `splitting` list
-						if modulePath == entry.main || (exportAs != "" && exportAs == entrySpecifier) || (args.Kind != esbuild.ResolveJSDynamicImport && !noBundle) {
+						if modulePath == entry.main || (exportAs != "" && exportAs == entrySpecifier) || exportAs == "" || (args.Kind != esbuild.ResolveJSDynamicImport && !noBundle) {
 							if existsFile(resolvedFilename) {
-								pkgDir := path.Join(ctx.wd, "node_modules", ctx.esmPath.PkgName)
+								pkgDir := path.Join(ctx.wd, "node_modules", pkgName)
 								short := strings.TrimPrefix(resolvedFilename, pkgDir)[1:]
 								if analyzeMode && resolvedFilename != entryModuleFilename && strings.HasPrefix(args.Importer, pkgDir) {
 									includes = append(includes, [2]string{short, strings.TrimPrefix(args.Importer, pkgDir)[1:]})
