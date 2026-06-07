@@ -732,6 +732,23 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 							return esbuild.OnResolveResult{}, fmt.Errorf("could not resolve module %s", specifier)
 						}
 
+						// externalize sideEffects modules in subpath builds so they can be shared
+						// across entries (e.g. ol/proj and ol/proj/proj4 share proj.js)
+						if ctx.esmPath.SubPath != "" && pkgJson.SideEffects.Len() > 0 {
+							shortPath := strings.TrimPrefix(modulePath, "./")
+							if pkgJson.SideEffects.Has(modulePath) || pkgJson.SideEffects.Has(shortPath) {
+								externalPath, sideEffects, err := ctx.resolveExternalModule(path.Join(pkgJson.Name, stripModuleExt(shortPath)), args.Kind, withTypeJSON, analyzeMode)
+								if err != nil {
+									return esbuild.OnResolveResult{}, err
+								}
+								return esbuild.OnResolveResult{
+									Path:        externalPath,
+									SideEffects: sideEffects,
+									External:    true,
+								}, nil
+							}
+						}
+
 						// split the module that includes `export * from "external"` statement
 						if entry.module && len(pkgJson.Dependencies)+len(pkgJson.PeerDependencies) > 0 && args.Kind == esbuild.ResolveJSImportStatement {
 							fi, err := os.Lstat(resolvedFilename)
@@ -790,7 +807,8 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 						// - it's not a dynamic import and the `?bundle=false` flag is not present
 						// - it's not in the `splitting` list
 						isDynamicImport := args.Kind == esbuild.ResolveJSDynamicImport
-						if modulePath == entry.main || exportAs == entrySpecifier || (!isDynamicImport && !noBundle) {
+						bundleInternalModule := exportAs == "" && !isDynamicImport && ctx.bundleMode != BundleFalse && ctx.pkgJson.Type == "module"
+						if modulePath == entry.main || exportAs == entrySpecifier || (!isDynamicImport && !noBundle) || bundleInternalModule {
 							if existsFile(resolvedFilename) {
 								pkgDir := path.Join(ctx.wd, "node_modules", pkgName)
 								short := strings.TrimPrefix(resolvedFilename, pkgDir)[1:]
