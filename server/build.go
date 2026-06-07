@@ -789,7 +789,9 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 						// - it's not a conditional export
 						// - it's not a dynamic import and the `?bundle=false` flag is not present
 						// - it's not in the `splitting` list
-						if modulePath == entry.main || (exportAs != "" && exportAs == entrySpecifier) || exportAs == "" || (args.Kind != esbuild.ResolveJSDynamicImport && !noBundle) {
+						isDynamicImport := args.Kind == esbuild.ResolveJSDynamicImport
+						bundleInternalModule := exportAs == "" && !isDynamicImport && ctx.bundleMode != BundleFalse
+						if modulePath == entry.main || exportAs == entrySpecifier || (!isDynamicImport && !noBundle) || bundleInternalModule {
 							if existsFile(resolvedFilename) {
 								pkgDir := path.Join(ctx.wd, "node_modules", pkgName)
 								short := strings.TrimPrefix(resolvedFilename, pkgDir)[1:]
