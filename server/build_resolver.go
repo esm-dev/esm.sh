@@ -205,8 +205,8 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 					}
 				}
 			}
-			if exportEntry.main != "" && ctx.existsPkgFile(exportEntry.main) {
-				entry.update(exportEntry.main, exportEntry.module)
+			if mainJs, ok := ctx.resloveSubModule(exportEntry.main); ok {
+				entry.update(mainJs, exportEntry.module)
 			}
 			if exportEntry.types != "" && ctx.existsPkgFile(exportEntry.types) {
 				entry.types = exportEntry.types
@@ -1157,6 +1157,27 @@ func (ctx *BuildContext) existsPkgFile(fp ...string) bool {
 	args[2] = ctx.esmPath.PkgName
 	copy(args[3:], fp)
 	return existsFile(path.Join(args...))
+}
+
+func (ctx *BuildContext) resloveSubModule(subPath string) (string, bool) {
+	if subPath != "" {
+		if ctx.existsPkgFile(subPath) {
+			return subPath, true
+		}
+		preferExt := ".mjs"
+		if ctx.pkgJson.Type == "commonjs" {
+			preferExt = ".cjs"
+		}
+		for _, ext := range []string{preferExt, "js", "mts", "ts", "cts"} {
+			if ctx.existsPkgFile(subPath + "." + ext) {
+				return subPath + "." + ext, true
+			}
+			if ctx.existsPkgFile(subPath + "/index." + ext) {
+				return subPath + "/index." + ext, true
+			}
+		}
+	}
+	return "", false
 }
 
 func (ctx *BuildContext) resolveDependency(specifier string, isDts bool) (esm EsmPath, packageJson *npm.PackageJSON, err error) {

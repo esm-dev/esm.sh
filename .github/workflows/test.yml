@@ -13,7 +13,7 @@ jobs:
 
     strategy:
       matrix:
-        deno-version: [1.x, 2.x]
+        deno-version: [1.x, 2.7.x]
 
     steps:
       - name: Checkout

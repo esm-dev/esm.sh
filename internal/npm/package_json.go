@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"path"
 	"strings"
 
 	"github.com/ije/gox/set"
@@ -72,7 +71,7 @@ type PackageJSON struct {
 // ToNpmPackage converts PackageJSONRaw to PackageJSON
 func (a *PackageJSONRaw) ToNpmPackage() *PackageJSON {
 	browser := map[string]string{}
-	if a.Browser.str != "" && hasModuleExt(a.Browser.str) {
+	if a.Browser.str != "" {
 		browser["."] = a.Browser.str
 	}
 	if a.Browser.object != nil {
@@ -119,7 +118,7 @@ func (a *PackageJSONRaw) ToNpmPackage() *PackageJSON {
 		if s, ok := a.SideEffects.(string); ok {
 			if s == "false" {
 				sideEffectsFalse = true
-			} else if hasModuleExt(s) {
+			} else {
 				sideEffects = set.New(s)
 			}
 		} else if b, ok := a.SideEffects.(bool); ok {
@@ -128,7 +127,7 @@ func (a *PackageJSONRaw) ToNpmPackage() *PackageJSON {
 			if len(m) > 0 {
 				sideEffects = set.New[string]()
 				for _, v := range m {
-					if name, ok := v.(string); ok && hasModuleExt(name) {
+					if name, ok := v.(string); ok {
 						sideEffects.Add(name)
 					}
 				}
@@ -417,16 +416,6 @@ func (a *JSONAny) String() string {
 		}
 	}
 	return ""
-}
-
-// hasModuleExt
-func hasModuleExt(s string) bool {
-	switch path.Ext(s) {
-	case ".js", ".mjs", ".cjs", ".jsx", ".ts", ".mts", ".cts", ".tsx":
-		return true
-	default:
-		return false
-	}
 }
 
 // asMap converts any value to a map[string]any, if the value is not a map[string]any, return nil
