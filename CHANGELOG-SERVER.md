@@ -1,5 +1,11 @@
 # Server Changelog
 
+## v137_5
+
+* Fix standalone mode. (#1367)
+* Treat empty `.mjs`/`.mts` entry as ESM instead of fake CommonJS. (#1366)
+* Remove unused `legacyGetBuildTargetByUA` function. (#1361)
+
 ## v137_4
 
 * Fix `*.svelte` transformer. (#1357)
