@@ -28,6 +28,7 @@ type JSWorker struct {
 	stdout    io.Reader
 	process   *os.Process
 	outReader *bufio.Reader
+	debug     bool
 }
 
 func (jsw *JSWorker) Start() (err error) {
@@ -86,7 +87,7 @@ func (jsw *JSWorker) Start() (err error) {
 
 	jsw.process = cmd.Process
 	jsw.outReader = bufio.NewReader(jsw.stdout)
-	if DEBUG {
+	if jsw.debug {
 		cmd := exec.Command(denoPath, "-v")
 		cmd.Env = append(os.Environ(), "DENO_NO_UPDATE_CHECK=1")
 		denoVersion, _ := cmd.Output()
@@ -103,7 +104,7 @@ func (jsw *JSWorker) Stop() (err error) {
 	jsw.stdin = nil
 	jsw.stdout = nil
 	jsw.outReader = nil
-	if DEBUG {
+	if jsw.debug {
 		fmt.Println(term.Dim(fmt.Sprintf("[debug] js worker stopped (runtime: %s)", jsw.script)))
 	}
 	return
@@ -119,7 +120,7 @@ func (jsw *JSWorker) Call(args ...any) (format string, output string, err error)
 		return
 	}
 
-	if DEBUG {
+	if jsw.debug {
 		start := time.Now()
 		defer func() {
 			fmt.Println(term.Dim(fmt.Sprintf("[debug] call %s#%s(%s) in %s", jsw.script, args[0], args[1], time.Since(start))))

@@ -46,7 +46,7 @@ func NewHandler(config Config) *Handler {
 		config.AppDir, _ = os.Getwd()
 	}
 	s := &Handler{config: &config}
-	s.etagSuffix = "-" + VERSION
+	s.etagSuffix = ""
 	if s.config.Dev {
 		s.etagSuffix += "-dev"
 	}
