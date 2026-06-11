@@ -87,7 +87,7 @@ jobs:
         working-directory: cli/npm/cli_package
 
       - name: Publish Package to NPM
-        run: npm publish --provenance --access public
+        run: npm publish --provenance --access public --tag latest
         working-directory: cli/npm/cli_package
 
   publish_to_npm:
@@ -114,7 +114,7 @@ jobs:
         working-directory: cli/npm
 
       - name: Publish Package
-        run: npm publish --provenance --access public
+        run: npm publish --provenance --access public --tag latest
         working-directory: cli/npm
 
   release:
