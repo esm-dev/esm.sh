@@ -86,3 +86,4 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           body_path: release-note.txt
+          make_latest: false
