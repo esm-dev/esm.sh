@@ -2,8 +2,6 @@
 
 set -e
 
-VERSION="v0.1.0"
-
 if [ "$OS" = "Windows_NT" ]; then
   echo "Windows is not supported"
   exit 1
@@ -24,7 +22,7 @@ case $(uname -sm) in
   ;;
 esac
 
-dl_url="https://github.com/esm-dev/esm.sh/releases/download/${VERSION}/cli-${target}.gz"
+dl_url="https://github.com/esm-dev/esm.sh/releases/latest/download/cli-${target}.gz"
 bin_dir="$HOME/.esm.sh/bin"
 exe_path="$bin_dir/esm.sh"
 
