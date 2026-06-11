@@ -141,5 +141,6 @@ jobs:
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
+          name: CLI ${{ github.ref_name }}
           body_path: release-note.txt
           files: .artifact/cli-*.gz

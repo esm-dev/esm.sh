@@ -85,5 +85,6 @@ jobs:
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
+          name: Server ${{ github.ref_name }}
           body_path: release-note.txt
           make_latest: false
