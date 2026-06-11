@@ -2,39 +2,12 @@
 
 ## v0.1.0
 
-Introduce `esm.sh` CLI, a _no-build_ tool for modern web development. Features include:
+Introduce esm.sh CLI, a import maps manager for modern web development written in golang. Features include:
 
-- Initialize a new no-build web app with esm.sh CDN
-- Serve web apps with esm.sh CDN, HMR, transforming TS/Vue/Svelte on the fly
-- Maintain the `importmap` script in index.html
+- Add imports from esm.sh CDN
+- Tidy import map
 
-## Installation
-
-Install `esm.sh` CLI via curl:
-
-```bash
-curl -fsSL https://esm.sh/install | bash
-```
-
-To install `esm.sh` CLI from source code, you need to have [Go](https://go.dev/dl) installed.
-
-```bash
-go install github.com/esm-dev/esm.sh
-```
-
-Or install `esm.sh` CLI via `npm`:
-
-```bash
-npm install -g esm.sh
-```
-
-Or use `npx esm.sh` without installation:
-
-```bash
-npx esm.sh [command]
-```
-
-### Usage
+Usage:
 
 ```
 $ esm.sh --help
