@@ -83,7 +83,7 @@ jobs:
           if-no-files-found: error
 
       - name: Create package.json
-        run: echo "const p=JSON.parse(require('fs').readFileSync('../npm/package.json','utf8'));console.log(JSON.stringify({...p,name:'@esm.sh/cli-${{ matrix.platform }}-${{ matrix.arch }}',version:'${{ github.ref_name }}'.slice(1),os:['${{ matrix.platform }}'],cpu:['${{ matrix.arch }}'],bin:void 0,scripts:void 0,optionalDependencies:void 0}))" | node > package.json
+        run: echo "const p=JSON.parse(require('fs').readFileSync('../package.json','utf8'));console.log(JSON.stringify({...p,name:'@esm.sh/cli-${{ matrix.platform }}-${{ matrix.arch }}',version:'${{ github.ref_name }}'.slice(1),os:['${{ matrix.platform }}'],cpu:['${{ matrix.arch }}'],bin:void 0,scripts:void 0,optionalDependencies:void 0}))" | node > package.json
         working-directory: cli/npm/cli_package
 
       - name: Publish Package to NPM
