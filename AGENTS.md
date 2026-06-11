@@ -16,7 +16,9 @@ A _no-build_ JavaScript CDN for modern web development.
 make run/server
 ```
 
-Then you can import `React` from "http://localhost:8080/react"
+Then you can import modules from `http://localhost:8080/<package>[@<version>][/<path>][?<query>]` in browser/Deno.
+
+More usage examples can be found in the [README](./README.md).
 
 ## Running Server Integration Tests
 
@@ -40,3 +42,10 @@ vi test/test-case-name/test.ts
 # run the test
 make test/server dir=test-case-name
 ```
+
+## CDN
+
+The project has been deployed to https://esm.sh.
+
+- https://esm.sh/status.json: CDN status.
+- https://esm.sh/<package>[@<version>][/<path>][?<query>]: CDN URL for the package.
