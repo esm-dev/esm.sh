@@ -2,6 +2,7 @@
 
 ## v137_6
 
+* Upgrade `esbuild` to `0.28.1`.
 * Fix shard S3 meta cache paths. (#1372)
 
 ## v137_5
