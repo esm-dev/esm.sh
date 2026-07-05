@@ -1,5 +1,9 @@
 # Server Changelog
 
+## v137_6
+
+* Fix shard S3 meta cache paths. (#1372)
+
 ## v137_5
 
 * Fix standalone mode. (#1367)

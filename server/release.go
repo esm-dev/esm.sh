@@ -14,8 +14,8 @@ const DEBUG = false
 //go:embed embed
 var embedFS embed.FS
 
-// may be changed by `-ldflags`
-var VERSION = "v137"
+// real version is injected by `-ldflags`
+var VERSION = "PROD"
 
 // pprof is disabled in production build
 func pprofRouter() rex.Handle {
