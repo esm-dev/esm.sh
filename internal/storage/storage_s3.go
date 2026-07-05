@@ -108,7 +108,7 @@ func (s3 *s3Storage) Stat(name string) (stat Stat, err error) {
 		return nil, errors.New("name is required")
 	}
 	if s3.shouldUseFSCache(name) {
-		stat, err = s3.fsCache.Stat(name)
+		stat, err = s3.fsCache.Stat(s3.fsCacheKey(name))
 		if err == nil {
 			return
 		}
@@ -161,7 +161,7 @@ func (s3 *s3Storage) Get(name string) (content io.ReadCloser, stat Stat, err err
 		return nil, nil, errors.New("name is required")
 	}
 	if s3.shouldUseFSCache(name) {
-		content, stat, err = s3.fsCache.Get(name)
+		content, stat, err = s3.fsCache.Get(s3.fsCacheKey(name))
 		if err == nil {
 			return
 		}
@@ -207,17 +207,18 @@ func (s3 *s3Storage) Get(name string) (content io.ReadCloser, stat Stat, err err
 		lastModified:  lastModified,
 	}
 	if s3.shouldUseFSCache(name) {
+		cacheKey := s3.fsCacheKey(name)
 		pr, pw := io.Pipe()
 		go func() {
 			unlock := s3.fsCacheLock.Lock(name)
 			defer unlock()
-			_, err := s3.fsCache.Stat(name)
+			_, err := s3.fsCache.Stat(cacheKey)
 			if err == nil {
 				_, err = io.Copy(pw, resp.Body)
 				pw.CloseWithError(err)
 				return
 			}
-			err = s3.fsCache.Put(name, io.TeeReader(resp.Body, pw))
+			err = s3.fsCache.Put(cacheKey, io.TeeReader(resp.Body, pw))
 			pw.CloseWithError(err)
 			resp.Body.Close()
 		}()
@@ -268,11 +269,12 @@ func (s3 *s3Storage) Put(name string, content io.Reader) (err error) {
 		return
 	}
 	if s3.shouldUseFSCache(name) {
+		cacheKey := s3.fsCacheKey(name)
 		pr, pw := io.Pipe()
 		go func(content io.Reader) {
 			unlock := s3.fsCacheLock.Lock(name)
 			defer unlock()
-			err := s3.fsCache.Put(name, io.TeeReader(content, pw))
+			err := s3.fsCache.Put(cacheKey, io.TeeReader(content, pw))
 			pw.CloseWithError(err)
 		}(content)
 		content = pr
@@ -296,7 +298,7 @@ func (s3 *s3Storage) Delete(name string) (err error) {
 		return errors.New("key is required")
 	}
 	if s3.shouldUseFSCache(name) {
-		go s3.fsCache.Delete(name)
+		go s3.fsCache.Delete(s3.fsCacheKey(name))
 	}
 	req, _ := http.NewRequest("DELETE", s3.apiEndpoint+"/"+name, nil)
 	s3.sign(req)
@@ -425,6 +427,17 @@ func (s3 *s3Storage) shouldUseFSCache(name string) bool {
 		return false
 	}
 	return true
+}
+
+func (s3 *s3Storage) fsCacheKey(name string) string {
+	const metaPrefix = "meta/"
+	if strings.HasPrefix(name, metaPrefix) {
+		hash := strings.TrimPrefix(name, metaPrefix)
+		if len(hash) == 64 && strings.IndexByte(hash, '/') == -1 {
+			return metaPrefix + hash[:2] + "/" + hash[2:]
+		}
+	}
+	return name
 }
 
 func parseS3Error(resp *http.Response) error {

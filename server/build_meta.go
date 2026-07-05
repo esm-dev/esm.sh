@@ -104,7 +104,6 @@ func decodeBuildMeta(data []byte) (*BuildMeta, error) {
 type BuildMetaDB struct {
 	cache   *lru.Cache[string, []byte]
 	storage storage.Storage
-	oldDB   Database
 }
 
 func NewBuildMetaDB(backStorage storage.Storage) *BuildMetaDB {
@@ -123,19 +122,6 @@ func (db *BuildMetaDB) Get(key string) (value []byte, err error) {
 	}
 	r, _, err := db.storage.Get(normalizeMetaStoreKey(key))
 	if err != nil {
-		if err == storage.ErrNotFound && db.oldDB != nil {
-			value, err := db.oldDB.Get(key)
-			if err == nil {
-				go doOnce("copy-meta:"+key, func() error {
-					err := db.Put(key, value)
-					if err == nil {
-						db.cache.Add(key, value)
-					}
-					return err
-				})
-				return value, nil
-			}
-		}
 		return
 	}
 	defer r.Close()

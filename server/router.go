@@ -67,18 +67,6 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 		metaDB     = NewBuildMetaDB(esmStorage)
 	)
 
-	// todo: remove old db code after migration is complete
-	{
-		oldDbFile := path.Join(config.WorkDir, "esm.db")
-		if existsFile(oldDbFile) {
-			var err error
-			metaDB.oldDB, err = OpenBoltDB(oldDbFile)
-			if err != nil {
-				logger.Errorf("failed to open old db: %v", err)
-			}
-		}
-	}
-
 	// purge npm cache when disk is low or full
 	go func() {
 		// run an initial check before waiting for the first ticker event
@@ -1304,7 +1292,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 		}
 
 		if buildMeta.CSSEntry != "" {
-			url := getCSSEntryRedirectURL(origin, esmPath, buildMeta.CSSEntry)			
+			url := getCSSEntryRedirectURL(origin, esmPath, buildMeta.CSSEntry)
 			return redirect(ctx, url, isExactVersion)
 		}
 
