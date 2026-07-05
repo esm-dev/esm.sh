@@ -9,7 +9,6 @@ require (
 	github.com/ije/esbuild-internal v0.28.0
 	github.com/ije/gox v0.10.4
 	github.com/ije/rex v1.15.6
-	go.etcd.io/bbolt v1.4.3
 	golang.org/x/net v0.53.0
 	golang.org/x/term v0.42.0
 )
