@@ -7,6 +7,19 @@ import (
 	"testing"
 )
 
+func TestS3StorageFSCacheKey(t *testing.T) {
+	s3 := &s3Storage{}
+	hash := "3fdadb34f247fde94adfb18268ac0caeed539ae7ad1380035d1366943b85ca7a"
+	got := s3.fsCacheKey("meta/" + hash)
+	want := "meta/3f/dadb34f247fde94adfb18268ac0caeed539ae7ad1380035d1366943b85ca7a"
+	if got != want {
+		t.Fatalf("invalid cache key %q, want %q", got, want)
+	}
+	if got = s3.fsCacheKey("v135/react@19.2.0/esnext/react.mjs"); got != "v135/react@19.2.0/esnext/react.mjs" {
+		t.Fatalf("invalid cache key %q", got)
+	}
+}
+
 func TestS3Storage(t *testing.T) {
 	endpint := os.Getenv("GO_TEST_S3_ENDPOINT")
 	if endpint == "" {
