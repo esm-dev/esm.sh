@@ -14,7 +14,7 @@ const DEBUG = false
 //go:embed embed
 var embedFS embed.FS
 
-// real version is injected by `-ldflags`
+// defined by `-ldflags`
 var VERSION = "PROD"
 
 // pprof is disabled in production build
