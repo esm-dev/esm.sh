@@ -15,8 +15,18 @@ import (
 // debug mode
 const DEBUG = true
 
-// always "DEV" in DEBUG mode
+// always "DEV" in debug mode
 const VERSION = "DEV"
+
+type MockEmbedFS struct{}
+
+func (fs MockEmbedFS) ReadFile(name string) ([]byte, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return nil, err
+	}
+	return os.ReadFile(path.Join(cwd, "server", name))
+}
 
 // mock embed.FS reads files from the current working directory in DEBUG mode
 var embedFS MockEmbedFS
@@ -40,14 +50,4 @@ func pprofRouter() rex.Handle {
 			return rex.Next()
 		}
 	}
-}
-
-type MockEmbedFS struct{}
-
-func (fs MockEmbedFS) ReadFile(name string) ([]byte, error) {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return nil, err
-	}
-	return os.ReadFile(path.Join(cwd, "server", name))
 }
