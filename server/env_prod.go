@@ -4,8 +4,7 @@ package server
 
 import (
 	"embed"
-
-	"github.com/ije/rex"
+	"net/http"
 )
 
 // production mode
@@ -18,8 +17,6 @@ var embedFS embed.FS
 var VERSION = "PROD"
 
 // pprof is disabled in production build
-func pprofRouter() rex.Handle {
-	return func(ctx *rex.Context) any {
-		return rex.Next()
-	}
+func pprofRouter(next http.Handler) http.Handler {
+	return next
 }

@@ -8,8 +8,6 @@ import (
 	"os"
 	"path"
 	"strings"
-
-	"github.com/ije/rex"
 )
 
 // debug mode
@@ -32,22 +30,23 @@ func (fs MockEmbedFS) ReadFile(name string) ([]byte, error) {
 var embedFS MockEmbedFS
 
 // pprof middleware
-func pprofRouter() rex.Handle {
-	return func(ctx *rex.Context) any {
-		switch ctx.R.URL.Path {
+func pprofRouter(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
 		case "/debug/pprof/cmdline":
-			return http.HandlerFunc(pprof.Cmdline)
+			pprof.Cmdline(w, r)
 		case "/debug/pprof/profile":
-			return http.HandlerFunc(pprof.Profile)
+			pprof.Profile(w, r)
 		case "/debug/pprof/symbol":
-			return http.HandlerFunc(pprof.Symbol)
+			pprof.Symbol(w, r)
 		case "/debug/pprof/trace":
-			return http.HandlerFunc(pprof.Trace)
+			pprof.Trace(w, r)
 		default:
-			if strings.HasPrefix(ctx.R.URL.Path, "/debug/pprof/") {
-				return http.HandlerFunc(pprof.Index)
+			if strings.HasPrefix(r.URL.Path, "/debug/pprof/") {
+				pprof.Index(w, r)
+				return
 			}
-			return rex.Next()
+			next.ServeHTTP(w, r)
 		}
-	}
+	})
 }

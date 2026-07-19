@@ -1,9 +1,9 @@
 package server
 
 import (
-	"context"
 	"flag"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/signal"
@@ -16,7 +16,8 @@ import (
 	"github.com/esm-dev/esm.sh/internal/storage"
 	"github.com/ije/gox/log"
 	"github.com/ije/gox/set"
-	"github.com/ije/rex"
+	"github.com/rs/cors"
+	"golang.org/x/crypto/acme/autocert"
 )
 
 // Start starts the esm.sh server
@@ -70,41 +71,55 @@ func Start() {
 	// load node runtime in background
 	go getNodeRuntimeJS("fs")
 
-	// add middlewares
-	rex.Use(
-		pprofRouter(),
-		cors(config.CorsAllowOrigins),
-		rex.Header("Server", "esm.sh"),
-		rex.Logger(logger),
-		rex.Optional(rex.AccessLogger(accessLogger), config.AccessLog),
-		rex.Optional(rex.Compress(), config.Compress),
-		rex.Optional(customLandingPage(&config.CustomLandingPage), config.CustomLandingPage.Origin != ""),
-		esmLegacyRouter(esmStorage),
-		esmRouter(esmStorage, logger),
-	)
+	// build the handler chain, the last added handler is called first
+	var handler http.Handler = esmRouter(esmStorage, logger)
+	handler = esmLegacyRouter(esmStorage, handler)
+	if config.CustomLandingPage.Origin != "" {
+		handler = customLandingPage(&config.CustomLandingPage, handler)
+	}
+	if config.Compress {
+		handler = withCompress(handler)
+	}
+	if config.AccessLog {
+		handler = withAccessLog(accessLogger, handler)
+	}
+	handler = corsMiddleware(config.CorsAllowOrigins, handler)
+	handler = pprofRouter(handler)
+	handler = withRecovery(logger, handler)
 
-	// start server
-	C := rex.Serve(context.Background(), rex.ServerConfig{
-		Port: uint16(config.Port),
-		TLS: rex.TLSConfig{
-			Port: uint16(config.TlsPort),
-			AutoTLS: rex.AutoTLSConfig{
-				AcceptTOS: config.TlsPort > 0 && !DEBUG,
-				CacheDir:  path.Join(config.WorkDir, "autotls"),
-			},
-		},
-	}, func(port, tlsPort uint16) {
-		logger.Infof("Server is ready on http://localhost:%d", port)
-		if tlsPort > 0 {
-			logger.Infof("Server is ready on https://localhost:%d", tlsPort)
+	// start the http server
+	errCh := make(chan error, 2)
+	httpServer := &http.Server{
+		Addr:    fmt.Sprintf(":%d", config.Port),
+		Handler: handler,
+	}
+	go func() {
+		errCh <- httpServer.ListenAndServe()
+	}()
+	logger.Infof("Server is ready on http://localhost:%d", config.Port)
+
+	// start the https server with autocert (Let's Encrypt) if the `tlsPort` is set
+	if config.TlsPort > 0 && !DEBUG {
+		certManager := &autocert.Manager{
+			Prompt: autocert.AcceptTOS,
+			Cache:  autocert.DirCache(path.Join(config.WorkDir, "autotls")),
 		}
-	})
+		httpsServer := &http.Server{
+			Addr:      fmt.Sprintf(":%d", config.TlsPort),
+			Handler:   handler,
+			TLSConfig: certManager.TLSConfig(),
+		}
+		go func() {
+			errCh <- httpsServer.ListenAndServeTLS("", "")
+		}()
+		logger.Infof("Server is ready on https://localhost:%d", config.TlsPort)
+	}
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGTERM, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGHUP, syscall.SIGABRT)
 	select {
 	case <-c:
-	case err = <-C:
+	case err = <-errCh:
 		logger.Error(err)
 	}
 
@@ -113,90 +128,77 @@ func Start() {
 	accessLogger.FlushBuffer()
 }
 
-func cors(allowOrigins []string) rex.Handle {
-	allowList := set.NewReadOnly(allowOrigins...)
-	return func(ctx *rex.Context) any {
-		origin := ctx.R.Header.Get("Origin")
-		isOptionsMethod := ctx.R.Method == "OPTIONS"
-		h := ctx.W.Header()
-		if allowList.Len() > 0 {
-			if origin != "" {
-				if !allowList.Has(origin) {
-					return rex.Status(403, "forbidden")
-				}
-				setCorsHeaders(h, isOptionsMethod, origin)
-			} else if isOptionsMethod {
-				// not a preflight request
-				return rex.Status(405, "method not allowed")
-			}
-			appendVaryHeader(h, "Origin")
-		} else {
-			setCorsHeaders(h, isOptionsMethod, "*")
-		}
-		if isOptionsMethod {
-			return rex.NoContent()
-		}
-		return ctx.Next()
+// corsMiddleware returns a middleware that handles CORS requests.
+func corsMiddleware(allowOrigins []string, next http.Handler) http.Handler {
+	opts := cors.Options{
+		AllowedOrigins: []string{"*"},
+		AllowedMethods: []string{http.MethodHead, http.MethodGet, http.MethodPost},
+		AllowedHeaders: []string{"*"},
+		MaxAge:         86400,
 	}
+	if len(allowOrigins) > 0 {
+		opts.AllowedOrigins = allowOrigins
+	}
+	return cors.New(opts).Handler(next)
 }
 
-func setCorsHeaders(h http.Header, isOptionsMethod bool, origin string) {
-	h.Set("Access-Control-Allow-Origin", origin)
-	if isOptionsMethod {
-		h.Set("Access-Control-Allow-Headers", "*")
-		h.Set("Access-Control-Max-Age", "86400")
-	}
-}
-
-func customLandingPage(options *LandingPageOptions) rex.Handle {
+// customLandingPage returns a middleware that serves the custom landing page
+// from the configured origin.
+func customLandingPage(options *LandingPageOptions, next http.Handler) http.Handler {
 	assets := set.New[string]()
 	for _, p := range options.Assets {
 		assets.Add("/" + strings.TrimPrefix(p, "/"))
 	}
-	return func(ctx *rex.Context) any {
-		if ctx.R.URL.Path == "/" || assets.Has(ctx.R.URL.Path) {
-			query := ctx.R.URL.RawQuery
-			if query != "" {
-				query = "?" + query
-			}
-			url, err := ctx.R.URL.Parse(options.Origin + ctx.R.URL.Path + query)
-			if err != nil {
-				return rex.Err(http.StatusBadRequest, "Invalid url")
-			}
-			fetchClient := fetch.NewClient(ctx.UserAgent(), 15, false)
-			res, err := fetchClient.Fetch(url, nil)
-			if err != nil {
-				return rex.Err(http.StatusBadGateway, "Failed to fetch custom landing page")
-			}
-			etag := res.Header.Get("Etag")
-			if etag != "" {
-				if ctx.R.Header.Get("If-None-Match") == etag {
-					return rex.Status(http.StatusNotModified, nil)
-				}
-				ctx.SetHeader("Etag", etag)
-			} else {
-				lastModified := res.Header.Get("Last-Modified")
-				if lastModified != "" {
-					v := ctx.R.Header.Get("If-Modified-Since")
-					if v != "" {
-						timeIfModifiedSince, e1 := time.Parse(http.TimeFormat, v)
-						timeLastModified, e2 := time.Parse(http.TimeFormat, lastModified)
-						if e1 == nil && e2 == nil && !timeIfModifiedSince.After(timeLastModified) {
-							return rex.Status(http.StatusNotModified, nil)
-						}
-					}
-					ctx.SetHeader("Last-Modified", lastModified)
-				}
-			}
-			cacheControl := res.Header.Get("Cache-Control")
-			if cacheControl != "" {
-				ctx.SetHeader("Cache-Control", cacheControl)
-			} else {
-				ctx.SetHeader("Cache-Control", ccMustRevalidate)
-			}
-			ctx.SetHeader("Content-Type", res.Header.Get("Content-Type"))
-			return res.Body // auto closed
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" && !assets.Has(r.URL.Path) {
+			next.ServeHTTP(w, r)
+			return
 		}
-		return ctx.Next()
-	}
+		query := r.URL.RawQuery
+		if query != "" {
+			query = "?" + query
+		}
+		url, err := r.URL.Parse(options.Origin + r.URL.Path + query)
+		if err != nil {
+			writeJSONError(w, http.StatusBadRequest, "Invalid url")
+			return
+		}
+		fetchClient := fetch.NewClient(r.UserAgent(), 15, false)
+		res, err := fetchClient.Fetch(url, nil)
+		if err != nil {
+			writeJSONError(w, http.StatusBadGateway, "Failed to fetch custom landing page")
+			return
+		}
+		defer res.Body.Close()
+		h := w.Header()
+		etag := res.Header.Get("Etag")
+		if etag != "" {
+			if r.Header.Get("If-None-Match") == etag {
+				w.WriteHeader(http.StatusNotModified)
+				return
+			}
+			h.Set("Etag", etag)
+		} else {
+			lastModified := res.Header.Get("Last-Modified")
+			if lastModified != "" {
+				v := r.Header.Get("If-Modified-Since")
+				if v != "" {
+					timeIfModifiedSince, e1 := time.Parse(http.TimeFormat, v)
+					timeLastModified, e2 := time.Parse(http.TimeFormat, lastModified)
+					if e1 == nil && e2 == nil && !timeIfModifiedSince.After(timeLastModified) {
+						w.WriteHeader(http.StatusNotModified)
+						return
+					}
+				}
+				h.Set("Last-Modified", lastModified)
+			}
+		}
+		cacheControl := res.Header.Get("Cache-Control")
+		if cacheControl == "" {
+			cacheControl = ccMustRevalidate
+		}
+		h.Set("Cache-Control", cacheControl)
+		h.Set("Content-Type", res.Header.Get("Content-Type"))
+		io.Copy(w, res.Body)
+	})
 }
