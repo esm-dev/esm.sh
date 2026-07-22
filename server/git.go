@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"os"
 	"os/exec"
 	"time"
 
@@ -88,5 +89,10 @@ func ghInstallContext(ctx context.Context, wd, name, tag string) (err error) {
 	}
 
 	err = extractPackageTarballContext(ctx, wd, name, io.LimitReader(res.Body, maxPackageTarballSize))
+	if err != nil {
+		// clear wd if failed to extract tarball, otherwise the partial
+		// extraction would be treated as a completed installation
+		os.RemoveAll(wd)
+	}
 	return
 }
