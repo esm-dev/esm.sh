@@ -1198,6 +1198,15 @@ REBUILD:
 				return
 			}
 			name := strings.Split(msg, "\"")[1]
+			// a relative path import can not be externalized, report it as a build error
+			if isRelPathSpecifier(name) || strings.HasPrefix(name, "/") {
+				if loc := res.Errors[0].Location; loc != nil {
+					err = fmt.Errorf("could not resolve \"%s\" (imported by %s)", name, loc.File)
+				} else {
+					err = fmt.Errorf("could not resolve \"%s\"", name)
+				}
+				return
+			}
 			if !implicitExternal.Has(name) {
 				ctx.logger.Warnf("build(%s): implicit external '%s'", ctx.Path(), name)
 				implicitExternal.Add(name)
