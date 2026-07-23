@@ -298,7 +298,12 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 			return
 		}
 		var jsonData []byte
-		jsonPath := path.Join(ctx.wd, "node_modules", ctx.esmPath.PkgName, entry.main)
+		pkgDir := path.Join(ctx.wd, "node_modules", ctx.esmPath.PkgName)
+		jsonPath := path.Join(pkgDir, entry.main)
+		if !strings.HasPrefix(jsonPath, pkgDir+"/") {
+			err = fmt.Errorf("could not resolve module %s", entry.main)
+			return
+		}
 		jsonData, err = os.ReadFile(jsonPath)
 		if err != nil {
 			return
