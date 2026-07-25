@@ -68,6 +68,24 @@ func parseEsmPath(npmrc *NpmRC, pathname string) (esm EsmPath, extraQuery string
 			err = errors.New("invalid path")
 			return
 		}
+		parts := strings.Split(pkgName, "/")
+		for i := 0; i < len(parts); i++ {
+			name := parts[i]
+			if name == "" || name == "." || name == ".." {
+				err = errors.New("invalid path")
+				return
+			}
+			if strings.HasPrefix(name, "@") {
+				i++
+				if i == len(parts) || parts[i] == "" || parts[i] == "." || parts[i] == ".." || !npm.ValidatePackageName(name+"/"+parts[i]) {
+					err = errors.New("invalid path")
+					return
+				}
+			} else if !npm.ValidatePackageName(name) {
+				err = errors.New("invalid path")
+				return
+			}
+		}
 		version, subPath := utils.SplitByFirstByte(rest, '/')
 		if version == "" || !npm.Versioning.Match(version) {
 			err = errors.New("invalid path")

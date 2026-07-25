@@ -3,6 +3,8 @@ package storage
 import (
 	"bytes"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"testing"
 )
@@ -17,6 +19,72 @@ func TestS3StorageFSCacheKey(t *testing.T) {
 	}
 	if got = s3.fsCacheKey("v135/react@19.2.0/esnext/react.mjs"); got != "v135/react@19.2.0/esnext/react.mjs" {
 		t.Fatalf("invalid cache key %q", got)
+	}
+}
+
+func TestS3StoragePutIfAbsent(t *testing.T) {
+	stored := map[string][]byte{}
+	conflict := true
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("If-None-Match") != "*" {
+			t.Errorf("missing If-None-Match header")
+		}
+		if r.URL.Path == "/retry.mjs" && conflict {
+			conflict = false
+			w.WriteHeader(http.StatusConflict)
+			return
+		}
+		data, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Error(err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		if _, ok := stored[r.URL.Path]; ok {
+			w.WriteHeader(http.StatusPreconditionFailed)
+			return
+		}
+		stored[r.URL.Path] = data
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	s3, err := NewS3Storage(&StorageOptions{
+		Type:            "s3",
+		Endpoint:        server.URL,
+		Region:          "auto",
+		AccessKeyID:     "test",
+		SecretAccessKey: "test",
+		CacheDir:        t.TempDir(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	created, err := s3.PutIfAbsent("module.mjs", bytes.NewBufferString("first"))
+	if err != nil || !created {
+		t.Fatalf("first PutIfAbsent: created %v, err %v", created, err)
+	}
+	backend := s3.(*s3Storage)
+	if err = backend.fsCache.Put("module.mjs", bytes.NewBufferString("stale")); err != nil {
+		t.Fatal(err)
+	}
+	created, err = s3.PutIfAbsent("module.mjs", bytes.NewBufferString("second"))
+	if err != nil || created {
+		t.Fatalf("second PutIfAbsent: created %v, err %v", created, err)
+	}
+	if string(stored["/module.mjs"]) != "first" {
+		t.Fatalf("stored content was overwritten: %q", stored["/module.mjs"])
+	}
+	if _, err = backend.fsCache.Stat("module.mjs"); err != ErrNotFound {
+		t.Fatalf("stale filesystem cache was not invalidated: %v", err)
+	}
+
+	created, err = s3.PutIfAbsent("retry.mjs", bytes.NewBufferString("retried"))
+	if err != nil || !created {
+		t.Fatalf("retried PutIfAbsent: created %v, err %v", created, err)
+	}
+	if string(stored["/retry.mjs"]) != "retried" {
+		t.Fatalf("unexpected retry content: %q", stored["/retry.mjs"])
 	}
 }
 
@@ -59,13 +127,21 @@ func TestS3Storage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	created, err := s3.PutIfAbsent(dirname+"/locked.txt", bytes.NewBufferString("first"))
+	if err != nil || !created {
+		t.Fatalf("first PutIfAbsent: created %v, err %v", created, err)
+	}
+	created, err = s3.PutIfAbsent(dirname+"/locked.txt", bytes.NewBufferString("second"))
+	if err != nil || created {
+		t.Fatalf("second PutIfAbsent: created %v, err %v", created, err)
+	}
 
 	keys, err := s3.List(dirname + "/")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(keys) != 3 {
-		t.Fatalf("invalid keys length(%d), expected 3", len(keys))
+	if len(keys) != 4 {
+		t.Fatalf("invalid keys length(%d), expected 4", len(keys))
 	}
 
 	stat, err := s3.Stat(dirname + "/hello.txt")
@@ -120,11 +196,25 @@ func TestS3Storage(t *testing.T) {
 		t.Fatalf("invalid content(%s), expected 'foobar~'", string(data))
 	}
 
+	r, _, err = s3.Get(dirname + "/locked.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err = io.ReadAll(r)
+	r.Close()
+	if err != nil || string(data) != "first" {
+		t.Fatalf("invalid locked content(%s), expected 'first'", string(data))
+	}
+
 	err = s3.Delete(dirname + "/hello.txt")
 	if err != nil {
 		t.Fatal(err)
 	}
 	err = s3.Delete(dirname + "/%23/hello+world!")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = s3.Delete(dirname + "/locked.txt")
 	if err != nil {
 		t.Fatal(err)
 	}

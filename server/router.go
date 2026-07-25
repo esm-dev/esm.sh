@@ -65,17 +65,18 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 		buildQueue = NewBuildQueue(int(config.BuildConcurrency))
 		npmrc      = DefaultNpmRC()
 		metaDB     = NewBuildMetaDB(esmStorage)
+		workDir    = config.WorkDir
 	)
 
 	// purge npm cache when disk is low or full
 	go func() {
 		// run an initial check before waiting for the first ticker event
-		purgeNPMCacheWhenDiskIsLowOrFull(npmrc, logger)
+		purgeNPMCacheWhenDiskIsLowOrFull(npmrc, logger, workDir)
 
 		ticker := time.NewTicker(1 * time.Hour)
 		defer ticker.Stop()
 		for range ticker.C {
-			go purgeNPMCacheWhenDiskIsLowOrFull(npmrc, logger)
+			go purgeNPMCacheWhenDiskIsLowOrFull(npmrc, logger, workDir)
 		}
 	}()
 
@@ -163,13 +164,13 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 				}
 				if len(output.Map) > 0 {
 					output.Code = fmt.Sprintf("%s//# sourceMappingURL=+%s", output.Code, path.Base(savePath)+".map")
-					err = esmStorage.Put(savePath+".map", strings.NewReader(output.Map))
+					err = putImmutableExact(esmStorage, savePath+".map", []byte(output.Map))
 					if err != nil {
 						logger.Errorf("storage.put(%s): %v", savePath+".map", err)
 						return rex.Err(500, "failed to store source map")
 					}
 				}
-				err = esmStorage.Put(savePath, strings.NewReader(output.Code))
+				err = putImmutableExact(esmStorage, savePath, []byte(output.Code))
 				if err != nil {
 					logger.Errorf("storage.put(%s): %v", savePath, err)
 					return rex.Err(500, "failed to store transformed code")
@@ -253,7 +254,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 				}
 				readme = bytes.ReplaceAll(readme, []byte("./server/embed/"), []byte("/embed/"))
 				readme = bytes.ReplaceAll(readme, []byte("./HOSTING.md"), []byte("https://github.com/esm-dev/esm.sh/blob/main/HOSTING.md"))
-				readme = bytes.ReplaceAll(readme, []byte("https://esm.sh"), []byte(getOrigin(ctx)))
+				readme = bytes.ReplaceAll(readme, []byte("https://esm.sh"), []byte(config.CdnOrigin))
 				indexHTML, err = embedFS.ReadFile("embed/index.html")
 				if err != nil {
 					err = errors.New("failed to read index.html: " + err.Error())
@@ -277,7 +278,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 
 		case "/status.json":
 			diskStatus := "ok"
-			switch checkDiskStatus() {
+			switch checkDiskStatus(config.WorkDir) {
 			case DiskStatusFull:
 				diskStatus = "full"
 			case DiskStatusLow:
@@ -527,7 +528,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 			return rex.Status(403, "forbidden")
 		}
 
-		origin := getOrigin(ctx)
+		origin := config.CdnOrigin
 
 		registryPrefix := ""
 		if esmPath.GhPrefix {
@@ -875,7 +876,8 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 					return rex.Status(403, "File Too Large")
 				}
 				etag := fmt.Sprintf(`W/"%x-%x"`, stat.ModTime().Unix(), stat.Size())
-				if ifNoneMatch := ctx.R.Header.Get("If-None-Match"); ifNoneMatch == etag {
+				jsonModule := strings.HasSuffix(esmPath.SubPath, ".json") && query.Has("module")
+				if ifNoneMatch := ctx.R.Header.Get("If-None-Match"); !jsonModule && ifNoneMatch == etag {
 					return rex.Status(http.StatusNotModified, nil)
 				}
 				content, err := os.Open(filename)
@@ -894,19 +896,31 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 						ctx.SetHeader("Content-Type", contentType)
 					}
 				}
-				ctx.SetHeader("Content-Length", fmt.Sprintf("%d", stat.Size()))
-				ctx.SetHeader("Etag", etag)
-				ctx.SetHeader("Last-Modified", stat.ModTime().UTC().Format(http.TimeFormat))
-				ctx.SetHeader("Cache-Control", ccImmutable)
-				if strings.HasSuffix(esmPath.SubPath, ".json") && query.Has("module") {
+				if jsonModule {
 					defer content.Close()
 					jsonData, err := io.ReadAll(content)
 					if err != nil {
 						return rex.Status(500, err.Error())
 					}
+					module, err := encodeJSONModule(jsonData)
+					if err != nil {
+						ctx.SetHeader("Cache-Control", ccMustRevalidate)
+						return rex.Status(500, err.Error())
+					}
 					ctx.SetHeader("Content-Type", ctJavaScript)
-					return concatBytes([]byte("export default "), jsonData)
+					ctx.SetHeader("Etag", etag)
+					ctx.SetHeader("Last-Modified", stat.ModTime().UTC().Format(http.TimeFormat))
+					ctx.SetHeader("Cache-Control", ccImmutable)
+					if ctx.R.Header.Get("If-None-Match") == etag {
+						return rex.Status(http.StatusNotModified, nil)
+					}
+					ctx.SetHeader("Content-Length", fmt.Sprintf("%d", len(module)))
+					return module
 				}
+				ctx.SetHeader("Etag", etag)
+				ctx.SetHeader("Last-Modified", stat.ModTime().UTC().Format(http.TimeFormat))
+				ctx.SetHeader("Cache-Control", ccImmutable)
+				ctx.SetHeader("Content-Length", fmt.Sprintf("%d", stat.Size()))
 				return content // auto closed
 			}
 
@@ -961,11 +975,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 							if len(exports) > 0 {
 								moduleUrl += "?exports=" + strings.Join(exports, ",")
 							}
-							return fmt.Sprintf(
-								`export default function workerFactory(injectOrOptions) { const options = typeof injectOrOptions === "string" ? { inject: injectOrOptions }: injectOrOptions ?? {}; const { inject, name = "%s" } = options; const blob = new Blob(['import * as $module from "%s";', inject].filter(Boolean), { type: "application/javascript" }); return new Worker(URL.createObjectURL(blob), { type: "module", name })}`,
-								moduleUrl,
-								moduleUrl,
-							)
+							return newWorkerFactory(moduleUrl)
 						}
 						if len(exports) > 0 {
 							defer f.Close()
@@ -998,7 +1008,11 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 								return rex.Status(500, err.Error())
 							}
 							// note: the source map is dropped
-							go esmStorage.Put(savePath, bytes.NewReader(ret))
+							ret, err = putImmutable(esmStorage, savePath, ret)
+							if err != nil {
+								logger.Errorf("storage.put(%s): %v", savePath, err)
+								return rex.Status(500, "Storage error, please try again")
+							}
 							return ret
 						}
 					}
@@ -1469,11 +1483,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 					if !buildMeta.CJS && len(exports) > 0 {
 						moduleUrl += "?exports=" + strings.Join(exports, ",")
 					}
-					return fmt.Sprintf(
-						`export default function workerFactory(injectOrOptions) { const options = typeof injectOrOptions === "string" ? { inject: injectOrOptions }: injectOrOptions ?? {}; const { inject, name = "%s" } = options; const blob = new Blob(['import * as $module from "%s";', inject].filter(Boolean), { type: "application/javascript" }); return new Worker(URL.createObjectURL(blob), { type: "module", name })}`,
-						moduleUrl,
-						moduleUrl,
-					)
+					return newWorkerFactory(moduleUrl)
 				}
 				if noDts := query.Has("no-dts") || query.Has("no-check"); !noDts && buildMeta.Dts != "" {
 					ctx.SetHeader("X-TypeScript-Types", origin+buildMeta.Dts)
@@ -1501,7 +1511,11 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 					if err != nil {
 						return rex.Status(500, err.Error())
 					}
-					go esmStorage.Put(savePath, bytes.NewReader(ret))
+					ret, err = putImmutable(esmStorage, savePath, ret)
+					if err != nil {
+						logger.Errorf("storage.put(%s): %v", savePath, err)
+						return rex.Status(500, "Storage error, please try again")
+					}
 					// note: the source map is dropped
 					return ret
 				}
@@ -1518,11 +1532,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 			if !buildMeta.CJS && len(exports) > 0 {
 				moduleUrl += "?exports=" + strings.Join(exports, ",")
 			}
-			fmt.Fprintf(buf,
-				`export default function workerFactory(injectOrOptions) { const options = typeof injectOrOptions === "string" ? { inject: injectOrOptions }: injectOrOptions ?? {}; const { inject, name = "%s" } = options; const blob = new Blob(['import * as $module from "%s";', inject].filter(Boolean), { type: "application/javascript" }); return new Worker(URL.createObjectURL(blob), { type: "module", name })}`,
-				moduleUrl,
-				moduleUrl,
-			)
+			buf.WriteString(newWorkerFactory(moduleUrl))
 		} else {
 			if len(buildMeta.Imports) > 0 && !query.Has("exports") {
 				for _, dep := range buildMeta.Imports {
@@ -1566,22 +1576,6 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 	}
 }
 
-func getOrigin(ctx *rex.Context) string {
-	origin := ctx.R.Header.Get("X-Real-Origin")
-	if origin != "" {
-		return origin
-	}
-	proto := "http:"
-	if cfVisitor := ctx.R.Header.Get("CF-Visitor"); cfVisitor != "" {
-		if strings.Contains(cfVisitor, "\"https\"") {
-			proto = "https:"
-		}
-	} else if ctx.R.TLS != nil {
-		proto = "https:"
-	}
-	return proto + "//" + ctx.R.Host
-}
-
 func redirect(ctx *rex.Context, url string, isMovedPermanently bool) any {
 	code := http.StatusFound
 	if isMovedPermanently {
@@ -1604,6 +1598,16 @@ func errorJS(ctx *rex.Context, message string) any {
 	ctx.SetHeader("Content-Type", ctJavaScript)
 	ctx.SetHeader("Cache-Control", ccImmutable)
 	return buf.Bytes()
+}
+
+func newWorkerFactory(moduleUrl string) string {
+	urlLiteral := bytes.TrimSpace(utils.MustEncodeJSON(moduleUrl))
+	importLiteral := bytes.TrimSpace(utils.MustEncodeJSON(fmt.Sprintf("import * as $module from %s;", urlLiteral)))
+	return fmt.Sprintf(
+		`export default function workerFactory(injectOrOptions) { const moduleUrl = %s; const options = typeof injectOrOptions === "string" ? { inject: injectOrOptions }: injectOrOptions ?? {}; const { inject, name = moduleUrl } = options; const blob = new Blob([%s, inject].filter(Boolean), { type: "application/javascript" }); return new Worker(URL.createObjectURL(blob), { type: "module", name })}`,
+		urlLiteral,
+		importLiteral,
+	)
 }
 
 func getCSSEntryRedirectURL(origin string, esmPath EsmPath, cssEntry string) string {

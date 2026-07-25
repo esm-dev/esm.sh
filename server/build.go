@@ -87,7 +87,42 @@ var loaders = map[string]esbuild.Loader{
 	".woff2":  esbuild.LoaderDataURL,
 }
 
+func encodeJSONModule(data []byte) ([]byte, error) {
+	if !json.Valid(data) {
+		return nil, errors.New("invalid JSON module")
+	}
+	encoded := utils.MustEncodeJSON(json.RawMessage(data))
+	return concatBytes([]byte("export default "), bytes.TrimSuffix(encoded, []byte{'\n'})), nil
+}
+
+func putImmutable(store storage.Storage, key string, data []byte) ([]byte, error) {
+	created, err := store.PutIfAbsent(key, bytes.NewReader(data))
+	if err != nil || created {
+		return data, err
+	}
+	r, _, err := store.Get(key)
+	if err != nil {
+		return nil, err
+	}
+	stored, err := io.ReadAll(r)
+	if closeErr := r.Close(); err == nil {
+		err = closeErr
+	}
+	return stored, err
+}
+
+func putImmutableExact(store storage.Storage, key string, data []byte) error {
+	stored, err := putImmutable(store, key, data)
+	if err == nil && !bytes.Equal(stored, data) {
+		return fmt.Errorf("immutable storage conflict: %s", key)
+	}
+	return err
+}
+
 func (ctx *BuildContext) Path() string {
+	if len(ctx.args.Conditions) > 1 {
+		sort.Strings(ctx.args.Conditions)
+	}
 	if ctx.path != "" {
 		return ctx.path
 	}
@@ -304,16 +339,29 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 			err = fmt.Errorf("could not resolve module %s", entry.main)
 			return
 		}
+		savePath := ctx.getSavePath()
+		// A stored module is immutable even if its metadata was lost.
+		_, statErr := ctx.storage.Stat(savePath)
+		if statErr == nil {
+			meta = &BuildMeta{ExportDefault: true}
+			return
+		} else if statErr != storage.ErrNotFound {
+			ctx.logger.Errorf("storage.stat(%s): %v", savePath, statErr)
+			err = errors.New("storage(stat): " + statErr.Error())
+			return
+		}
 		jsonData, err = os.ReadFile(jsonPath)
 		if err != nil {
 			return
 		}
-		buffer := &bytes.Buffer{}
-		buffer.WriteString("export default ")
-		buffer.Write(jsonData)
-		err = ctx.storage.Put(ctx.getSavePath(), buffer)
+		var module []byte
+		module, err = encodeJSONModule(jsonData)
 		if err != nil {
-			ctx.logger.Errorf("storage.put(%s): %v", ctx.getSavePath(), err)
+			return
+		}
+		_, err = ctx.storage.PutIfAbsent(savePath, bytes.NewReader(module))
+		if err != nil {
+			ctx.logger.Errorf("storage.put(%s): %v", savePath, err)
 			err = errors.New("storage(put): " + err.Error())
 			return
 		}
@@ -367,13 +415,16 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 		if meta.ExportDefault {
 			fmt.Fprintf(buf, `export { default } from "%s";`, importUrl)
 		}
-		err = ctx.storage.Put(ctx.getSavePath(), buf)
+		meta.Dts, err = ctx.resolveDTS(entry)
+		if err != nil {
+			return
+		}
+		err = putImmutableExact(ctx.storage, ctx.getSavePath(), buf.Bytes())
 		if err != nil {
 			ctx.logger.Errorf("storage.put(%s): %v", ctx.getSavePath(), err)
 			err = errors.New("storage(put): " + err.Error())
 			return
 		}
-		meta.Dts, err = ctx.resolveDTS(entry)
 		return
 	}
 
@@ -1249,6 +1300,7 @@ REBUILD:
 	}
 
 	imports := set.New[string]()
+	var jsOutputs []*bytes.Buffer
 
 	for _, file := range res.OutputFiles {
 		if strings.HasSuffix(file.Path, ".js") {
@@ -1483,39 +1535,20 @@ REBUILD:
 				finalJS.WriteString(path.Base(ctx.Path()))
 				finalJS.WriteString(".map")
 			}
-
-			var stat storage.Stat
-			stat, err = ctx.storage.Stat(ctx.getSavePath())
-			if err == nil && stat.Size() > 0 {
-				ctx.logger.Infof("build(%s): file already exists in the storage, skip it", ctx.Path())
-				continue
-			}
-			if err != storage.ErrNotFound {
-				ctx.logger.Errorf("storage.stat(%s): %v", ctx.getSavePath(), err)
-				err = errors.New("storage(stat): " + err.Error())
-				return
-			}
-			sha := sha512.New384()
-			err = ctx.storage.Put(ctx.getSavePath(), storage.TeeReader(finalJS, sha))
-			if err != nil {
-				ctx.logger.Errorf("storage.put(%s): %v", ctx.getSavePath(), err)
-				err = errors.New("storage(put): " + err.Error())
-				return
-			}
-			meta.Integrity = "sha384-" + base64.StdEncoding.EncodeToString(sha.Sum(nil))
+			jsOutputs = append(jsOutputs, finalJS)
 		}
 	}
 
+	type sidecar struct {
+		path string
+		data []byte
+	}
+	var sidecars []sidecar
 	for _, file := range res.OutputFiles {
 		if strings.HasSuffix(file.Path, ".css") {
 			savePath := ctx.getSavePath()
 			savePath = strings.TrimSuffix(savePath, path.Ext(savePath)) + ".css"
-			err = ctx.storage.Put(savePath, bytes.NewReader(file.Contents))
-			if err != nil {
-				ctx.logger.Errorf("storage.put(%s): %v", savePath, err)
-				err = errors.New("storage(put): " + err.Error())
-				return
-			}
+			sidecars = append(sidecars, sidecar{savePath, file.Contents})
 			meta.CSSInJS = true
 		} else if config.SourceMap && strings.HasSuffix(file.Path, ".js.map") {
 			var sourceMap map[string]any
@@ -1530,12 +1563,7 @@ REBUILD:
 				}
 				buf := &bytes.Buffer{}
 				if json.NewEncoder(buf).Encode(sourceMap) == nil {
-					err = ctx.storage.Put(ctx.getSavePath()+".map", buf)
-					if err != nil {
-						ctx.logger.Errorf("storage.put(%s): %v", ctx.getSavePath()+".map", err)
-						err = errors.New("storage(put): " + err.Error())
-						return
-					}
+					sidecars = append(sidecars, sidecar{ctx.getSavePath() + ".map", buf.Bytes()})
 				}
 			}
 		}
@@ -1551,6 +1579,88 @@ REBUILD:
 
 	// resolve types(dts)
 	meta.Dts, err = ctx.resolveDTS(entry)
+	if err != nil {
+		return
+	}
+
+	if len(jsOutputs) > 0 {
+		main := jsOutputs[0].Bytes()
+		for _, output := range jsOutputs[1:] {
+			if !bytes.Equal(main, output.Bytes()) {
+				err = errors.New("build produced multiple module outputs")
+				return
+			}
+		}
+
+		savePath := ctx.getSavePath()
+		var stored []byte
+		var exists bool
+		var f io.ReadCloser
+		f, _, err = ctx.storage.Get(savePath)
+		if err == nil {
+			exists = true
+			stored, err = io.ReadAll(f)
+			if closeErr := f.Close(); err == nil {
+				err = closeErr
+			}
+		} else if err == storage.ErrNotFound {
+			err = nil
+		}
+		if err != nil {
+			ctx.logger.Errorf("storage.get(%s): %v", savePath, err)
+			err = errors.New("storage(get): " + err.Error())
+			return
+		}
+
+		if !exists {
+			for _, sidecar := range sidecars {
+				f, _, err = ctx.storage.Get(sidecar.path)
+				if err == storage.ErrNotFound {
+					err = nil
+					continue
+				}
+				if err != nil {
+					ctx.logger.Errorf("storage.get(%s): %v", sidecar.path, err)
+					err = errors.New("storage(get): " + err.Error())
+					return
+				}
+				data, readErr := io.ReadAll(f)
+				if closeErr := f.Close(); readErr == nil {
+					readErr = closeErr
+				}
+				if readErr != nil {
+					err = errors.New("storage(get): " + readErr.Error())
+					return
+				}
+				if !bytes.Equal(data, sidecar.data) {
+					err = fmt.Errorf("immutable storage conflict: %s", sidecar.path)
+					return
+				}
+			}
+			stored, err = putImmutable(ctx.storage, savePath, main)
+			if err != nil {
+				ctx.logger.Errorf("storage.put(%s): %v", savePath, err)
+				err = errors.New("storage(put): " + err.Error())
+				return
+			}
+		}
+
+		if !bytes.Equal(stored, main) {
+			err = fmt.Errorf("immutable storage conflict: %s", savePath)
+			return
+		}
+		sha := sha512.Sum384(stored)
+		meta.Integrity = "sha384-" + base64.StdEncoding.EncodeToString(sha[:])
+	}
+
+	for _, sidecar := range sidecars {
+		err = putImmutableExact(ctx.storage, sidecar.path, sidecar.data)
+		if err != nil {
+			ctx.logger.Errorf("storage.put(%s): %v", sidecar.path, err)
+			err = errors.New("storage(put): " + err.Error())
+			return
+		}
+	}
 	return
 }
 

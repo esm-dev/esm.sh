@@ -5,6 +5,34 @@ import (
 	"testing"
 )
 
+func TestParsePrPackageName(t *testing.T) {
+	for _, pathname := range []string{
+		"/pr/tinybench@abcdef0",
+		"/pr/tinylibs/tinybench/tinybench@abcdef0",
+		"/pr/owner/repo/@scope/pkg@abcdef0",
+	} {
+		esm, _, exact, _, _, err := parseEsmPath(nil, pathname)
+		if err != nil {
+			t.Errorf("parseEsmPath(%q): %v", pathname, err)
+		} else if !esm.PrPrefix || !exact {
+			t.Errorf("parseEsmPath(%q) did not return an exact PR package", pathname)
+		}
+	}
+
+	for _, pathname := range []string{
+		"/pr/../pkg@abcdef0",
+		"/pr/owner//pkg@abcdef0",
+		"/pr/owner/repo/..@abcdef0",
+		"/pr/owner/repo/bad%name@abcdef0",
+		"/pr/owner/repo/bad name@abcdef0",
+		"/pr/@scope/..@abcdef0",
+	} {
+		if _, _, _, _, _, err := parseEsmPath(nil, pathname); err == nil {
+			t.Errorf("expected PR package path %q to be rejected", pathname)
+		}
+	}
+}
+
 func TestPrCommitFromHeader(t *testing.T) {
 	tests := []struct {
 		name     string

@@ -4,6 +4,57 @@ import (
 	"testing"
 )
 
+func TestCdnOrigin(t *testing.T) {
+	t.Setenv("CDN_ORIGIN", "")
+	for origin, want := range map[string]string{
+		"https://cdn.example.com/": "https://cdn.example.com",
+		"http://localhost:8080":    "http://localhost:8080",
+		"https://[::1]:8443":       "https://[::1]:8443",
+	} {
+		config := &Config{CdnOrigin: origin}
+		if err := normalizeConfig(config); err != nil {
+			t.Fatal(err)
+		}
+		if config.CdnOrigin != want {
+			t.Fatalf("unexpected CDN origin %q, want %q", config.CdnOrigin, want)
+		}
+	}
+
+	config := &Config{Origin: "https://legacy.example.com"}
+	if err := normalizeConfig(config); err != nil {
+		t.Fatal(err)
+	}
+	if config.CdnOrigin != config.Origin {
+		t.Fatalf("unexpected legacy CDN origin %q", config.CdnOrigin)
+	}
+
+	for _, origin := range []string{
+		"//cdn.example.com",
+		"https://:443",
+		"https://user@cdn.example.com",
+		`https://cdn.example";globalThis.PWNED=1;"`,
+		"https://cdn.example';globalThis.PWNED=1;'",
+		`https://cdn.example\evil`,
+		"https://bad_host.example",
+		"https://[cdn.example]",
+		"https://-cdn.example",
+		"https://cdn-.example",
+		"https://cdn.example:",
+		"https://cdn.example:0",
+		"https://cdn.example:65536",
+		"https://cdn.example.com/path",
+		"https://cdn.example.com?",
+		"https://cdn.example.com?query",
+		"https://cdn.example.com#fragment",
+		"javascript:alert(1)",
+		"https://cdn.example.com\r\nX-Pwned: 1",
+	} {
+		if err := normalizeConfig(&Config{CdnOrigin: origin}); err == nil {
+			t.Errorf("expected CDN origin %q to be rejected", origin)
+		}
+	}
+}
+
 func TestExtractPackageName(t *testing.T) {
 	type want struct {
 		packageId string

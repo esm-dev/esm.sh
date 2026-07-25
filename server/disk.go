@@ -21,8 +21,8 @@ const (
 // concurrent rename/remove races within this process.
 var npmStorePurgeLock sync.Mutex
 
-func purgeNPMCacheWhenDiskIsLowOrFull(npmrc *NpmRC, logger *log.Logger) {
-	if status := checkDiskStatus(); status == DiskStatusOk || status == DiskStatusError {
+func purgeNPMCacheWhenDiskIsLowOrFull(npmrc *NpmRC, logger *log.Logger, workDir string) {
+	if status := checkDiskStatus(workDir); status == DiskStatusOk || status == DiskStatusError {
 		return
 	}
 
@@ -50,9 +50,9 @@ func purgeNPMCacheWhenDiskIsLowOrFull(npmrc *NpmRC, logger *log.Logger) {
 	}
 }
 
-func checkDiskStatus() DiskStatus {
+func checkDiskStatus(workDir string) DiskStatus {
 	var stat syscall.Statfs_t
-	err := syscall.Statfs(config.WorkDir, &stat)
+	err := syscall.Statfs(workDir, &stat)
 	if err == nil {
 		avail := stat.Bavail * uint64(stat.Bsize)
 		if avail < 100*MB {

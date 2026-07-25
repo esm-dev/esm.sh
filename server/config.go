@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/url"
 	"os"
 	"path"
@@ -27,6 +28,8 @@ var (
 type Config struct {
 	Port                uint16                       `json:"port"`
 	TlsPort             uint16                       `json:"tlsPort"`
+	CdnOrigin           string                       `json:"cdnOrigin"`
+	Origin              string                       `json:"origin,omitempty"`
 	CustomLandingPage   LandingPageOptions           `json:"customLandingPage"`
 	WorkDir             string                       `json:"workDir"`
 	CorsAllowOrigins    []string                     `json:"corsAllowOrigins"`
@@ -101,20 +104,79 @@ func LoadConfig(filename string) (*Config, error) {
 			return nil, fmt.Errorf("fail to get absolute path of the work directory: %w", err)
 		}
 	}
-	normalizeConfig(&config)
+	err = normalizeConfig(&config)
+	if err != nil {
+		return nil, err
+	}
 	return &config, nil
 }
 
 func DefaultConfig() *Config {
 	config := &Config{}
-	normalizeConfig(config)
+	if err := normalizeConfig(config); err != nil {
+		panic(err)
+	}
 	return config
 }
 
-func normalizeConfig(config *Config) {
+func normalizeConfig(config *Config) error {
 	if config.Port == 0 {
 		config.Port = 80
 	}
+	if config.CdnOrigin == "" {
+		config.CdnOrigin = config.Origin
+	}
+	if config.CdnOrigin == "" {
+		config.CdnOrigin = os.Getenv("CDN_ORIGIN")
+	}
+	if config.CdnOrigin == "" {
+		config.CdnOrigin = fmt.Sprintf("http://localhost:%d", config.Port)
+	}
+	u, err := url.Parse(config.CdnOrigin)
+	if err != nil {
+		return fmt.Errorf("invalid CDN origin: %q", config.CdnOrigin)
+	}
+	invalidOrigin := (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.User != nil || (u.Path != "" && u.Path != "/") || u.RawPath != "" || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || u.Opaque != ""
+	hostname := u.Hostname()
+	if hostname == "" {
+		invalidOrigin = true
+	} else if net.ParseIP(hostname) == nil {
+		domain := strings.TrimSuffix(hostname, ".")
+		if domain == "" || len(hostname) > 253 {
+			invalidOrigin = true
+		}
+		for label := range strings.SplitSeq(domain, ".") {
+			if len(label) == 0 || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+				invalidOrigin = true
+				break
+			}
+			for _, c := range label {
+				if !('a' <= c && c <= 'z') && !('A' <= c && c <= 'Z') && !('0' <= c && c <= '9') && c != '-' {
+					invalidOrigin = true
+					break
+				}
+			}
+		}
+	}
+	port := u.Port()
+	if port != "" {
+		n, e := strconv.Atoi(port)
+		if e != nil || n < 1 || n > 65535 || u.Host != net.JoinHostPort(hostname, port) {
+			invalidOrigin = true
+		}
+	} else {
+		host := hostname
+		if strings.Contains(hostname, ":") {
+			host = "[" + hostname + "]"
+		}
+		if u.Host != host {
+			invalidOrigin = true
+		}
+	}
+	if invalidOrigin {
+		return fmt.Errorf("invalid CDN origin: %q", config.CdnOrigin)
+	}
+	config.CdnOrigin = u.Scheme + "://" + u.Host
 	if config.WorkDir == "" {
 		if v := os.Getenv("ESMDIR"); v != "" && existsDir(v) {
 			config.WorkDir = v
@@ -257,6 +319,7 @@ func normalizeConfig(config *Config) {
 	config.Compress = !(bytes.Equal(config.CompressRaw, []byte("false")) || os.Getenv("COMPRESS") == "false")
 	config.SourceMap = !(bytes.Equal(config.SourceMapRaw, []byte("false")) || (os.Getenv("SOURCEMAP") == "false" || os.Getenv("SOURCE_MAP") == "false"))
 	config.Minify = !(bytes.Equal(config.MinifyRaw, []byte("false")) || os.Getenv("MINIFY") == "false")
+	return nil
 }
 
 // extractPackageName Will take a packageName as input extract key parts and return them

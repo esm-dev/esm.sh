@@ -50,3 +50,25 @@ func TestEncodeBuildArgs(t *testing.T) {
 		t.Fatal("ignoreAnnotations should be true")
 	}
 }
+
+func TestBuildPathCanonicalizesConditions(t *testing.T) {
+	a := &BuildContext{
+		esmPath: EsmPath{PkgName: "pkg", PkgVersion: "1.0.0"},
+		args:    BuildArgs{Conditions: []string{"react-server", "browser"}},
+		target:  "es2022",
+	}
+	b := &BuildContext{
+		esmPath: EsmPath{PkgName: "pkg", PkgVersion: "1.0.0"},
+		args:    BuildArgs{Conditions: []string{"browser", "react-server"}},
+		target:  "es2022",
+	}
+	const want = "/pkg@1.0.0/X-Y2Jyb3dzZXIscmVhY3Qtc2VydmVy/es2022/pkg.mjs"
+	if a.Path() != want || b.Path() != want {
+		t.Fatal("condition permutations must use the same build path")
+	}
+	for _, ctx := range []*BuildContext{a, b} {
+		if ctx.args.Conditions[0] != "browser" || ctx.args.Conditions[1] != "react-server" {
+			t.Fatalf("conditions were not canonicalized: %v", ctx.args.Conditions)
+		}
+	}
+}

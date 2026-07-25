@@ -5,12 +5,11 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/esm-dev/esm.sh/internal/npm"
-	"github.com/esm-dev/esm.sh/internal/storage"
 	"github.com/ije/gox/set"
 	"github.com/ije/gox/utils"
 )
@@ -42,18 +41,14 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 	marker.Add(dtsPath)
 
 	savePath := normalizeSavePath(path.Join("types", dtsPath))
-	// check if the dts file has been transformed
-	_, err = ctx.storage.Stat(savePath)
-	if err == nil || err != storage.ErrNotFound {
-		return
-	}
-
 	dtsFilename := path.Join(ctx.wd, "node_modules", ctx.esmPath.PkgName, dts)
 	dtsContent, err := os.Open(dtsFilename)
 	if err != nil {
 		// if the dts file does not exist, print a warning but continue to build
 		if os.IsNotExist(err) {
-			if entry {
+			if _, storedErr := ctx.storage.Stat(savePath); storedErr == nil {
+				err = nil
+			} else if entry {
 				err = fmt.Errorf("types not found")
 			} else {
 				err = nil
@@ -254,28 +249,17 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 		return
 	}
 
-	err = ctx.storage.Put(savePath, ctx.rewriteDTS(dts, buffer))
-	if err != nil {
-		return
+	dependencies := deps.Values()
+	sort.Strings(dependencies)
+	for _, s := range dependencies {
+		var j int
+		j, err = transformDTS(ctx, "./"+path.Join(path.Dir(dts), s), buildArgsPrefix, marker)
+		if err != nil {
+			return
+		}
+		n += j
 	}
 
-	var wg sync.WaitGroup
-	var errors []error
-	for _, s := range deps.Values() {
-		wg.Add(1)
-		go func(s string) {
-			j, err := transformDTS(ctx, "./"+path.Join(path.Dir(dts), s), buildArgsPrefix, marker)
-			if err != nil {
-				errors = append(errors, err)
-			}
-			n += j
-			wg.Done()
-		}(s)
-	}
-	wg.Wait()
-
-	if len(errors) > 0 {
-		err = errors[0]
-	}
+	err = putImmutableExact(ctx.storage, savePath, ctx.rewriteDTS(dts, buffer).Bytes())
 	return
 }

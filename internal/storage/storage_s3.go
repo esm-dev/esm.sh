@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -230,67 +231,113 @@ func (s3 *s3Storage) Get(name string) (content io.ReadCloser, stat Stat, err err
 }
 
 func (s3 *s3Storage) Put(name string, content io.Reader) (err error) {
+	_, err = s3.put(name, content, false)
+	return
+}
+
+func (s3 *s3Storage) PutIfAbsent(name string, content io.Reader) (created bool, err error) {
+	return s3.put(name, content, true)
+}
+
+func (s3 *s3Storage) put(name string, content io.Reader, exclusive bool) (created bool, err error) {
 	if name == "" {
-		return errors.New("name is required")
+		return false, errors.New("name is required")
 	}
-	var contentLength int64
+	var body io.ReadSeeker
 	if buf, ok := content.(*bytes.Buffer); ok {
-		contentLength = int64(buf.Len())
-	} else if seeker, ok := content.(io.Seeker); ok {
-		var size int64
-		size, err = seeker.Seek(0, io.SeekEnd)
-		if err != nil {
-			return
-		}
-		_, err = seeker.Seek(0, io.SeekStart)
-		if err != nil {
-			return
-		}
-		contentLength = size
+		body = bytes.NewReader(buf.Next(buf.Len()))
+	} else if seeker, ok := content.(io.ReadSeeker); ok {
+		body = seeker
 	} else if reader, ok := content.(*teeReader); ok {
 		if buf, ok := reader.r.(*bytes.Buffer); ok {
-			contentLength = int64(buf.Len())
-		} else if seeker, ok := reader.r.(io.Seeker); ok {
-			var size int64
-			size, err = seeker.Seek(0, io.SeekEnd)
-			if err != nil {
-				return
+			data := buf.Next(buf.Len())
+			n, e := reader.w.Write(data)
+			if e != nil {
+				return false, e
 			}
-			_, err = seeker.Seek(0, io.SeekStart)
-			if err != nil {
-				return
+			if n != len(data) {
+				return false, io.ErrShortWrite
 			}
-			contentLength = size
+			body = bytes.NewReader(data)
 		} else {
-			return errors.New("missing content length")
+			data, e := io.ReadAll(reader)
+			if e != nil {
+				return false, e
+			}
+			body = bytes.NewReader(data)
 		}
 	} else {
-		err = errors.New("missing content length")
-		return
+		return false, errors.New("missing content length")
 	}
-	if s3.shouldUseFSCache(name) {
-		cacheKey := s3.fsCacheKey(name)
-		pr, pw := io.Pipe()
-		go func(content io.Reader) {
-			unlock := s3.fsCacheLock.Lock(name)
-			defer unlock()
-			err := s3.fsCache.Put(cacheKey, io.TeeReader(content, pw))
-			pw.CloseWithError(err)
-		}(content)
-		content = pr
-	}
-	req, _ := http.NewRequest("PUT", s3.apiEndpoint+"/"+name, content)
-	s3.sign(req)
-	req.ContentLength = contentLength
-	resp, err := http.DefaultClient.Do(req)
+	contentLength, err := body.Seek(0, io.SeekEnd)
 	if err != nil {
-		return
+		return false, err
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode >= 400 {
-		return parseS3Error(resp)
+	for attempt := 0; attempt < 2; attempt++ {
+		_, err = body.Seek(0, io.SeekStart)
+		if err != nil {
+			return false, err
+		}
+		var requestBody io.Reader = body
+		if !exclusive && s3.shouldUseFSCache(name) {
+			cacheKey := s3.fsCacheKey(name)
+			pr, pw := io.Pipe()
+			go func(content io.Reader) {
+				unlock := s3.fsCacheLock.Lock(name)
+				defer unlock()
+				err := s3.fsCache.Put(cacheKey, io.TeeReader(content, pw))
+				pw.CloseWithError(err)
+			}(requestBody)
+			requestBody = pr
+		}
+		req, _ := http.NewRequest("PUT", s3.apiEndpoint+"/"+name, requestBody)
+		if exclusive {
+			req.Header.Set("If-None-Match", "*")
+		}
+		s3.sign(req)
+		req.ContentLength = contentLength
+		resp, e := http.DefaultClient.Do(req)
+		if e != nil {
+			return false, e
+		}
+		if exclusive && resp.StatusCode == http.StatusConflict && attempt == 0 {
+			resp.Body.Close()
+			continue
+		}
+		if exclusive && resp.StatusCode == http.StatusPreconditionFailed {
+			resp.Body.Close()
+			if err = s3.invalidateFSCache(name); err != nil {
+				return false, err
+			}
+			return false, nil
+		}
+		if resp.StatusCode >= 400 {
+			err = parseS3Error(resp)
+			resp.Body.Close()
+			return false, err
+		}
+		resp.Body.Close()
+		if exclusive {
+			if err = s3.invalidateFSCache(name); err != nil {
+				return false, err
+			}
+		}
+		return true, nil
 	}
-	return nil
+	return false, errors.New("conditional put conflict")
+}
+
+func (s3 *s3Storage) invalidateFSCache(name string) error {
+	if !s3.shouldUseFSCache(name) {
+		return nil
+	}
+	unlock := s3.fsCacheLock.Lock(name)
+	defer unlock()
+	err := s3.fsCache.Delete(s3.fsCacheKey(name))
+	if os.IsNotExist(err) {
+		return nil
+	}
+	return err
 }
 
 func (s3 *s3Storage) Delete(name string) (err error) {

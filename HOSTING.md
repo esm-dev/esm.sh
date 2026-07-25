@@ -18,6 +18,7 @@ To configure the server, create a `config.json` file then pass it to the server 
 // config.json
 {
   "port": 8080,
+  "cdnOrigin": "https://esm.example.com",
   "npmRegistry": "https://registry.npmjs.org/",
   "npmToken": "******"
 }
@@ -65,14 +66,15 @@ docker pull ghcr.io/esm-dev/esm.sh:v137   # specified stable version
 docker pull ghcr.io/esm-dev/esm.sh:dev    # latest dev version
 ```
 
-Run the container:
+Run the container with its public origin:
 
 ```bash
-docker run -p 80:80 ghcr.io/esm-dev/esm.sh:latest
+docker run -e CDN_ORIGIN=https://esm.example.com -p 80:80 ghcr.io/esm-dev/esm.sh:latest
 ```
 
 Available environment variables:
 
+- `CDN_ORIGIN`: The public origin of the CDN, for example `https://esm.example.com`. Self-hosted deployments should always set this.
 - `COMPRESS`: Compress http responses with gzip/brotli, default is `true`.
 - `CUSTOM_LANDING_PAGE_ORIGIN`: The custom landing page origin, default is empty.
 - `CUSTOM_LANDING_PAGE_ASSETS`: The custom landing page assets separated by comma(,), default is empty.

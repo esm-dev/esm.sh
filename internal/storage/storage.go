@@ -24,6 +24,7 @@ type Storage interface {
 	Stat(key string) (stat Stat, err error)
 	Get(key string) (content io.ReadCloser, stat Stat, err error)
 	Put(key string, r io.Reader) error
+	PutIfAbsent(key string, r io.Reader) (created bool, err error)
 	Delete(key string) error
 	List(prefix string) (keys []string, err error)
 	DeleteAll(prefix string) (deletedKeys []string, err error)

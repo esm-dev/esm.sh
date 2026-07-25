@@ -152,7 +152,7 @@ func legacyESM(ctx *rex.Context, fs storage.Storage, buildVersionPrefix string) 
 				return rex.Status(500, err.Error())
 			}
 			var b strings.Builder
-			b.WriteString(getOrigin(ctx))
+			b.WriteString(config.CdnOrigin)
 			if buildVersionPrefix != "" {
 				b.WriteByte('/')
 				b.WriteString(buildVersionPrefix)
@@ -191,7 +191,7 @@ func legacyESM(ctx *rex.Context, fs storage.Storage, buildVersionPrefix string) 
 				ctx.SetHeader("Content-Type", ctTypeScript)
 				// resolve hostname in typescript definition files if the origin is not "https://esm.sh"
 				if endsWith(pathname, ".d.ts", ".d.mts") {
-					origin := getOrigin(ctx)
+					origin := config.CdnOrigin
 					if origin != "https://esm.sh" {
 						defer f.Close()
 						data, err := io.ReadAll(f)
@@ -244,7 +244,7 @@ func legacyESM(ctx *rex.Context, fs storage.Storage, buildVersionPrefix string) 
 					ctx.SetHeader("X-ESM-Id", ret.EsmId)
 				}
 				if ret.Dts != "" {
-					ctx.SetHeader("X-TypeScript-Types", getOrigin(ctx)+ret.Dts)
+					ctx.SetHeader("X-TypeScript-Types", config.CdnOrigin+ret.Dts)
 				}
 				return ret.Code
 			}
@@ -253,7 +253,7 @@ func legacyESM(ctx *rex.Context, fs storage.Storage, buildVersionPrefix string) 
 
 	// strip leading `/stable/*` and `/v<build-version>/*`
 	if buildVersionPrefix != "" {
-		origin := getOrigin(ctx)
+		origin := config.CdnOrigin
 		if strings.HasPrefix(pathname, "/node_") && strings.HasSuffix(pathname, ".js") {
 			pathname = "/node/" + strings.TrimSuffix(strings.TrimPrefix(pathname, "/node_"), ".js") + ".mjs"
 		} else if pathname == "/node.ns.d.ts" {

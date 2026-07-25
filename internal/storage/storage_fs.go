@@ -81,26 +81,58 @@ func (fs *fsStorage) Get(key string) (content io.ReadCloser, stat Stat, err erro
 }
 
 func (fs *fsStorage) Put(key string, content io.Reader) (err error) {
+	_, err = fs.put(key, content, false)
+	return
+}
+
+func (fs *fsStorage) PutIfAbsent(key string, content io.Reader) (created bool, err error) {
+	return fs.put(key, content, true)
+}
+
+func (fs *fsStorage) put(key string, content io.Reader, exclusive bool) (created bool, err error) {
 	filename, err := fs.joinRootSafe(key)
 	if err != nil {
-		return err
+		return
 	}
 	err = ensureDir(filepath.Dir(filename))
 	if err != nil {
 		return
 	}
+	if exclusive {
+		_, err = os.Lstat(filename)
+		if err == nil {
+			return false, nil
+		}
+		if !os.IsNotExist(err) {
+			return false, err
+		}
+	}
 
-	file, err := os.Create(filename)
+	file, err := os.CreateTemp(filepath.Dir(filename), ".tmp-*")
 	if err != nil {
 		return
 	}
-
+	tempName := file.Name()
+	defer os.Remove(tempName)
 	_, err = io.Copy(file, content)
-	file.Close()
-	if err != nil {
-		os.Remove(filename) // clean up if error occurs
+	if err == nil {
+		err = file.Chmod(0644)
 	}
-	return
+	if closeErr := file.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		return false, err
+	}
+	if exclusive {
+		err = os.Link(tempName, filename)
+		if errors.Is(err, os.ErrExist) {
+			return false, nil
+		}
+		return err == nil, err
+	}
+	err = os.Rename(tempName, filename)
+	return err == nil, err
 }
 
 func (fs *fsStorage) Delete(key string) (err error) {
@@ -169,6 +201,9 @@ func findFiles(root string, parentDir string) ([]string, error) {
 	var files []string
 	for _, entry := range entries {
 		name := entry.Name()
+		if !entry.IsDir() && strings.HasPrefix(name, ".tmp-") {
+			continue
+		}
 		path := name
 		if parentDir != "" {
 			path = parentDir + "/" + name
