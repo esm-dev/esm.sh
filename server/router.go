@@ -1567,9 +1567,8 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 }
 
 func getOrigin(ctx *rex.Context) string {
-	origin := ctx.R.Header.Get("X-Real-Origin")
-	if origin != "" {
-		return origin
+	if config.CdnOrigin != "" {
+		return config.CdnOrigin
 	}
 	proto := "http:"
 	if cfVisitor := ctx.R.Header.Get("CF-Visitor"); cfVisitor != "" {
