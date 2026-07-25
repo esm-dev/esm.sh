@@ -24,7 +24,6 @@ import (
 	"github.com/esm-dev/esm.sh/internal/mime"
 	"github.com/esm-dev/esm.sh/internal/storage"
 	esbuild "github.com/ije/esbuild-internal/api"
-	"github.com/ije/esbuild-internal/xxhash"
 	"github.com/ije/gox/log"
 	"github.com/ije/gox/set"
 	"github.com/ije/gox/utils"
@@ -253,7 +252,6 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 				}
 				readme = bytes.ReplaceAll(readme, []byte("./server/embed/"), []byte("/embed/"))
 				readme = bytes.ReplaceAll(readme, []byte("./HOSTING.md"), []byte("https://github.com/esm-dev/esm.sh/blob/main/HOSTING.md"))
-				readme = bytes.ReplaceAll(readme, []byte("https://esm.sh"), []byte(getOrigin(ctx)))
 				indexHTML, err = embedFS.ReadFile("embed/index.html")
 				if err != nil {
 					err = errors.New("failed to read index.html: " + err.Error())
@@ -527,8 +525,6 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 			return rex.Status(403, "forbidden")
 		}
 
-		origin := getOrigin(ctx)
-
 		registryPrefix := ""
 		if esmPath.GhPrefix {
 			registryPrefix = "/gh"
@@ -553,12 +549,12 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 			} else if !endsWith(types, ".d.ts", ".d.mts", ".d.cts") {
 				types += ".d.ts"
 			}
-			return redirect(ctx, fmt.Sprintf("%s/%s@%s%s", origin, info.Name, info.Version, utils.NormalizePathname(types)), isExactVersion)
+			return redirect(ctx, fmt.Sprintf("/%s@%s%s", info.Name, info.Version, utils.NormalizePathname(types)), isExactVersion)
 		}
 
 		// redirect to the main css path for CSS packages
 		if css := cssPackages[esmPath.PkgName]; css != "" && esmPath.SubPath == "" {
-			url := fmt.Sprintf("%s/%s/%s", origin, esmPath.PackageId(), css)
+			url := fmt.Sprintf("/%s/%s", esmPath.PackageId(), css)
 			return redirect(ctx, url, isExactVersion)
 		}
 
@@ -688,7 +684,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 					query = "?" + rawQuery
 				}
 				ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", config.NpmQueryCacheTTL))
-				return redirect(ctx, fmt.Sprintf("%s/%s%s%s", origin, pkgName, subPath, query), false)
+				return redirect(ctx, fmt.Sprintf("/%s%s%s", pkgName, subPath, query), false)
 			}
 			if pathKind != EsmEntry {
 				pkgName := esmPath.PkgName
@@ -719,7 +715,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 					query = "?" + rawQuery
 				}
 				ctx.SetHeader("Cache-Control", fmt.Sprintf("public, max-age=%d", config.NpmQueryCacheTTL))
-				return redirect(ctx, fmt.Sprintf("%s%s/%s@%s%s%s", origin, registryPrefix, pkgName, pkgVersion, subPath, query), false)
+				return redirect(ctx, fmt.Sprintf("%s/%s@%s%s%s", registryPrefix, pkgName, pkgVersion, subPath, query), false)
 			}
 		}
 
@@ -763,7 +759,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 				ctx.SetHeader("Cache-Control", ccImmutable)
 				return rex.Status(404, "File not found")
 			}
-			url := fmt.Sprintf("%s%s/%s@%s/%s", origin, registryPrefix, esmPath.PkgName, esmPath.PkgVersion, file)
+			url := fmt.Sprintf("%s/%s@%s/%s", registryPrefix, esmPath.PkgName, esmPath.PkgVersion, file)
 			return redirect(ctx, url, true)
 		}
 
@@ -771,11 +767,10 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 		if isExactVersion {
 			// return wasm file as an es6 module when `?module` query is present (requires `top-level-await` support)
 			if pathKind == RawFile && strings.HasSuffix(esmPath.SubPath, ".wasm") && query.Has("module") {
-				wasmUrl := origin + pathname
 				buf := bytes.NewBufferString("/* esm.sh - wasm module */\n")
-				buf.WriteString("const data = await fetch(")
-				buf.WriteString(strings.TrimSpace(string(utils.MustEncodeJSON(wasmUrl))))
-				buf.WriteString(").then(r => r.arrayBuffer());\n")
+				buf.WriteString("const data = await fetch(new URL(")
+				buf.WriteString(strings.TrimSpace(string(utils.MustEncodeJSON(pathname))))
+				buf.WriteString(", import.meta.url)).then(r => r.arrayBuffer());\n")
 				buf.WriteString("export default new WebAssembly.Module(data);")
 				ctx.SetHeader("Content-Type", ctJavaScript)
 				ctx.SetHeader("Content-Length", fmt.Sprintf("%d", buf.Len()))
@@ -827,7 +822,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 						query = "?" + rawQuery
 					}
 					// redirect to the 'main' JS file
-					return redirect(ctx, fmt.Sprintf("%s/%s%s%s", origin, esmPath.PackageId(), utils.NormalizePathname(entry.main), query), true)
+					return redirect(ctx, fmt.Sprintf("/%s%s%s", esmPath.PackageId(), utils.NormalizePathname(entry.main), query), true)
 				}
 
 				filename := path.Join(npmrc.StoreDir(), esmPath.PackageId(), "node_modules", esmPath.PkgName, esmPath.SubPath)
@@ -858,7 +853,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 								query = "?" + rawQuery
 							}
 							// redirect to the resolved path
-							return redirect(ctx, fmt.Sprintf("%s/%s%s%s", origin, esmPath.PackageId(), utils.NormalizePathname(entry.main), query), true)
+							return redirect(ctx, fmt.Sprintf("/%s%s%s", esmPath.PackageId(), utils.NormalizePathname(entry.main), query), true)
 						}
 						ctx.SetHeader("Cache-Control", ccImmutable)
 						return rex.Status(404, "File Not Found")
@@ -904,22 +899,32 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 					if err != nil {
 						return rex.Status(500, err.Error())
 					}
+					js, err := encodeJSONModule(jsonData)
+					if err != nil {
+						return rex.Status(500, err.Error())
+					}
 					ctx.SetHeader("Content-Type", ctJavaScript)
-					return concatBytes([]byte("export default "), jsonData)
+					return js
 				}
 				return content // auto closed
 			}
 
+			// Direct declaration query variants are keyed after parsing below.
+			dtsQueryVariant := pathKind == EsmDts &&
+				(query.Has("path") || (xArgs == nil &&
+					(query.Has("alias") || query.Has("deps") || query.Has("external") ||
+						query.Has("conditions"))))
+
 			// serve build/dts files
-			if pathKind == EsmBuild || pathKind == EsmSourceMap || pathKind == EsmDts {
+			if (pathKind == EsmBuild || pathKind == EsmSourceMap || pathKind == EsmDts) && !dtsQueryVariant {
 				var savePath string
 				if asteriskPrefix {
 					pathname = "/*" + pathname[1:]
 				}
 				if pathKind == EsmDts {
-					savePath = path.Join("types", pathname)
+					savePath = path.Join(typesStoragePrefix, pathname)
 				} else {
-					savePath = path.Join("modules", pathname)
+					savePath = path.Join(buildStoragePrefix, pathname)
 				}
 				savePath = normalizeSavePath(savePath)
 				f, stat, err := esmStorage.Get(savePath)
@@ -957,21 +962,15 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 						sort.Strings(exports)
 						if query.Has("worker") {
 							defer f.Close()
-							moduleUrl := origin + pathname
+							modulePath := pathname
 							if len(exports) > 0 {
-								moduleUrl += "?exports=" + strings.Join(exports, ",")
+								modulePath += "?exports=" + strings.Join(exports, ",")
 							}
-							return fmt.Sprintf(
-								`export default function workerFactory(injectOrOptions) { const options = typeof injectOrOptions === "string" ? { inject: injectOrOptions }: injectOrOptions ?? {}; const { inject, name = "%s" } = options; const blob = new Blob(['import * as $module from "%s";', inject].filter(Boolean), { type: "application/javascript" }); return new Worker(URL.createObjectURL(blob), { type: "module", name })}`,
-								moduleUrl,
-								moduleUrl,
-							)
+							return renderWorkerFactory(modulePath)
 						}
 						if len(exports) > 0 {
 							defer f.Close()
-							xxh := xxhash.New()
-							xxh.Write([]byte(strings.Join(exports, ",")))
-							savePath = strings.TrimSuffix(savePath, ".mjs") + "_" + base64.RawURLEncoding.EncodeToString(xxh.Sum(nil)) + ".mjs"
+							savePath = treeShakeSavePath(savePath, exports)
 							f2, stat, err := esmStorage.Get(savePath)
 							if err == nil {
 								ctx.SetHeader("Content-Length", fmt.Sprintf("%d", stat.Size()))
@@ -1008,7 +1007,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 						if err != nil {
 							return rex.Status(500, err.Error())
 						}
-						return bytes.ReplaceAll(buffer, []byte("{ESM_CDN_ORIGIN}"), []byte(origin))
+						return bytes.ReplaceAll(buffer, []byte("{ESM_CDN_ORIGIN}"), nil)
 					}
 					ctx.SetHeader("Content-Length", fmt.Sprintf("%d", stat.Size()))
 					return f // auto closed
@@ -1058,70 +1057,62 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 			if targetFromUA {
 				appendVaryHeader(ctx.W.Header(), "User-Agent")
 			}
-			return redirect(ctx, fmt.Sprintf("%s%s/%s@%s%s%s", origin, registryPrefix, pkgName, pkgVersion, subPath, qs), false)
+			return redirect(ctx, fmt.Sprintf("%s/%s@%s%s%s", registryPrefix, pkgName, pkgVersion, subPath, qs), false)
 		}
 
 		// check `?alias` query
 		alias := map[string]string{}
-		if query.Has("alias") {
-			for p := range strings.SplitSeq(query.Get("alias"), ",") {
-				p = strings.TrimSpace(p)
-				if p != "" {
-					name, to := utils.SplitByFirstByte(p, ':')
-					name = strings.TrimSpace(name)
-					to = strings.TrimSpace(to)
-					if name != "" && to != "" && name != esmPath.PkgName {
-						alias[name] = to
-					}
-				}
+		if xArgs == nil && query.Has("alias") {
+			alias, err = parseAliasArg(query.Get("alias"), maxBuildArgBytes)
+			if err != nil {
+				ctx.SetHeader("Cache-Control", ccImmutable)
+				return rex.Status(400, "Invalid alias query: "+err.Error())
 			}
+			delete(alias, esmPath.PkgName)
 		}
 
 		// check `?deps` query
 		deps := map[string]string{}
-		if query.Has("deps") {
-			for v := range strings.SplitSeq(query.Get("deps"), ",") {
-				v = strings.TrimSpace(v)
-				if v != "" {
-					esm, _, _, _, _, err := parseEsmPath(npmrc, v)
-					if err != nil {
-						ctx.SetHeader("Cache-Control", ccImmutable)
-						return rex.Status(400, fmt.Sprintf("Invalid deps query: %v not found", v))
-					}
-					if esm.PkgName != esmPath.PkgName {
-						deps[esm.PkgName] = esm.PkgVersion
-					}
+		if xArgs == nil && query.Has("deps") {
+			rawDeps, err := parseDepsArg(query.Get("deps"), maxBuildArgBytes)
+			if err != nil {
+				ctx.SetHeader("Cache-Control", ccImmutable)
+				return rex.Status(400, "Invalid deps query: "+err.Error())
+			}
+			for name, version := range rawDeps {
+				specifier := name
+				if version != "" {
+					specifier += "@" + version
+				}
+				esm, _, _, _, _, err := parseEsmPath(npmrc, specifier)
+				if err != nil {
+					ctx.SetHeader("Cache-Control", ccImmutable)
+					return rex.Status(400, fmt.Sprintf("Invalid deps query: %s not found", specifier))
+				}
+				if esm.PkgName != esmPath.PkgName {
+					deps[esm.PkgName] = esm.PkgVersion
 				}
 			}
 		}
 
 		// check `?conditions` query
 		var conditions []string
-		conditionsSet := set.New[string]()
-		if query.Has("conditions") {
-			for p := range strings.SplitSeq(query.Get("conditions"), ",") {
-				p = strings.TrimSpace(p)
-				if p != "" && !strings.ContainsRune(p, ' ') && !conditionsSet.Has(p) {
-					conditionsSet.Add(p)
-					conditions = append(conditions, p)
-				}
+		if xArgs == nil && query.Has("conditions") {
+			conditions, err = parseConditionsArg(query.Get("conditions"))
+			if err != nil {
+				ctx.SetHeader("Cache-Control", ccImmutable)
+				return rex.Status(400, "Invalid conditions query: "+err.Error())
 			}
 		}
 
 		// check `?external` query
 		external := set.New[string]()
 		externalAll := asteriskPrefix
-		if !asteriskPrefix && query.Has("external") {
-			for p := range strings.SplitSeq(query.Get("external"), ",") {
-				p = strings.TrimSpace(p)
-				if p == "*" {
-					external.Reset()
-					externalAll = true
-					break
-				}
-				if p != "" {
-					external.Add(p)
-				}
+		if xArgs == nil && !asteriskPrefix && query.Has("external") {
+			external, externalAll, err = parseExternalArg(query.Get("external"))
+			if err != nil {
+				ctx.SetHeader("Cache-Control", ccImmutable)
+				return rex.Status(400, "Invalid external query: "+err.Error())
 			}
 		}
 
@@ -1145,11 +1136,12 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 				if a := encodeBuildArgs(buildArgs, true); a != "" {
 					args = "X-" + a
 				}
-				savePath := normalizeSavePath(path.Join(fmt.Sprintf(
-					"types/%s/%s",
+				savePath := normalizeSavePath(path.Join(
+					typesStoragePrefix,
 					esmPath.PackageId(),
 					args,
-				), esmPath.SubPath))
+					esmPath.SubPath,
+				))
 				content, stat, err = esmStorage.Get(savePath)
 				return
 			}
@@ -1182,6 +1174,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 						}
 						return rex.Status(500, "Failed to build types: "+output.err.Error())
 					}
+					buildArgs = output.ctx.args
 				case <-time.After(time.Duration(config.BuildWaitTime) * time.Second):
 					ctx.SetHeader("Cache-Control", ccMustRevalidate)
 					return rex.Status(http.StatusRequestTimeout, "timeout, the types is waiting to be built, please try refreshing the page.")
@@ -1206,7 +1199,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 			}
 			ctx.SetHeader("Content-Type", ctTypeScript)
 			ctx.SetHeader("Cache-Control", ccImmutable)
-			return bytes.ReplaceAll(buffer, []byte("{ESM_CDN_ORIGIN}"), []byte(origin))
+			return bytes.ReplaceAll(buffer, []byte("{ESM_CDN_ORIGIN}"), nil)
 		}
 
 		if xArgs == nil {
@@ -1285,6 +1278,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 					return rex.Status(500, msg)
 				}
 				buildMeta = output.meta
+				build = output.ctx
 			case <-time.After(time.Duration(config.BuildWaitTime) * time.Second):
 				ctx.SetHeader("Cache-Control", ccMustRevalidate)
 				return rex.Status(http.StatusRequestTimeout, "timeout, the module is waiting to be built, please try refreshing the page.")
@@ -1292,14 +1286,13 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 		}
 
 		if buildMeta.CSSEntry != "" {
-			url := getCSSEntryRedirectURL(origin, esmPath, buildMeta.CSSEntry)
+			url := getCSSEntryRedirectURL(esmPath, buildMeta.CSSEntry)
 			return redirect(ctx, url, isExactVersion)
 		}
 
 		// redirect to `*.d.ts` file
 		if buildMeta.TypesOnly {
-			dtsUrl := origin + buildMeta.Dts
-			ctx.SetHeader("X-TypeScript-Types", dtsUrl)
+			ctx.SetHeader("X-TypeScript-Types", buildMeta.Dts)
 			ctx.SetHeader("Content-Type", ctJavaScript)
 			ctx.SetHeader("Cache-Control", ccImmutable)
 			if ctx.R.Method == http.MethodHead {
@@ -1318,7 +1311,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 				}
 				return rex.Status(404, "Package CSS not found")
 			}
-			url := origin + strings.TrimSuffix(build.Path(), ".mjs") + ".css"
+			url := strings.TrimSuffix(build.Path(), ".mjs") + ".css"
 			return redirect(ctx, url, isExactVersion)
 		}
 
@@ -1465,25 +1458,19 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 				ctx.SetHeader("Content-Type", ctJavaScript)
 				if query.Has("worker") {
 					defer f.Close()
-					moduleUrl := origin + build.Path()
+					modulePath := build.Path()
 					if !buildMeta.CJS && len(exports) > 0 {
-						moduleUrl += "?exports=" + strings.Join(exports, ",")
+						modulePath += "?exports=" + strings.Join(exports, ",")
 					}
-					return fmt.Sprintf(
-						`export default function workerFactory(injectOrOptions) { const options = typeof injectOrOptions === "string" ? { inject: injectOrOptions }: injectOrOptions ?? {}; const { inject, name = "%s" } = options; const blob = new Blob(['import * as $module from "%s";', inject].filter(Boolean), { type: "application/javascript" }); return new Worker(URL.createObjectURL(blob), { type: "module", name })}`,
-						moduleUrl,
-						moduleUrl,
-					)
+					return renderWorkerFactory(modulePath)
 				}
 				if noDts := query.Has("no-dts") || query.Has("no-check"); !noDts && buildMeta.Dts != "" {
-					ctx.SetHeader("X-TypeScript-Types", origin+buildMeta.Dts)
+					ctx.SetHeader("X-TypeScript-Types", buildMeta.Dts)
 					ctx.SetHeader("Access-Control-Expose-Headers", "X-TypeScript-Types")
 				}
 				if !buildMeta.CJS && len(exports) > 0 {
 					defer f.Close()
-					xxh := xxhash.New()
-					xxh.Write([]byte(strings.Join(exports, ",")))
-					savePath = strings.TrimSuffix(savePath, ".mjs") + "_" + base64.RawURLEncoding.EncodeToString(xxh.Sum(nil)) + ".mjs"
+					savePath = treeShakeSavePath(savePath, exports)
 					f2, stat, err := esmStorage.Get(savePath)
 					if err == nil {
 						ctx.SetHeader("Content-Length", fmt.Sprintf("%d", stat.Size()))
@@ -1514,15 +1501,11 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 		fmt.Fprintf(buf, "/* esm.sh - %s */\n", esmPath.String())
 
 		if query.Has("worker") {
-			moduleUrl := origin + build.Path()
+			modulePath := build.Path()
 			if !buildMeta.CJS && len(exports) > 0 {
-				moduleUrl += "?exports=" + strings.Join(exports, ",")
+				modulePath += "?exports=" + strings.Join(exports, ",")
 			}
-			fmt.Fprintf(buf,
-				`export default function workerFactory(injectOrOptions) { const options = typeof injectOrOptions === "string" ? { inject: injectOrOptions }: injectOrOptions ?? {}; const { inject, name = "%s" } = options; const blob = new Blob(['import * as $module from "%s";', inject].filter(Boolean), { type: "application/javascript" }); return new Worker(URL.createObjectURL(blob), { type: "module", name })}`,
-				moduleUrl,
-				moduleUrl,
-			)
+			buf.WriteString(renderWorkerFactory(modulePath))
 		} else {
 			if len(buildMeta.Imports) > 0 && !query.Has("exports") {
 				for _, dep := range buildMeta.Imports {
@@ -1543,7 +1526,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 			}
 			ctx.SetHeader("X-ESM-Path", esmPath)
 			if noDts := query.Has("no-dts") || query.Has("no-check"); !noDts && buildMeta.Dts != "" {
-				ctx.SetHeader("X-TypeScript-Types", origin+buildMeta.Dts)
+				ctx.SetHeader("X-TypeScript-Types", buildMeta.Dts)
 				ctx.SetHeader("Access-Control-Expose-Headers", "X-ESM-Path, X-TypeScript-Types")
 			} else {
 				ctx.SetHeader("Access-Control-Expose-Headers", "X-ESM-Path")
@@ -1564,22 +1547,6 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 		}
 		return buf.Bytes()
 	}
-}
-
-func getOrigin(ctx *rex.Context) string {
-	origin := ctx.R.Header.Get("X-Real-Origin")
-	if origin != "" {
-		return origin
-	}
-	proto := "http:"
-	if cfVisitor := ctx.R.Header.Get("CF-Visitor"); cfVisitor != "" {
-		if strings.Contains(cfVisitor, "\"https\"") {
-			proto = "https:"
-		}
-	} else if ctx.R.TLS != nil {
-		proto = "https:"
-	}
-	return proto + "//" + ctx.R.Host
 }
 
 func redirect(ctx *rex.Context, url string, isMovedPermanently bool) any {
@@ -1606,6 +1573,13 @@ func errorJS(ctx *rex.Context, message string) any {
 	return buf.Bytes()
 }
 
-func getCSSEntryRedirectURL(origin string, esmPath EsmPath, cssEntry string) string {
-	return origin + "/" + esmPath.PackageId() + utils.NormalizePathname(cssEntry)
+func renderWorkerFactory(modulePath string) string {
+	return fmt.Sprintf(
+		`export default function workerFactory(injectOrOptions) { const moduleUrl = new URL(%s, import.meta.url).href; const options = typeof injectOrOptions === "string" ? { inject: injectOrOptions }: injectOrOptions ?? {}; const { inject, name = moduleUrl } = options; const blob = new Blob(["import * as $module from " + JSON.stringify(moduleUrl) + ";", inject].filter(Boolean), { type: "application/javascript" }); return new Worker(URL.createObjectURL(blob), { type: "module", name })}`,
+		strings.TrimSpace(string(utils.MustEncodeJSON(modulePath))),
+	)
+}
+
+func getCSSEntryRedirectURL(esmPath EsmPath, cssEntry string) string {
+	return "/" + esmPath.PackageId() + utils.NormalizePathname(cssEntry)
 }

@@ -21,7 +21,7 @@ var (
 // ValidatePackageName validates the package name.
 // based on https://github.com/npm/validate-npm-package-name
 func ValidatePackageName(pkgName string) bool {
-	if l := len(pkgName); l == 0 || l > 214 {
+	if l := len(pkgName); l == 0 || l > 214 || pkgName == "." || pkgName == ".." {
 		return false
 	}
 	if strings.HasSuffix(pkgName, ".d.ts.map") {
@@ -29,9 +29,38 @@ func ValidatePackageName(pkgName string) bool {
 	}
 	if strings.HasPrefix(pkgName, "@") {
 		scope, name := utils.SplitByFirstByte(pkgName, '/')
-		return Naming.Match(scope[1:]) && Naming.Match(name)
+		return name != "." && name != ".." && Naming.Match(scope[1:]) && Naming.Match(name)
 	}
 	return Naming.Match(pkgName)
+}
+
+// ValidatePkgPrNewName validates compact and repository-qualified pkg.pr.new names.
+func ValidatePkgPrNewName(pkgName string) bool {
+	if len(pkgName) == 0 || len(pkgName) > 512 {
+		return false
+	}
+	parts := strings.Split(pkgName, "/")
+	validSegment := func(segment string) bool {
+		return len(segment) <= 214 && segment != "." && segment != ".." && Naming.Match(segment)
+	}
+	switch len(parts) {
+	case 1:
+		return ValidatePackageName(pkgName)
+	case 2:
+		if strings.HasPrefix(pkgName, "@") {
+			return ValidatePackageName(pkgName)
+		}
+		return validSegment(parts[0]) && validSegment(parts[1])
+	case 3:
+		return validSegment(parts[0]) && validSegment(parts[1]) && ValidatePackageName(parts[2])
+	case 4:
+		return validSegment(parts[0]) && validSegment(parts[1]) && strings.HasPrefix(parts[2], "@") && ValidatePackageName(parts[2]+"/"+parts[3])
+	}
+	return false
+}
+
+func ValidatePkgPrNewVersion(version string) bool {
+	return len(version) <= 256 && version != "." && version != ".." && Versioning.Match(version)
 }
 
 type Package struct {
@@ -111,11 +140,11 @@ func ResolveDependencyVersion(v string) (Package, error) {
 		}
 		if u.Host == "pkg.pr.new" {
 			pkgName, rest := utils.SplitByLastByte(u.Path[1:], '@')
-			if rest == "" {
+			if rest == "" || !ValidatePkgPrNewName(pkgName) {
 				return Package{}, errors.New("unsupported http dependency")
 			}
 			version, _ := utils.SplitByFirstByte(rest, '/')
-			if version == "" {
+			if !ValidatePkgPrNewVersion(version) {
 				return Package{}, errors.New("unsupported http dependency")
 			}
 			return Package{

@@ -6,6 +6,6 @@ Deno.test("issue #578", async () => {
   const esmPathHeader = res.headers.get("X-Esm-Path");
   assertEquals(esmPathHeader, "/katex@0.16.4/esnext/katex.mjs");
   const tsHeader = res.headers.get("x-typescript-types");
-  assert(tsHeader?.startsWith("http://localhost:8080/@types/katex@~0.16"));
+  assert(tsHeader?.startsWith("/@types/katex@~0.16"));
   assert(tsHeader?.endsWith("/index.d.ts"));
 });

@@ -14,7 +14,20 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/esm-dev/esm.sh/internal/npm"
 )
+
+func TestInstallPackageRejectsInvalidPkgPrNewName(t *testing.T) {
+	npmrc := &NpmRC{}
+	if _, err := npmrc.installPackageContext(context.Background(), npm.Package{
+		PkgPrNew: true,
+		Name:     "owner/../package",
+		Version:  "a832a55",
+	}); err == nil {
+		t.Fatal("expected invalid pkg.pr.new package name to be rejected")
+	}
+}
 
 func TestSameURLOrigin(t *testing.T) {
 	registryUrl, _ := url.Parse("https://registry.example/package")

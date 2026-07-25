@@ -47,7 +47,7 @@ Deno.test("legacy routes (cache hit)", async () => {
     }),
   );
   await writeTextFile(
-    ".esmd/storage/legacy/react-dom@19.2.5.y35WJGFJWuY.meta",
+    ".esmd/storage/legacy/react-dom@19.2.5.VwhfCQHI1gcHWW6bPkA0_iVlHThtWHfo-4kbLQSxB_4.meta",
     JSON.stringify({
       "esmId": "v135/react-dom@19.2.5/X-ZS9yZWFjdA/es2022/react-dom.mjs",
       "dts": "/v135/@types/react-dom@~19.2/X-ZS9yZWFjdA/index.d.ts",
@@ -56,17 +56,23 @@ Deno.test("legacy routes (cache hit)", async () => {
     }),
   );
   await writeTextFile(".esmd/storage/legacy/v135/react@19.2.5/es2022/react.js", "export const version = '19.2.5';");
-  await writeTextFile(".esmd/storage/legacy/v135/@types/react@19.2.5/index.d.ts", "export const version:string;");
+  await writeTextFile(
+    ".esmd/storage/legacy/v135/@types/react@19.2.5/index.d.ts",
+    'export * from "https://esm.sh/v135/@types/react@19.2.5/global.d.ts";',
+  );
 
   {
     const res = await fetch("http://localhost:8080/v135/react@19.0.0", {
       redirect: "manual",
-      headers: { "User-Agent": "i'm a browser" },
+      headers: {
+        "User-Agent": "i'm a browser",
+        "X-Real-Origin": "https://attacker.invalid",
+      },
     });
     const text = await res.text();
     assertEquals(res.status, 200);
     assertEquals(res.headers.get("x-esm-id"), "stable/react@19.0.0/es2022/react.mjs");
-    assertEquals(res.headers.get("x-typescript-types"), "http://localhost:8080/v135/@types/react@latest/index.d.ts");
+    assertEquals(res.headers.get("x-typescript-types"), "/v135/@types/react@latest/index.d.ts");
     assertEquals(
       text,
       '/* esm.sh - react@19.0.0 */\nexport * from "/stable/react@19.0.0/es2022/react.mjs";\nexport { default } from "/stable/react@19.0.0/es2022/react.mjs";\n',
@@ -81,7 +87,7 @@ Deno.test("legacy routes (cache hit)", async () => {
     const text = await res.text();
     assertEquals(res.status, 200);
     assertEquals(res.headers.get("x-esm-id"), "v135/react-dom@19.2.5/X-ZS9yZWFjdA/es2022/react-dom.mjs");
-    assertEquals(res.headers.get("x-typescript-types"), "http://localhost:8080/v135/@types/react-dom@~19.2/X-ZS9yZWFjdA/index.d.ts");
+    assertEquals(res.headers.get("x-typescript-types"), "/v135/@types/react-dom@~19.2/X-ZS9yZWFjdA/index.d.ts");
     assertEquals(text, '/* esm.sh - react-dom@19.2.5 */\nexport * from "/v135/react-dom@19.2.5/X-ZS9yZWFjdA/es2022/react-dom.mjs";\nexport { default } from "/v135/react-dom@19.2.5/X-ZS9yZWFjdA/es2022/react-dom.mjs";\n');
   }
 
@@ -100,7 +106,7 @@ Deno.test("legacy routes (cache hit)", async () => {
     });
     const text = await res.text();
     assertEquals(res.status, 200);
-    assertEquals(text, "export const version:string;");
+    assertEquals(text, 'export * from "/v135/@types/react@19.2.5/global.d.ts";');
   }
 });
 
@@ -111,7 +117,7 @@ Deno.test("legacy routes (cache miss)", async () => {
     });
     res.body?.cancel();
     assertEquals(res.status, 301);
-    assert(res.headers.get("Location")?.startsWith("http://localhost:8080/react@18.3.1"));
+    assert(res.headers.get("Location")?.startsWith("/react@18.3.1"));
   }
   {
     const res = await fetch("http://localhost:8080/v135/react@18.3.1", {
@@ -119,7 +125,7 @@ Deno.test("legacy routes (cache miss)", async () => {
     });
     res.body?.cancel();
     assertEquals(res.status, 301);
-    assert(res.headers.get("Location")?.startsWith("http://localhost:8080/react@18.3.1"));
+    assert(res.headers.get("Location")?.startsWith("/react@18.3.1"));
   }
   {
     const res = await fetch("http://localhost:8080/v135/react@18.3.1?target=2018", {
@@ -127,7 +133,7 @@ Deno.test("legacy routes (cache miss)", async () => {
     });
     res.body?.cancel();
     assertEquals(res.status, 301);
-    assert(res.headers.get("Location")?.startsWith("http://localhost:8080/react@18.3.1?target=2018"));
+    assert(res.headers.get("Location")?.startsWith("/react@18.3.1?target=2018"));
   }
   {
     const res = await fetch("http://localhost:8080/stable/react", {
@@ -135,7 +141,7 @@ Deno.test("legacy routes (cache miss)", async () => {
     });
     res.body?.cancel();
     assertEquals(res.status, 302);
-    assert(res.headers.get("Location")?.startsWith("http://localhost:8080/stable/react@"));
+    assert(res.headers.get("Location")?.startsWith("/stable/react@"));
   }
   {
     const res = await fetch("http://localhost:8080/v135/react@18", {
@@ -143,7 +149,7 @@ Deno.test("legacy routes (cache miss)", async () => {
     });
     res.body?.cancel();
     assertEquals(res.status, 302);
-    assert(res.headers.get("Location")?.startsWith("http://localhost:8080/v135/react@18."));
+    assert(res.headers.get("Location")?.startsWith("/v135/react@18."));
   }
   {
     const res = await fetch("http://localhost:8080/v135/node_process.js", {
@@ -152,7 +158,7 @@ Deno.test("legacy routes (cache miss)", async () => {
     });
     res.body?.cancel();
     assertEquals(res.status, 301);
-    assert(res.headers.get("Location")?.startsWith("http://localhost:8080/node/process.mjs"));
+    assert(res.headers.get("Location")?.startsWith("/node/process.mjs"));
   }
   {
     const res = await fetch("http://localhost:8080/v135/node.ns.d.ts", {

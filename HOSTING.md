@@ -114,7 +114,8 @@ To deploy the server with CloudFlare CDN, you need to create following cache rul
 (ends_with(http.request.uri.path, ".d.cts"))
 ```
 
-Ensure "Ignore query string" option is enabled in the "cache key" settings.
+Keep the query string in the cache key. Do not enable "Ignore query string":
+`?module` and declaration build arguments can change the response body.
 
 #### 2. Cache `?target=*`
 

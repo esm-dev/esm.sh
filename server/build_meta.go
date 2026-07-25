@@ -149,6 +149,6 @@ func (storage *BuildMetaDB) Delete(key string) (err error) {
 }
 
 func normalizeMetaStoreKey(key string) string {
-	data := sha256.Sum256([]byte(key))
+	data := sha256.Sum256([]byte(buildCacheVersion + ":" + key))
 	return "meta/" + hex.EncodeToString(data[:])
 }

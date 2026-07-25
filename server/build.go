@@ -50,6 +50,7 @@ type BuildContext struct {
 	path        string
 	rawPath     string
 	status      string
+	onPathReady func() bool
 	splitting   *set.ReadOnlySet[string]
 	esmImports  [][2]string
 	cjsRequires [][3]string
@@ -159,6 +160,13 @@ func (ctx *BuildContext) Build(buildCtx context.Context) (meta *BuildMeta, err e
 	if err != nil {
 		return
 	}
+	err = ctx.normalizeBuildArgs()
+	if err != nil {
+		return
+	}
+	if ctx.onPathReady != nil && !ctx.onPathReady() {
+		return
+	}
 
 	// check previous build again after installation (in case the sub-module path has been changed by the `install` function)
 	meta, ok, err = ctx.Exists()
@@ -206,7 +214,7 @@ func (ctx *BuildContext) buildPath() {
 
 	esm := ctx.esmPath
 	if ctx.target == "types" {
-		if strings.HasSuffix(esm.SubPath, ".d.ts") {
+		if esm.SubPath != "" {
 			ctx.path = fmt.Sprintf(
 				"/%s%s/%s%s",
 				asteriskPrefix,
@@ -308,10 +316,12 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 		if err != nil {
 			return
 		}
-		buffer := &bytes.Buffer{}
-		buffer.WriteString("export default ")
-		buffer.Write(jsonData)
-		err = ctx.storage.Put(ctx.getSavePath(), buffer)
+		var js []byte
+		js, err = encodeJSONModule(jsonData)
+		if err != nil {
+			return
+		}
+		err = ctx.storage.Put(ctx.getSavePath(), bytes.NewReader(js))
 		if err != nil {
 			ctx.logger.Errorf("storage.put(%s): %v", ctx.getSavePath(), err)
 			err = errors.New("storage(put): " + err.Error())
@@ -1559,6 +1569,13 @@ func (ctx *BuildContext) buildTypes() (ret *BuildMeta, err error) {
 	ctx.status = "install"
 	err = ctx.install()
 	if err != nil {
+		return
+	}
+	err = ctx.normalizeBuildArgs()
+	if err != nil {
+		return
+	}
+	if ctx.onPathReady != nil && !ctx.onPathReady() {
 		return
 	}
 	if err = ctx.checkCanceled(); err != nil {

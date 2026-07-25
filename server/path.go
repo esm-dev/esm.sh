@@ -64,12 +64,12 @@ func parseEsmPath(npmrc *NpmRC, pathname string) (esm EsmPath, extraQuery string
 			pathname = pathname[12:]
 		}
 		pkgName, rest := utils.SplitByLastByte(pathname, '@')
-		if rest == "" {
+		if rest == "" || !npm.ValidatePkgPrNewName(pkgName) {
 			err = errors.New("invalid path")
 			return
 		}
 		version, subPath := utils.SplitByFirstByte(rest, '/')
-		if version == "" || !npm.Versioning.Match(version) {
+		if !npm.ValidatePkgPrNewVersion(version) {
 			err = errors.New("invalid path")
 			return
 		}

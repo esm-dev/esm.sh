@@ -322,6 +322,9 @@ func (npmrc *NpmRC) installPackageContext(ctx context.Context, pkg npm.Package) 
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	if pkg.PkgPrNew && (!npm.ValidatePkgPrNewName(pkg.Name) || !npm.ValidatePkgPrNewVersion(pkg.Version)) {
+		return nil, errors.New("invalid pkg.pr.new package")
+	}
 	installDir := filepath.Join(npmrc.StoreDir(), pkg.String())
 	packageJsonPath := filepath.Join(installDir, "node_modules", pkg.Name, "package.json")
 

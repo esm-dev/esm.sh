@@ -41,7 +41,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 	}
 	marker.Add(dtsPath)
 
-	savePath := normalizeSavePath(path.Join("types", dtsPath))
+	savePath := normalizeSavePath(path.Join(typesStoragePrefix, dtsPath))
 	// check if the dts file has been transformed
 	_, err = ctx.storage.Stat(savePath)
 	if err == nil || err != storage.ErrNotFound {

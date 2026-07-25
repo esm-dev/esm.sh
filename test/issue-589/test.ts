@@ -10,7 +10,7 @@ Deno.test("issue #589", async () => {
   assertEquals(res.status, 302);
   assert(
     res.headers.get("location")!.startsWith(
-      `http://localhost:8080/@types/react@18.`,
+      `/@types/react@18.`,
     ),
   );
 });

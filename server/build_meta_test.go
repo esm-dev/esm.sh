@@ -1,6 +1,8 @@
 package server
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"reflect"
 	"testing"
 )
@@ -31,5 +33,13 @@ func TestEncodeBuildMeta(t *testing.T) {
 	metaEmpty := &BuildMeta{}
 	if !reflect.DeepEqual(meta3, metaEmpty) {
 		t.Fatalf("meta mismatch: %+v != %+v", meta3, metaEmpty)
+	}
+}
+
+func TestBuildMetaCacheVersion(t *testing.T) {
+	key := "/package@1.0.0/es2022/package.mjs"
+	legacy := sha256.Sum256([]byte(key))
+	if normalizeMetaStoreKey(key) == "meta/"+hex.EncodeToString(legacy[:]) {
+		t.Fatal("build metadata still reuses the legacy cache key")
 	}
 }

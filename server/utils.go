@@ -1,13 +1,18 @@
 package server
 
 import (
+	"bytes"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/json"
+	"errors"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/ije/gox/utils"
 	"github.com/ije/gox/valid"
 )
 
@@ -51,6 +56,25 @@ func isNodeBuiltinSpecifier(specifier string) bool {
 // isJsonModuleSpecifier returns true if the specifier is a json module.
 func isJsonModuleSpecifier(specifier string) bool {
 	return strings.HasSuffix(specifier, ".json")
+}
+
+func encodeJSONModule(data []byte) ([]byte, error) {
+	if !json.Valid(data) {
+		return nil, errors.New("invalid json")
+	}
+	return concatBytes(
+		[]byte("export default "),
+		bytes.TrimSuffix(utils.MustEncodeJSON(json.RawMessage(data)), []byte("\n")),
+	), nil
+}
+
+func treeShakeSavePath(savePath string, exports []string) string {
+	return strings.TrimSuffix(savePath, ".mjs") + "_" + sha256Base64(strings.Join(exports, ",")) + ".mjs"
+}
+
+func sha256Base64(value string) string {
+	hash := sha256.Sum256([]byte(value))
+	return base64.RawURLEncoding.EncodeToString(hash[:])
 }
 
 // isHttpSpecifier returns true if the specifier is a remote URL.

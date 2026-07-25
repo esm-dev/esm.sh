@@ -15,6 +15,6 @@ Deno.test("jsr subpath", async () => {
 Deno.test("jsr raw path", async () => {
   const res = await fetch("http://localhost:8080/jsr.io/@std/assert@1.0.10/mod.ts");
   assertEquals(res.status, 200);
-  assertEquals(res.headers.get("x-typescript-types"), "http://localhost:8080/@jsr/std__assert@1.0.10/_dist/mod.d.ts");
+  assertEquals(res.headers.get("x-typescript-types"), "/@jsr/std__assert@1.0.10/_dist/mod.d.ts");
   assertStringIncludes(await res.text(), "/@jsr/std__assert@1.0.10/denonext/mod.ts.mjs");
 });

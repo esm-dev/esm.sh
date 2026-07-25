@@ -13,6 +13,7 @@ import (
 type BuildQueue struct {
 	lock      sync.Mutex
 	tasks     map[string]*BuildTask
+	canonical map[string]*BuildTask
 	queue     map[*BuildTask]struct{}
 	pending   *list.List
 	chann     int
@@ -21,6 +22,8 @@ type BuildQueue struct {
 
 type BuildTask struct {
 	ctx       *BuildContext
+	key       string
+	canonical string
 	waitChans []chan BuildOutput
 	createdAt time.Time
 	startedAt time.Time
@@ -28,6 +31,7 @@ type BuildTask struct {
 
 type BuildOutput struct {
 	meta *BuildMeta
+	ctx  *BuildContext
 	err  error
 }
 
@@ -36,10 +40,11 @@ func NewBuildQueue(concurrency int) *BuildQueue {
 		concurrency = 1 // ensure at least 1 concurrent task
 	}
 	return &BuildQueue{
-		queue:   map[*BuildTask]struct{}{},
-		pending: list.New(),
-		tasks:   map[string]*BuildTask{},
-		chann:   concurrency,
+		queue:     map[*BuildTask]struct{}{},
+		pending:   list.New(),
+		tasks:     map[string]*BuildTask{},
+		canonical: map[string]*BuildTask{},
+		chann:     concurrency,
 	}
 }
 
@@ -50,7 +55,11 @@ func (q *BuildQueue) Add(ctx *BuildContext) chan BuildOutput {
 
 	ch := make(chan BuildOutput, 1)
 
-	task, ok := q.tasks[ctx.Path()]
+	key := ctx.Path()
+	task, ok := q.canonical[key]
+	if !ok {
+		task, ok = q.tasks[key]
+	}
 	if ok {
 		task.waitChans = append(task.waitChans, ch)
 		return ch
@@ -58,13 +67,14 @@ func (q *BuildQueue) Add(ctx *BuildContext) chan BuildOutput {
 
 	task = &BuildTask{
 		ctx:       ctx,
+		key:       key,
 		createdAt: time.Now(),
 		waitChans: []chan BuildOutput{ch},
 	}
 	ctx.status = "pending"
 
 	q.pending.PushBack(task)
-	q.tasks[ctx.Path()] = task
+	q.tasks[key] = task
 
 	q.startSchedulerLocked()
 
@@ -136,15 +146,13 @@ func (q *BuildQueue) run(task *BuildTask) {
 			task.ctx.logger.Errorf("build '%s' panicked: %v", task.ctx.Path(), r)
 		}
 
-		waitChans := task.waitChans
-
 		q.lock.Lock()
+		waitChans := task.waitChans
 		q.chann++
 		delete(q.queue, task)
-		delete(q.tasks, task.ctx.Path())
-		if task.ctx.rawPath != "" {
-			// the `Build` function may have changed the path
-			delete(q.tasks, task.ctx.rawPath)
+		q.deleteTaskLocked(task.key, task)
+		if task.canonical != "" && q.canonical[task.canonical] == task {
+			delete(q.canonical, task.canonical)
 		}
 		q.startSchedulerLocked()
 		q.lock.Unlock()
@@ -168,6 +176,9 @@ func (q *BuildQueue) run(task *BuildTask) {
 	buildCtx, cancel := context.WithTimeout(context.Background(), buildTimeout)
 	defer cancel()
 
+	task.ctx.onPathReady = func() bool {
+		return q.rekey(task)
+	}
 	meta, err := task.ctx.Build(buildCtx)
 	if errors.Is(err, context.DeadlineExceeded) {
 		err = fmt.Errorf("build timeout after %d seconds", buildTimeout/time.Second)
@@ -183,5 +194,28 @@ func (q *BuildQueue) run(task *BuildTask) {
 		task.ctx.status = "error"
 		task.ctx.logger.Errorf("build '%s': %v", task.ctx.Path(), err)
 	}
-	output = BuildOutput{meta: meta, err: err}
+	output = BuildOutput{meta: meta, ctx: task.ctx, err: err}
+}
+
+func (q *BuildQueue) deleteTaskLocked(key string, task *BuildTask) {
+	if key != "" && q.tasks[key] == task {
+		delete(q.tasks, key)
+	}
+}
+
+func (q *BuildQueue) rekey(task *BuildTask) bool {
+	q.lock.Lock()
+	defer q.lock.Unlock()
+
+	key := task.ctx.Path()
+	if current := q.canonical[key]; current != nil && current != task {
+		current.waitChans = append(current.waitChans, task.waitChans...)
+		task.waitChans = nil
+		q.deleteTaskLocked(task.key, task)
+		task.ctx.status = "joined"
+		return false
+	}
+	q.canonical[key] = task
+	task.canonical = key
+	return true
 }

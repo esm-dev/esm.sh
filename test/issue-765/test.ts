@@ -7,7 +7,7 @@ Deno.test("issue #765", async () => {
 
   assertStringIncludes(
     dts,
-    `http://localhost:8080/openai@4.20.0/resources/index.d.ts`,
+    `/openai@4.20.0/resources/index.d.ts`,
   );
 
   const dts2 = await fetch(

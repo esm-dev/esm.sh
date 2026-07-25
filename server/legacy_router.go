@@ -2,7 +2,6 @@ package server
 
 import (
 	"bytes"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,7 +12,6 @@ import (
 
 	"github.com/esm-dev/esm.sh/internal/npm"
 	"github.com/esm-dev/esm.sh/internal/storage"
-	"github.com/ije/esbuild-internal/xxhash"
 	"github.com/ije/gox/utils"
 	"github.com/ije/gox/valid"
 	"github.com/ije/rex"
@@ -152,7 +150,6 @@ func legacyESM(ctx *rex.Context, fs storage.Storage, buildVersionPrefix string) 
 				return rex.Status(500, err.Error())
 			}
 			var b strings.Builder
-			b.WriteString(getOrigin(ctx))
 			if buildVersionPrefix != "" {
 				b.WriteByte('/')
 				b.WriteString(buildVersionPrefix)
@@ -189,19 +186,16 @@ func legacyESM(ctx *rex.Context, fs storage.Storage, buildVersionPrefix string) 
 				ctx.SetHeader("Content-Type", ctJavaScript)
 			case ".ts", ".mts":
 				ctx.SetHeader("Content-Type", ctTypeScript)
-				// resolve hostname in typescript definition files if the origin is not "https://esm.sh"
 				if endsWith(pathname, ".d.ts", ".d.mts") {
-					origin := getOrigin(ctx)
-					if origin != "https://esm.sh" {
-						defer f.Close()
-						data, err := io.ReadAll(f)
-						if err != nil {
-							return rex.Status(500, "Failed to read data from storage")
-						}
-						data = bytes.ReplaceAll(data, []byte("https://esm.sh/v"), []byte(origin+"/v"))
-						data = bytes.ReplaceAll(data, []byte("https://legacy.esm.sh/v"), []byte(origin+"/v"))
-						return data
+					defer f.Close()
+					data, err := io.ReadAll(f)
+					if err != nil {
+						return rex.Status(500, "Failed to read data from storage")
 					}
+					data = bytes.ReplaceAll(data, []byte("https://esm.sh/v"), []byte("/v"))
+					data = bytes.ReplaceAll(data, []byte("https://legacy.esm.sh/v"), []byte("/v"))
+					ctx.SetHeader("Cache-Control", ccImmutable)
+					return data
 				}
 			case ".map":
 				ctx.SetHeader("Content-Type", ctJSON)
@@ -222,9 +216,7 @@ func legacyESM(ctx *rex.Context, fs storage.Storage, buildVersionPrefix string) 
 				varyUA = true
 				savePath += "." + getBuildTargetByUA(ctx.UserAgent())
 			}
-			h := xxhash.New()
-			h.Write([]byte(query))
-			savePath += "." + base64.RawURLEncoding.EncodeToString(h.Sum(nil))
+			savePath += "." + sha256Base64(query)
 		}
 		savePath += ".meta"
 		f, _, e := fs.Get(savePath)
@@ -244,7 +236,7 @@ func legacyESM(ctx *rex.Context, fs storage.Storage, buildVersionPrefix string) 
 					ctx.SetHeader("X-ESM-Id", ret.EsmId)
 				}
 				if ret.Dts != "" {
-					ctx.SetHeader("X-TypeScript-Types", getOrigin(ctx)+ret.Dts)
+					ctx.SetHeader("X-TypeScript-Types", ret.Dts)
 				}
 				return ret.Code
 			}
@@ -253,13 +245,12 @@ func legacyESM(ctx *rex.Context, fs storage.Storage, buildVersionPrefix string) 
 
 	// strip leading `/stable/*` and `/v<build-version>/*`
 	if buildVersionPrefix != "" {
-		origin := getOrigin(ctx)
 		if strings.HasPrefix(pathname, "/node_") && strings.HasSuffix(pathname, ".js") {
 			pathname = "/node/" + strings.TrimSuffix(strings.TrimPrefix(pathname, "/node_"), ".js") + ".mjs"
 		} else if pathname == "/node.ns.d.ts" {
 			return rex.Status(404, "Not Found")
 		}
-		return redirect(ctx, fmt.Sprintf("%s%s%s", origin, pathname, query), true)
+		return redirect(ctx, pathname+query, true)
 	}
 
 	return rex.Next()

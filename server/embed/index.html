@@ -372,7 +372,7 @@
     hljs.registerLanguage("xml", xml);
 
     init("/md4w@0.2.7/js/md4w-small.wasm").then(() => {
-      const html = mdToHtml(README);
+      const html = mdToHtml(README.replaceAll("https://esm.sh", location.origin));
       document.querySelector("main").innerHTML = html;
 
       // scroll to hashHeading

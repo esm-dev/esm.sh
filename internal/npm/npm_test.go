@@ -5,6 +5,51 @@ import (
 	"time"
 )
 
+func TestValidatePkgPrNewName(t *testing.T) {
+	for _, name := range []string{
+		"tinybench",
+		"@scope/package",
+		"sveltejs/svelte",
+		"tinylibs/tinybench/tinybench",
+		"owner/repo/@scope/package",
+	} {
+		if !ValidatePkgPrNewName(name) {
+			t.Errorf("expected %q to be valid", name)
+		}
+	}
+
+	for _, name := range []string{
+		"",
+		".",
+		"..",
+		"owner/../package",
+		"owner//package",
+		"/owner/repo",
+		"owner/repo/",
+		"owner/repo/package/extra",
+		"owner/repo/@scope",
+		`owner\repo`,
+		"owner/repo/package?query",
+	} {
+		if ValidatePkgPrNewName(name) {
+			t.Errorf("expected %q to be invalid", name)
+		}
+	}
+}
+
+func TestValidatePkgPrNewVersion(t *testing.T) {
+	for _, version := range []string{"main", "123", "a832a55", "feature-1"} {
+		if !ValidatePkgPrNewVersion(version) {
+			t.Errorf("expected %q to be valid", version)
+		}
+	}
+	for _, version := range []string{"", ".", "..", "../main", "feature/main"} {
+		if ValidatePkgPrNewVersion(version) {
+			t.Errorf("expected %q to be invalid", version)
+		}
+	}
+}
+
 func TestIsExactVersion(t *testing.T) {
 	tests := []struct {
 		name    string

@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path"
 	"slices"
@@ -987,11 +988,12 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 	}
 	params := []string{}
 	if len(args.Alias) > 0 {
-		var alias []string
+		var alias sort.StringSlice
 		for k, v := range args.Alias {
 			alias = append(alias, fmt.Sprintf("%s:%s", k, v))
 		}
-		params = append(params, "alias="+strings.Join(alias, ","))
+		alias.Sort()
+		params = append(params, "alias="+url.QueryEscape(strings.Join(alias, ",")))
 	}
 	if len(args.Deps) > 0 {
 		var deps sort.StringSlice
@@ -999,7 +1001,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 			deps = append(deps, n+"@"+v)
 		}
 		deps.Sort()
-		params = append(params, "deps="+strings.Join(deps, ","))
+		params = append(params, "deps="+url.QueryEscape(strings.Join(deps, ",")))
 	}
 	if args.External.Len() > 0 {
 		external := make(sort.StringSlice, args.External.Len())
@@ -1007,13 +1009,10 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 			external[i] = e
 		}
 		external.Sort()
-		params = append(params, "external="+strings.Join(external, ","))
+		params = append(params, "external="+url.QueryEscape(strings.Join(external, ",")))
 	}
 	if len(args.Conditions) > 0 {
-		conditions := make(sort.StringSlice, len(args.Conditions))
-		copy(conditions, args.Conditions)
-		conditions.Sort()
-		params = append(params, "conditions="+strings.Join(conditions, ","))
+		params = append(params, "conditions="+url.QueryEscape(strings.Join(args.Conditions, ",")))
 	}
 	if dep.SubPath != "" && strings.HasSuffix(dep.SubPath, ".json") {
 		params = append(params, "module")
@@ -1128,7 +1127,7 @@ func (ctx *BuildContext) getImportPath(esm EsmPath, buildArgsPrefix string, exte
 }
 
 func (ctx *BuildContext) getSavePath() string {
-	return normalizeSavePath(path.Join("modules", ctx.Path()))
+	return normalizeSavePath(path.Join(buildStoragePrefix, ctx.Path()))
 }
 
 func (ctx *BuildContext) getBuildArgsPrefix(isDts bool) string {

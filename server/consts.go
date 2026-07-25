@@ -5,6 +5,9 @@ const (
 	maxAssetFileSize      = 50 * MB
 	maxPackageTarballSize = 256 * MB
 	lruCacheCapacity      = 10000
+	buildCacheVersion     = "v2"
+	buildStoragePrefix    = "modules/" + buildCacheVersion
+	typesStoragePrefix    = "types/" + buildCacheVersion
 )
 
 // asset file extensions

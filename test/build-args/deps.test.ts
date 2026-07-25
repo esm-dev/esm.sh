@@ -7,10 +7,10 @@ Deno.test("?deps", async () => {
     assertStringIncludes(code, 'import "/react-dom@18.2.0/X-ZHJlYWN0QDE4LjIuMA/es2022/react-dom.mjs"');
     assertStringIncludes(code, 'import "/react@18.2.0/es2022/jsx-runtime.mjs"');
     assertStringIncludes(code, 'import "/react@18.2.0/es2022/react.mjs"');
-    assertStringIncludes(code, 'import "/react-transition-group@^4.4.5?deps=react-dom@18.2.0,react@18.2.0&target=es2022"');
+    assertStringIncludes(code, 'import "/react-transition-group@^4.4.5?deps=react-dom%4018.2.0%2Creact%4018.2.0&target=es2022"');
     assertStringIncludes(code, 'export * from "/@mui/material@5.16.7/X-ZHJlYWN0LWRvbUAxOC4yLjAscmVhY3RAMTguMi4w/es2022/material.mjs"');
-    assertStringIncludes(code, 'import "/@mui/system@^5.16.7/createTheme?deps=react@18.2.0&target=es2022"');
-    assertStringIncludes(code, 'import "/@mui/utils@^5.16.6/useTimeout?deps=react@18.2.0&target=es2022"');
+    assertStringIncludes(code, 'import "/@mui/system@^5.16.7/createTheme?deps=react%4018.2.0&target=es2022"');
+    assertStringIncludes(code, 'import "/@mui/utils@^5.16.6/useTimeout?deps=react%4018.2.0&target=es2022"');
   }
   {
     const res = await fetch("http://localhost:8080/@mui/material@5.16.7/X-ZHJlYWN0LWRvbUAxOC4yLjAscmVhY3RAMTguMi4w/es2022/material.mjs");
@@ -18,9 +18,9 @@ Deno.test("?deps", async () => {
     assertStringIncludes(code, 'from"/react-dom@18.2.0/X-ZHJlYWN0QDE4LjIuMA/es2022/react-dom.mjs"');
     assertStringIncludes(code, 'from"/react@18.2.0/es2022/jsx-runtime.mjs"');
     assertStringIncludes(code, 'from"/react@18.2.0/es2022/react.mjs"');
-    assertStringIncludes(code, 'from"/react-transition-group@^4.4.5?deps=react-dom@18.2.0,react@18.2.0&target=es2022"');
-    assertStringIncludes(code, 'from"/@mui/system@^5.16.7/createTheme?deps=react@18.2.0&target=es2022"');
-    assertStringIncludes(code, 'from"/@mui/utils@^5.16.6/useTimeout?deps=react@18.2.0&target=es2022"');
+    assertStringIncludes(code, 'from"/react-transition-group@^4.4.5?deps=react-dom%4018.2.0%2Creact%4018.2.0&target=es2022"');
+    assertStringIncludes(code, 'from"/@mui/system@^5.16.7/createTheme?deps=react%4018.2.0&target=es2022"');
+    assertStringIncludes(code, 'from"/@mui/utils@^5.16.6/useTimeout?deps=react%4018.2.0&target=es2022"');
   }
 });
 
@@ -31,7 +31,7 @@ Deno.test("?deps in TypeScript types", async () => {
   assert(dtsUrl, "X-TypeScript-Types header should be present");
   assertStringIncludes(dtsUrl, "/X-", "DTS URL should include X-<hash> encoded build args");
 
-  const dtsRes = await fetch(dtsUrl);
+  const dtsRes = await fetch(new URL(dtsUrl, res.url));
   const dtsCode = await dtsRes.text();
   assertStringIncludes(dtsCode, "@mui/utils", "DTS should import from @mui/utils");
   assertStringIncludes(

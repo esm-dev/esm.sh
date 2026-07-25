@@ -27,7 +27,7 @@ Deno.test("redirect semantic versioning module for deno target", async () => {
     res.body?.cancel();
     assertEquals(res.status, 302);
     assertEquals(res.headers.get("cache-control"), "public, max-age=600");
-    assertStringIncludes(res.headers.get("location")!, "http://localhost:8080/preact@");
+    assertStringIncludes(res.headers.get("location")!, "/preact@");
     assertStringIncludes(res.headers.get("vary") ?? "", "User-Agent");
   }
 
@@ -50,9 +50,9 @@ Deno.test("redirect asset URLs", async () => {
     res.body?.cancel();
     assertEquals(res.status, 302);
     assertEquals(res.headers.get("cache-control"), "public, max-age=600");
-    assertStringIncludes(res.headers.get("location")!, "http://localhost:8080/react@");
+    assertStringIncludes(res.headers.get("location")!, "/react@");
 
-    const res2 = await fetch(res.headers.get("location")!, { redirect: "manual" });
+    const res2 = await fetch(new URL(res.headers.get("location")!, res.url), { redirect: "manual" });
     const pkg = await res2.json();
     assertEquals(res2.status, 200);
     assertEquals(res2.headers.get("cache-control"), "public, max-age=31536000, immutable");
@@ -63,9 +63,9 @@ Deno.test("redirect asset URLs", async () => {
     res.body?.cancel();
     assertEquals(res.status, 302);
     assertEquals(res.headers.get("cache-control"), "public, max-age=600");
-    assertStringIncludes(res.headers.get("location")!, "http://localhost:8080/react@18.");
+    assertStringIncludes(res.headers.get("location")!, "/react@18.");
 
-    const res2 = await fetch(res.headers.get("location")!, { redirect: "manual" });
+    const res2 = await fetch(new URL(res.headers.get("location")!, res.url), { redirect: "manual" });
     const pkg = await res2.json();
     assertEquals(res2.status, 200);
     assertEquals(res2.headers.get("cache-control"), "public, max-age=31536000, immutable");
@@ -76,10 +76,10 @@ Deno.test("redirect asset URLs", async () => {
     res.body?.cancel();
     assertEquals(res.status, 302);
     assertEquals(res.headers.get("cache-control"), "public, max-age=600");
-    assertStringIncludes(res.headers.get("location")!, "http://localhost:8080/react@");
+    assertStringIncludes(res.headers.get("location")!, "/react@");
     assert(res.headers.get("location")!.endsWith("/package.json?module"));
 
-    const res2 = await fetch(res.headers.get("location")!, { redirect: "manual" });
+    const res2 = await fetch(new URL(res.headers.get("location")!, res.url), { redirect: "manual" });
     const js = await res2.text();
     assertEquals(res2.status, 200);
     assertEquals(res2.headers.get("cache-control"), "public, max-age=31536000, immutable");
@@ -91,7 +91,7 @@ Deno.test("redirect asset URLs", async () => {
     res.body?.cancel();
     assertEquals(res.status, 301);
     assertEquals(res.headers.get("cache-control"), "public, max-age=31536000, immutable");
-    assertEquals(res.headers.get("location")!, "http://localhost:8080/@lezer/highlight@1.2.1/dist/index.js?raw");
+    assertEquals(res.headers.get("location")!, "/@lezer/highlight@1.2.1/dist/index.js?raw");
   }
 });
 
@@ -105,7 +105,7 @@ Deno.test("Fix wasm URLs with `target` segment", async () => {
     assertEquals(res.status, 301);
     assertEquals(
       res.headers.get("location"),
-      "http://localhost:8080/lightningcss-wasm@1.19.0/lightningcss_node.wasm",
+      "/lightningcss-wasm@1.19.0/lightningcss_node.wasm",
     );
   }
   {
@@ -117,7 +117,7 @@ Deno.test("Fix wasm URLs with `target` segment", async () => {
     assertEquals(res.status, 301);
     assertEquals(
       res.headers.get("location"),
-      "http://localhost:8080/esm-compiler@0.7.2/pkg/esm_compiler_bg.wasm",
+      "/esm-compiler@0.7.2/pkg/esm_compiler_bg.wasm",
     );
   }
   {
@@ -129,7 +129,7 @@ Deno.test("Fix wasm URLs with `target` segment", async () => {
     assertEquals(res.status, 301);
     assertEquals(
       res.headers.get("location"),
-      "http://localhost:8080/gh/oxc-project/oxc@7d785c3/napi/parser/parser.wasm32-wasi.wasm",
+      "/gh/oxc-project/oxc@7d785c3/napi/parser/parser.wasm32-wasi.wasm",
     );
   }
 });
@@ -143,7 +143,7 @@ Deno.test("Fix json URLs with `target` segment", async () => {
   assertEquals(res.status, 301);
   assertEquals(
     res.headers.get("location"),
-    "http://localhost:8080/lightningcss-wasm@1.19.0/package.json",
+    "/lightningcss-wasm@1.19.0/package.json",
   );
 });
 
@@ -173,7 +173,7 @@ Deno.test("redirect to css entry", async () => {
   const res = await fetch("http://localhost:8080/@markprompt/css@0.33.0", { redirect: "manual" });
   res.body?.cancel();
   assertEquals(res.status, 301);
-  assertEquals(res.headers.get("location"), "http://localhost:8080/@markprompt/css@0.33.0/markprompt.css");
+  assertEquals(res.headers.get("location"), "/@markprompt/css@0.33.0/markprompt.css");
 });
 
 Deno.test("[workaround] force the dependency version of react equals to react-dom", async () => {

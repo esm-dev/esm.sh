@@ -8,7 +8,7 @@ Deno.test("issue #606", async (t) => {
     res.body?.cancel();
     assertEquals(
       res.headers.get("x-typescript-types")!,
-      `http://localhost:8080/@sinclair/typebox@0.28.5/typebox.d.ts`,
+      `/@sinclair/typebox@0.28.5/typebox.d.ts`,
     );
   });
 
@@ -19,7 +19,7 @@ Deno.test("issue #606", async (t) => {
     res.body?.cancel();
     assertEquals(
       res.headers.get("x-typescript-types")!,
-      `http://localhost:8080/@sinclair/typebox@0.28.5/value/index.d.ts`,
+      `/@sinclair/typebox@0.28.5/value/index.d.ts`,
     );
   });
 });
