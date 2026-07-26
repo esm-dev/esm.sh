@@ -1,5 +1,11 @@
 # Server Changelog
 
+## v137_7
+
+* Prevent npm credentials from leaking to cross-origin tarball URLs. (#1375)
+* Harden module and web path handling against path traversal. (#1375, #1376, #1377)
+* Add a trusted CDN origin configuration for generated URLs. (#1381)
+
 ## v137_6
 
 * Upgrade `esbuild` to `0.28.1`.
