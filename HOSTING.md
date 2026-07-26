@@ -68,7 +68,7 @@ docker pull ghcr.io/esm-dev/esm.sh:dev    # latest dev version
 Run the container:
 
 ```bash
-docker run -p 80:80 ghcr.io/esm-dev/esm.sh:latest
+docker run -e CDN_ORIGIN=https://cdn.example.com -p 80:80 ghcr.io/esm-dev/esm.sh:latest
 ```
 
 Available environment variables:
