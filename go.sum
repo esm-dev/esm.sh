@@ -10,8 +10,6 @@ github.com/ije/esbuild-internal v0.28.1 h1:aj33Kv0dR5r9MXjTs4OLIKU/+msLaDHs+Bueb
 github.com/ije/esbuild-internal v0.28.1/go.mod h1:s7HvKZ4ZGifyzvgWpSwnJOQTr6b+bsgfNBZ8HAEwwSM=
 github.com/ije/gox v0.10.4 h1:c8QpPl6cCdUOm0FrheF4icNstsTImaRRrJv4l8BQmw8=
 github.com/ije/gox v0.10.4/go.mod h1:3GTaK8WXf6oxRbrViLqKNLTNcMR871Dz0zoujFNmG48=
-github.com/rs/cors v1.11.1 h1:eU3gRzXLRK57F5rKMGMZURNdIG4EoAmX8k94r9wXWHA=
-github.com/rs/cors v1.11.1/go.mod h1:XyqrcTp5zjWr1wsJ8PIRZssZ8b/WMcMf71DJnit4EMU=
 github.com/xyproto/randomstring v1.0.5 h1:YtlWPoRdgMu3NZtP45drfy1GKoojuR7hmRcnhZqKjWU=
 github.com/xyproto/randomstring v1.0.5/go.mod h1:rgmS5DeNXLivK7YprL0pY+lTuhNQW3iGxZ18UQApw/E=
 golang.org/x/crypto v0.53.0 h1:QZ4Muo8THX6CizN2vPPd5fBGHyogrdK9fG4wLPFUsto=

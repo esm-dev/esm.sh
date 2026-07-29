@@ -16,7 +16,6 @@ import (
 	"github.com/esm-dev/esm.sh/internal/storage"
 	"github.com/ije/gox/log"
 	"github.com/ije/gox/set"
-	"github.com/rs/cors"
 	"golang.org/x/crypto/acme/autocert"
 )
 
@@ -130,16 +129,34 @@ func Start() {
 
 // corsMiddleware returns a middleware that handles CORS requests.
 func corsMiddleware(allowOrigins []string, next http.Handler) http.Handler {
-	opts := cors.Options{
-		AllowedOrigins: []string{"*"},
-		AllowedMethods: []string{http.MethodHead, http.MethodGet, http.MethodPost},
-		AllowedHeaders: []string{"*"},
-		MaxAge:         86400,
-	}
-	if len(allowOrigins) > 0 {
-		opts.AllowedOrigins = allowOrigins
-	}
-	return cors.New(opts).Handler(next)
+	allowList := set.NewReadOnly(allowOrigins...)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		origin := r.Header.Get("Origin")
+		isOptions := r.Method == http.MethodOptions
+		h := w.Header()
+		if allowList.Len() > 0 {
+			if origin != "" {
+				if !allowList.Has(origin) {
+					writeStatus(w, http.StatusForbidden, "forbidden")
+					return
+				}
+				h.Set("Access-Control-Allow-Origin", origin)
+			} else if isOptions {
+				writeStatus(w, http.StatusMethodNotAllowed, "method not allowed")
+				return
+			}
+			appendVaryHeader(h, "Origin")
+		} else {
+			h.Set("Access-Control-Allow-Origin", "*")
+		}
+		if isOptions {
+			h.Set("Access-Control-Allow-Headers", "*")
+			h.Set("Access-Control-Max-Age", "86400")
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // customLandingPage returns a middleware that serves the custom landing page
