@@ -27,6 +27,7 @@ var (
 type Config struct {
 	Port                uint16                       `json:"port"`
 	TlsPort             uint16                       `json:"tlsPort"`
+	CdnOrigin           string                       `json:"cdnOrigin"`
 	CustomLandingPage   LandingPageOptions           `json:"customLandingPage"`
 	WorkDir             string                       `json:"workDir"`
 	CorsAllowOrigins    []string                     `json:"corsAllowOrigins"`
@@ -114,6 +115,18 @@ func DefaultConfig() *Config {
 func normalizeConfig(config *Config) {
 	if config.Port == 0 {
 		config.Port = 80
+	}
+	if config.CdnOrigin == "" {
+		config.CdnOrigin = os.Getenv("CDN_ORIGIN")
+	}
+	if origin := config.CdnOrigin; origin != "" {
+		u, err := url.Parse(origin)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			fmt.Println(term.Red("[error] invalid cdn origin: " + origin))
+			config.CdnOrigin = ""
+		} else {
+			config.CdnOrigin = u.Scheme + "://" + u.Host
+		}
 	}
 	if config.WorkDir == "" {
 		if v := os.Getenv("ESMDIR"); v != "" && existsDir(v) {

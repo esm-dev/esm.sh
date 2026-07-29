@@ -701,6 +701,13 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 		return
 	}
 
+	// a relative path specifier is not a valid external module, and would be
+	// mis-parsed as an npm package named ".." by the dependency resolver below
+	if isRelPathSpecifier(specifier) {
+		err = errors.New("could not resolve \"" + specifier + "\"")
+		return
+	}
+
 	// return the specifier directly in analyze mode
 	if analyzeMode {
 		resolvedPath = specifier

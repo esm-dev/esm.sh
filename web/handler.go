@@ -61,6 +61,11 @@ func NewHandler(config Config) *Handler {
 
 func (s *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	pathname := r.URL.Path
+	localPath := filepath.FromSlash(strings.TrimPrefix(pathname, "/"))
+	if strings.IndexByte(localPath, 0) >= 0 || (localPath != "" && !filepath.IsLocal(localPath)) {
+		http.Error(w, "Bad Request", http.StatusBadRequest)
+		return
+	}
 	switch pathname {
 	case "/@hmr", "/@refresh", "/@prefresh", "/@vdr":
 		s.ServeInternalJS(w, r, pathname[2:])
@@ -71,7 +76,7 @@ func (s *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		s.ServeHmrWS(w, r)
 	default:
-		filename := filepath.Join(s.config.AppDir, pathname)
+		filename := filepath.Join(s.config.AppDir, localPath)
 		fi, err := os.Lstat(filename)
 		if err == nil && fi.IsDir() {
 			if pathname != "/" && !strings.HasSuffix(pathname, "/") {

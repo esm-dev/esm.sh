@@ -590,10 +590,40 @@ func (reg *NpmRegistry) isSupportVersionRoute(urlStr string) bool {
 	return false
 }
 
+func sameURLOrigin(a *url.URL, b *url.URL) bool {
+	if !strings.EqualFold(a.Scheme, b.Scheme) || !strings.EqualFold(a.Hostname(), b.Hostname()) {
+		return false
+	}
+	aPort, bPort := a.Port(), b.Port()
+	if aPort == bPort {
+		return true
+	}
+	if strings.EqualFold(a.Scheme, "http") {
+		return aPort == "" && bPort == "80" || aPort == "80" && bPort == ""
+	}
+	return strings.EqualFold(a.Scheme, "https") && (aPort == "" && bPort == "443" || aPort == "443" && bPort == "")
+}
+
 func fetchPackageTarballContext(ctx context.Context, reg *NpmRegistry, installDir string, pkgName string, tarballUrlStr string) (err error) {
 	tarballUrl, err := url.Parse(tarballUrlStr)
 	if err != nil {
 		return
+	}
+	registryUrls := make([]*url.URL, 0, 2)
+	for _, urlStr := range [...]string{reg.Registry, reg.BackupRegistry} {
+		if urlStr != "" {
+			if u, parseErr := url.Parse(urlStr); parseErr == nil {
+				registryUrls = append(registryUrls, u)
+			}
+		}
+	}
+	isTrustedOrigin := func(u *url.URL) bool {
+		for _, registryUrl := range registryUrls {
+			if sameURLOrigin(u, registryUrl) {
+				return true
+			}
+		}
+		return false
 	}
 
 	if reg.isRateLimited() && reg.BackupRegistry != "" && strings.HasPrefix(tarballUrlStr, reg.Registry) {
@@ -609,13 +639,22 @@ func fetchPackageTarballContext(ctx context.Context, reg *NpmRegistry, installDi
 	}
 
 	header := http.Header{}
-	if reg.Token != "" {
-		header.Set("Authorization", "Bearer "+reg.Token)
-	} else if reg.User != "" && reg.Password != "" {
-		header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(reg.User+":"+reg.Password)))
+	if isTrustedOrigin(tarballUrl) {
+		if reg.Token != "" {
+			header.Set("Authorization", "Bearer "+reg.Token)
+		} else if reg.User != "" && reg.Password != "" {
+			header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(reg.User+":"+reg.Password)))
+		}
 	}
 
 	fetchClient := fetch.NewClient("esmd/"+VERSION, 30, false)
+	checkRedirect := fetchClient.CheckRedirect
+	fetchClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if !isTrustedOrigin(req.URL) {
+			req.Header.Del("Authorization")
+		}
+		return checkRedirect(req, via)
+	}
 
 	retryTimes := 0
 RETRY:

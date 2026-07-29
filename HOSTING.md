@@ -68,11 +68,12 @@ docker pull ghcr.io/esm-dev/esm.sh:dev    # latest dev version
 Run the container:
 
 ```bash
-docker run -p 80:80 ghcr.io/esm-dev/esm.sh:latest
+docker run -e CDN_ORIGIN=https://cdn.example.com -p 80:80 ghcr.io/esm-dev/esm.sh:latest
 ```
 
 Available environment variables:
 
+- `CDN_ORIGIN`: The public CDN origin, default is empty (use the request origin).
 - `COMPRESS`: Compress http responses with gzip/brotli, default is `true`.
 - `CUSTOM_LANDING_PAGE_ORIGIN`: The custom landing page origin, default is empty.
 - `CUSTOM_LANDING_PAGE_ASSETS`: The custom landing page assets separated by comma(,), default is empty.

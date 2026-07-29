@@ -1681,9 +1681,11 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 }
 
 func getOrigin(r *http.Request) string {
-	origin := r.Header.Get("X-Real-Origin")
-	if origin != "" {
-		return origin
+	if r.Host == "raw.esm.sh" {
+		return "https://raw.esm.sh"
+	}
+	if config.CdnOrigin != "" {
+		return config.CdnOrigin
 	}
 	proto := "http:"
 	if cfVisitor := r.Header.Get("CF-Visitor"); cfVisitor != "" {

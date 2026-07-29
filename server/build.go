@@ -298,7 +298,12 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 			return
 		}
 		var jsonData []byte
-		jsonPath := path.Join(ctx.wd, "node_modules", ctx.esmPath.PkgName, entry.main)
+		pkgDir := path.Join(ctx.wd, "node_modules", ctx.esmPath.PkgName)
+		jsonPath := path.Join(pkgDir, entry.main)
+		if !strings.HasPrefix(jsonPath, pkgDir+"/") {
+			err = fmt.Errorf("could not resolve module %s", entry.main)
+			return
+		}
 		jsonData, err = os.ReadFile(jsonPath)
 		if err != nil {
 			return
@@ -1198,6 +1203,15 @@ REBUILD:
 				return
 			}
 			name := strings.Split(msg, "\"")[1]
+			// a relative path import can not be externalized, report it as a build error
+			if isRelPathSpecifier(name) || strings.HasPrefix(name, "/") {
+				if loc := res.Errors[0].Location; loc != nil {
+					err = fmt.Errorf("could not resolve \"%s\" (imported by %s)", name, loc.File)
+				} else {
+					err = fmt.Errorf("could not resolve \"%s\"", name)
+				}
+				return
+			}
 			if !implicitExternal.Has(name) {
 				ctx.logger.Warnf("build(%s): implicit external '%s'", ctx.Path(), name)
 				implicitExternal.Add(name)
