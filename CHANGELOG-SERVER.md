@@ -1,5 +1,9 @@
 # Server Changelog
 
+## v137_8
+
+* Fix redirect urls for `raw.esm.sh` hostname. (#1385)
+
 ## v137_7
 
 * Prevent npm credentials from leaking to cross-origin tarball URLs. (#1375)
