@@ -1567,6 +1567,9 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) rex.Handle {
 }
 
 func getOrigin(ctx *rex.Context) string {
+	if ctx.R.Host == "raw.esm.sh" {
+		return "https://raw.esm.sh"
+	}
 	if config.CdnOrigin != "" {
 		return config.CdnOrigin
 	}
