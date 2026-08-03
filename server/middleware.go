@@ -3,6 +3,7 @@ package server
 import (
 	"compress/gzip"
 	"io"
+	"net"
 	"net/http"
 	"runtime/debug"
 	"strconv"
@@ -187,8 +188,9 @@ func remoteIP(r *http.Request) string {
 			ip = r.RemoteAddr
 		}
 	}
-	if i := strings.LastIndexByte(ip, ':'); i > 0 {
-		ip = ip[:i]
+	ip = strings.TrimSpace(ip)
+	if host, _, err := net.SplitHostPort(ip); err == nil {
+		return host
 	}
-	return strings.TrimSpace(ip)
+	return ip
 }
