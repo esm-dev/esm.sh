@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"path"
@@ -99,9 +100,14 @@ func Start() {
 
 	// start the https server with autocert (Let's Encrypt) if the `tlsPort` is set
 	if config.TlsPort > 0 && !DEBUG {
+		cdnURL, err := url.Parse(config.CdnOrigin)
+		if err != nil || cdnURL.Hostname() == "" {
+			logger.Fatal("cdnOrigin is required when tlsPort is enabled")
+		}
 		certManager := &autocert.Manager{
-			Prompt: autocert.AcceptTOS,
-			Cache:  autocert.DirCache(path.Join(config.WorkDir, "autotls")),
+			Prompt:     autocert.AcceptTOS,
+			Cache:      autocert.DirCache(path.Join(config.WorkDir, "autotls")),
+			HostPolicy: autocert.HostWhitelist(cdnURL.Hostname()),
 		}
 		httpsServer := &http.Server{
 			Addr:      fmt.Sprintf(":%d", config.TlsPort),

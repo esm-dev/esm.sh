@@ -8,6 +8,7 @@
   "tlsPort": 0,
 
   // The public CDN origin, default is empty (use `http.Request.Host` as the origin).
+  // Required when `tlsPort` is enabled; automatic certificates are restricted to this hostname.
   "cdnOrigin": "",
 
   // Allowed CORS origins, default is allow all origins.
