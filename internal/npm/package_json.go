@@ -88,12 +88,14 @@ func (a *PackageJSONRaw) ToNpmPackage() *PackageJSON {
 		}
 	}
 
+	// A dependency key becomes a path component of its node_modules symlink, so
+	// drop malformed keys just as npm does.
 	var dependencies map[string]string
 	if m, ok := a.Dependencies.(map[string]any); ok {
 		dependencies = make(map[string]string)
 		for k, v := range m {
 			if s, ok := v.(string); ok {
-				if k != "" && s != "" {
+				if s != "" && ValidatePackageName(k) {
 					dependencies[k] = s
 				}
 			}
@@ -105,7 +107,7 @@ func (a *PackageJSONRaw) ToNpmPackage() *PackageJSON {
 		peerDependencies = make(map[string]string)
 		for k, v := range m {
 			if s, ok := v.(string); ok {
-				if k != "" && s != "" {
+				if s != "" && ValidatePackageName(k) {
 					peerDependencies[k] = s
 				}
 			}

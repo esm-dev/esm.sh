@@ -10,8 +10,15 @@ import (
 	"github.com/ije/gox/term"
 )
 
+// generatedLoaderPath returns a compiled SFC loader cache path outside package
+// install directories. Package names cannot start with ".", so installs cannot
+// plant a file here that esm.sh will trust and execute.
+func generatedLoaderPath(npmrc *NpmRC, name string) string {
+	return path.Join(npmrc.StoreDir(), ".loaders", name)
+}
+
 func transformSvelte(ctx context.Context, npmrc *NpmRC, svelteVersion string, filename string, code string) (output *LoaderOutput, err error) {
-	loaderExecPath := path.Join(npmrc.StoreDir(), "svelte@"+svelteVersion, "loader.js")
+	loaderExecPath := generatedLoaderPath(npmrc, "svelte@"+svelteVersion+".js")
 
 	err = doOnce(loaderExecPath, func() (err error) {
 		if !existsFile(loaderExecPath) {
@@ -64,7 +71,7 @@ func compileSvelteLoader(ctx context.Context, npmrc *NpmRC, svelteVersion string
 
 func transformVue(ctx context.Context, npmrc *NpmRC, vueVersion string, filename string, code string) (output *LoaderOutput, err error) {
 	loaderVersion := "1.0.1" // @esm.sh/vue-compiler
-	loaderExecPath := path.Join(npmrc.StoreDir(), "@vue/compiler-sfc@"+vueVersion, "loader-"+loaderVersion+".js")
+	loaderExecPath := generatedLoaderPath(npmrc, "vue@"+vueVersion+"-"+loaderVersion+".js")
 
 	err = doOnce(loaderExecPath, func() (err error) {
 		if !existsFile(loaderExecPath) {

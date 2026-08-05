@@ -191,3 +191,44 @@ func TestExtractPackageTarball(t *testing.T) {
 		t.Fatal("bad.txt should be extracted in the root directory")
 	}
 }
+
+func TestExtractPackageTarballRejectsEscapingPackageName(t *testing.T) {
+	if err := extractPackageTarball(t.TempDir(), "../escape", bytes.NewReader(nil)); err == nil {
+		t.Fatal("expected an invalid package name error")
+	}
+}
+
+func TestExtractPackageTarballWillNotWriteThroughSymlink(t *testing.T) {
+	installDir := t.TempDir()
+	destination := t.TempDir()
+	if err := os.Mkdir(filepath.Join(installDir, "node_modules"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(destination, filepath.Join(installDir, "node_modules", "test-package")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	var buf bytes.Buffer
+	gw := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gw)
+	content := []byte("export const escaped = true")
+	if err := tw.WriteHeader(&tar.Header{Name: "package/index.js", Mode: 0644, Size: int64(len(content)), Typeflag: tar.TypeReg}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tw.Write(content); err != nil {
+		t.Fatal(err)
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := gw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := extractPackageTarball(installDir, "test-package", bytes.NewReader(buf.Bytes())); err == nil {
+		t.Fatal("expected extraction through a symlink to fail")
+	}
+	if existsFile(filepath.Join(destination, "index.js")) {
+		t.Fatal("tarball escaped the extraction root")
+	}
+}

@@ -82,8 +82,15 @@ func cjsModuleLexer(b *BuildContext, cjsEntry string) (ret cjsModuleLexerResult,
 		if err != nil {
 			return
 		}
+		// The specifier is built from package metadata, so encode it as a JS
+		// string literal instead of interpolating it into one.
+		var specifier []byte
+		specifier, err = json.Marshal("npm:" + path.Join(b.esmPath.PackageId(), cjsEntry))
+		if err != nil {
+			return
+		}
 		js := path.Join(b.wd, "reveal_"+strings.ReplaceAll(cjsEntry[2:], "/", "_"))
-		err = os.WriteFile(js, fmt.Appendf(nil, `console.log(JSON.stringify(Object.keys((await import("npm:%s")).default)))`, path.Join(b.esmPath.PackageId(), cjsEntry)), 0644)
+		err = os.WriteFile(js, fmt.Appendf(nil, `console.log(JSON.stringify(Object.keys((await import(%s)).default)))`, specifier), 0644)
 		if err != nil {
 			return
 		}
@@ -93,6 +100,9 @@ func cjsModuleLexer(b *BuildContext, cjsEntry string) (ret cjsModuleLexerResult,
 			denoPath,
 			"run",
 			"--allow-env",
+			// This child imports an untrusted package: withhold the variables
+			// server/config.go reads esm.sh's own credentials from.
+			"--deny-env=NPM_TOKEN,NPM_USER,NPM_PASSWORD,STORAGE_ACCESS_KEY_ID,STORAGE_SECRET_ACCESS_KEY",
 			"--no-prompt",
 			"--no-config",
 			"--no-lock",
@@ -112,7 +122,8 @@ func cjsModuleLexer(b *BuildContext, cjsEntry string) (ret cjsModuleLexerResult,
 			return
 		}
 		for _, name := range namedExports {
-			if !isJsReservedWord(name) {
+			// These names are spliced into `export const { ... }` by buildModule.
+			if isJsIdentifier(name) && !isJsReservedWord(name) {
 				ret.Exports = append(ret.Exports, name)
 			}
 		}

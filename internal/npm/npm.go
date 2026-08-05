@@ -3,6 +3,7 @@ package npm
 import (
 	"errors"
 	"net/url"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"sort"
@@ -25,6 +26,11 @@ func ValidatePackageName(pkgName string) bool {
 		return false
 	}
 	if strings.HasSuffix(pkgName, ".d.ts.map") {
+		return false
+	}
+	// npm forbids a leading "." in a package name or scope, and callers join
+	// validated names into filesystem paths, so "." and ".." must not pass
+	if strings.HasPrefix(pkgName, ".") || strings.HasPrefix(pkgName, "@.") || strings.Contains(pkgName, "/.") {
 		return false
 	}
 	if strings.HasPrefix(pkgName, "@") {
@@ -59,6 +65,20 @@ func (p *Package) String() string {
 // e.g. "flag": "jsr:@luca/flag@0.0.1"
 // e.g. "tinybench": "https://pkg.pr.new/tinybench@a832a55"
 func ResolveDependencyVersion(v string) (Package, error) {
+	p, err := resolveDependencyVersion(v)
+	if err != nil {
+		return Package{}, err
+	}
+	// Package.Name is joined into filesystem paths by the caller (the install
+	// directory, the node_modules symlink target, the tarball extraction root),
+	// so a resolved name must be a plain non-escaping relative path
+	if p.Name != "" && !filepath.IsLocal(p.Name) {
+		return Package{}, errors.New("invalid package name: " + p.Name)
+	}
+	return p, nil
+}
+
+func resolveDependencyVersion(v string) (Package, error) {
 	// ban file specifier
 	if strings.HasPrefix(v, "file:") {
 		return Package{}, errors.New("unsupported file dependency")
@@ -95,7 +115,7 @@ func ResolveDependencyVersion(v string) (Package, error) {
 			return Package{}, errors.New("unsupported git dependency")
 		}
 		repo := strings.TrimSuffix(gitUrl.Path[1:], ".git")
-		if gitUrl.Scheme == "git+ssh" {
+		if gitUrl.Scheme == "git+ssh" && gitUrl.Port() != "" {
 			repo = gitUrl.Port() + "/" + repo
 		}
 		return Package{

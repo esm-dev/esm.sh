@@ -469,6 +469,10 @@ func (npmrc *NpmRC) installDependenciesContext(ctx context.Context, wd string, p
 			if ctx.Err() != nil {
 				return
 			}
+			// name is the symlink path below, not necessarily the resolved package.
+			if !npm.ValidatePackageName(name) {
+				return
+			}
 			pkg := npm.Package{Name: name, Version: version}
 			p, err := npm.ResolveDependencyVersion(version)
 			if err != nil || p.Url != "" {
@@ -713,12 +717,26 @@ func extractPackageTarball(installDir string, pkgName string, tarball io.Reader)
 }
 
 func extractPackageTarballContext(ctx context.Context, installDir string, pkgName string, tarball io.Reader) (err error) {
+	// pkgName is joined into the extraction path below.
+	if !filepath.IsLocal(pkgName) {
+		return errors.New("invalid package name: " + pkgName)
+	}
+
 	unziped, err := gzip.NewReader(&contextReader{ctx: ctx, reader: tarball})
 	if err != nil {
 		return
 	}
 
-	pkgDir := filepath.Join(installDir, "node_modules", pkgName)
+	// Confine every write to installDir, including when a symlink is already at
+	// the destination. Lexical path checks alone cannot provide that guarantee.
+	if err = ensureDir(installDir); err != nil {
+		return
+	}
+	root, err := os.OpenRoot(installDir)
+	if err != nil {
+		return
+	}
+	defer root.Close()
 
 	// extract tarball
 	tr := tar.NewReader(unziped)
@@ -745,14 +763,16 @@ func extractPackageTarballContext(ctx context.Context, installDir string, pkgNam
 		if filename == "" {
 			continue
 		}
-		savepath := filepath.Join(pkgDir, filename)
+		savepath := filepath.Join("node_modules", pkgName, filename)
 		extname := filepath.Ext(savepath)
 		if !(extname != "" && (assetExts[extname[1:]] || slices.Contains(moduleExts, extname) || extname == ".map" || extname == ".css" || extname == ".svelte" || extname == ".vue")) {
 			// ignore unsupported formats
 			continue
 		}
-		ensureDir(filepath.Dir(savepath))
-		f, err := os.OpenFile(savepath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
+		if err := root.MkdirAll(filepath.Dir(savepath), 0755); err != nil {
+			return err
+		}
+		f, err := root.OpenFile(savepath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
 		if err != nil {
 			return err
 		}

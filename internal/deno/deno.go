@@ -10,13 +10,12 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
 
 	"github.com/ije/gox/utils"
 )
 
-const version = "2.6.9"
+const version = "2.7.13"
 
 func ResolveDenoPath(workDir string) string {
 	denoPath := filepath.Join(workDir, "bin/deno")
@@ -29,7 +28,7 @@ func ResolveDenoPath(workDir string) string {
 func CheckDenoPath(denoPath string) (err error) {
 	fi, err := os.Lstat(denoPath)
 	if err == nil {
-		if !fi.IsDir() && validateDenoVersion(denoPath) == nil {
+		if !fi.IsDir() && validateDenoVersion(denoPath, version) == nil {
 			return nil
 		}
 		// remove the invalid deno path and install a new one
@@ -45,7 +44,7 @@ func installDeno(installPath string, version string) (err error) {
 	// check system installed deno
 	systemDenoPath, err := exec.LookPath("deno")
 	if err == nil {
-		err = validateDenoVersion(systemDenoPath)
+		err = validateDenoVersion(systemDenoPath, version)
 		if err == nil {
 			if runtime.GOOS == "windows" {
 				_, err = utils.CopyFile(systemDenoPath, installPath)
@@ -143,21 +142,15 @@ func getDenoDownloadURL(version string) (string, error) {
 	return fmt.Sprintf("https://github.com/denoland/deno/releases/download/v%s/deno-%s-%s.zip", version, arch, os), nil
 }
 
-func validateDenoVersion(denoPath string) error {
+func validateDenoVersion(denoPath, want string) error {
 	cmd := exec.Command(denoPath, "eval", "console.log(Deno.version.deno)")
 	cmd.Env = append(os.Environ(), "DENO_NO_UPDATE_CHECK=1")
 	output, err := cmd.Output()
 	if err != nil {
 		return err
 	}
-	version := strings.Split(strings.TrimSpace(string(output)), ".")
-	if len(version) == 3 {
-		major, _ := strconv.Atoi(version[0])
-		minor, _ := strconv.Atoi(version[1])
-		// check if the installed deno version is greater than or equal to 2.4
-		if major > 2 || (major == 2 && minor >= 4) {
-			return nil
-		}
+	if strings.TrimSpace(string(output)) == want {
+		return nil
 	}
-	return errors.New("invalid deno version")
+	return errors.New("invalid deno version: expected " + want)
 }

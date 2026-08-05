@@ -1,9 +1,52 @@
 package npm
 
 import (
+	"reflect"
 	"testing"
 	"time"
 )
+
+func TestValidatePackageName(t *testing.T) {
+	for _, name := range []string{"react", "lodash.merge", "@scope/package"} {
+		if !ValidatePackageName(name) {
+			t.Errorf("ValidatePackageName(%q) = false, want true", name)
+		}
+	}
+	for _, name := range []string{".", "..", ".package", "@./package", "@../package", "@scope/.package", "../package"} {
+		if ValidatePackageName(name) {
+			t.Errorf("ValidatePackageName(%q) = true, want false", name)
+		}
+	}
+}
+
+func TestResolveDependencyVersionRejectsEscapingName(t *testing.T) {
+	for _, version := range []string{"npm:../escape@1.0.0", "../../escape#v1.0.0"} {
+		if _, err := ResolveDependencyVersion(version); err == nil {
+			t.Errorf("ResolveDependencyVersion(%q) returned no error", version)
+		}
+	}
+
+	pkg, err := ResolveDependencyVersion("git+ssh://git@github.com/esm-dev/esm.sh.git#v1.0.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pkg.Name != "esm-dev/esm.sh" {
+		t.Fatalf("resolved package name = %q, want %q", pkg.Name, "esm-dev/esm.sh")
+	}
+}
+
+func TestToNpmPackageDropsInvalidDependencyNames(t *testing.T) {
+	pkg := (&PackageJSONRaw{
+		Dependencies:     map[string]any{"react": "19.0.0", "../escape": "1.0.0"},
+		PeerDependencies: map[string]any{"vue": "3.0.0", "@scope/..": "1.0.0"},
+	}).ToNpmPackage()
+	if !reflect.DeepEqual(pkg.Dependencies, map[string]string{"react": "19.0.0"}) {
+		t.Fatalf("dependencies = %#v", pkg.Dependencies)
+	}
+	if !reflect.DeepEqual(pkg.PeerDependencies, map[string]string{"vue": "3.0.0"}) {
+		t.Fatalf("peer dependencies = %#v", pkg.PeerDependencies)
+	}
+}
 
 func TestIsExactVersion(t *testing.T) {
 	tests := []struct {
