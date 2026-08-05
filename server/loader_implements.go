@@ -10,9 +10,6 @@ import (
 	"github.com/ije/gox/term"
 )
 
-// generatedLoaderPath returns a compiled SFC loader cache path outside package
-// install directories. Package names cannot start with ".", so installs cannot
-// plant a file here that esm.sh will trust and execute.
 func generatedLoaderPath(npmrc *NpmRC, name string) string {
 	return path.Join(npmrc.StoreDir(), ".loaders", name)
 }
