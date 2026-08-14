@@ -1605,7 +1605,7 @@ func (ctx *BuildContext) install() (err error) {
 			p.Version = strings.TrimPrefix(p.Version, "v")
 		}
 
-		// Check if the `SubPath` is the same as the `main` or `module` field of the package.json
+		// Check if `SubPath` resolves to the package root
 		if subPath := ctx.esmPath.SubPath; subPath != "" && ctx.target != "types" {
 			isMainModule := false
 			check := func(s string) bool {
@@ -1623,9 +1623,10 @@ func (ctx *BuildContext) install() (err error) {
 						paths := getExportConditionPaths(obj)
 						isMainModule = slices.ContainsFunc(paths, check)
 					}
+				} else if !strings.HasPrefix(p.Exports.Keys()[0], ".") {
+					isMainModule = slices.ContainsFunc(getExportConditionPaths(p.Exports), check)
 				}
-			}
-			if !isMainModule {
+			} else {
 				isMainModule = (p.Module != "" && check(p.Module)) || (p.Main != "" && check(p.Main))
 			}
 			if isMainModule {
