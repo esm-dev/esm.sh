@@ -245,8 +245,8 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 			}
 		}
 
-		if entry.main == "" && len(ctx.pkgJson.Imports) > 0 {
-			if v, ok := ctx.pkgJson.Imports[ctx.pkgJson.PkgName+"/*"]; ok {
+		if entry.main == "" && ctx.pkgJson.Imports.Len() > 0 {
+			if v, ok := ctx.pkgJson.Imports.Get(ctx.pkgJson.PkgName + "/*"); ok {
 				if s, ok := v.(string); ok && strings.HasSuffix(s, "/*") {
 					for _, ext := range []string{"mjs", "js", "cjs", "mts", "ts", "tsx", "cts"} {
 						isModule := ext == "mjs" || ext == "mts" || ext == "ts" || (ext == "js" && pkgJson.Type == "module")

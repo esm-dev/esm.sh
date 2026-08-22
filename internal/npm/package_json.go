@@ -33,7 +33,7 @@ type PackageJSONRaw struct {
 	SideEffects      any             `json:"sideEffects"`
 	Dependencies     any             `json:"dependencies"`
 	PeerDependencies any             `json:"peerDependencies"`
-	Imports          any             `json:"imports"`
+	Imports          json.RawMessage `json:"imports"`
 	TypesVersions    any             `json:"typesVersions"`
 	Exports          json.RawMessage `json:"exports"`
 	Esmsh            any             `json:"esm.sh"`
@@ -60,7 +60,7 @@ type PackageJSON struct {
 	Browser          map[string]string
 	Dependencies     map[string]string
 	PeerDependencies map[string]string
-	Imports          map[string]any
+	Imports          JSONObject
 	TypesVersions    map[string]any
 	Exports          JSONObject
 	Esmsh            map[string]any
@@ -139,6 +139,11 @@ func (a *PackageJSONRaw) ToNpmPackage() *PackageJSON {
 		}
 	}
 
+	imports := JSONObject{}
+	if rawImports := a.Imports; rawImports != nil {
+		imports.UnmarshalJSON(rawImports)
+	}
+
 	exports := JSONObject{}
 	if rawExports := a.Exports; rawExports != nil {
 		var s string
@@ -178,7 +183,7 @@ func (a *PackageJSONRaw) ToNpmPackage() *PackageJSON {
 		SideEffects:      *sideEffects.ReadOnly(),
 		Dependencies:     dependencies,
 		PeerDependencies: peerDependencies,
-		Imports:          asMap(a.Imports),
+		Imports:          imports,
 		TypesVersions:    asMap(a.TypesVersions),
 		Exports:          exports,
 		Esmsh:            asMap(a.Esmsh),

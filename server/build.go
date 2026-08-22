@@ -489,16 +489,16 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 					}
 
 					// resolve specifier using the `imports` field of package.json/deno.json
-					if len(pkgJson.Imports) > 0 {
+					if pkgJson.Imports.Len() > 0 {
 						var v any
 						var ok bool
-						v, ok = pkgJson.Imports[specifier]
+						v, ok = pkgJson.Imports.Get(specifier)
 						if !ok && !isRelPathSpecifier(specifier) {
 							// check tailing slash
 							pkgName, _, subPath := splitEsmPath(specifier)
-							v, ok = pkgJson.Imports[pkgName]
+							v, ok = pkgJson.Imports.Get(pkgName)
 							if !ok {
-								v, ok = pkgJson.Imports[pkgName+"/"]
+								v, ok = pkgJson.Imports.Get(pkgName + "/")
 							}
 							if ok && len(subPath) > 0 {
 								if s, ok := v.(string); ok {
@@ -507,25 +507,16 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 							}
 						}
 						if ok {
+							var target string
 							if s, ok := v.(string); ok {
-								specifier = normalizeImportSpecifier(s)
+								target = s
+							} else if obj, ok := v.(npm.JSONObject); ok {
+								target = ctx.resolveConditionExportEntry(obj, pkgJson.Type).main
+							}
+							if target != "" {
+								specifier = normalizeImportSpecifier(target)
 								if isRelPathSpecifier(specifier) {
 									specifier = ctx.esmPath.PkgName + "/" + strings.TrimPrefix(specifier, "./")
-								}
-							} else if m, ok := v.(map[string]any); ok {
-								targets := []string{"browser", "module", "import", "default"}
-								if ctx.isDenoTarget() {
-									targets = []string{"deno", "module", "import", "default"}
-								} else if ctx.target == "node" {
-									targets = []string{"node", "module", "import", "default"}
-								}
-								for _, t := range targets {
-									if v, ok := m[t]; ok {
-										if s, ok := v.(string); ok {
-											specifier = s
-											break
-										}
-									}
 								}
 							}
 						}

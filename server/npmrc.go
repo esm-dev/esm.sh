@@ -367,9 +367,10 @@ func (npmrc *NpmRC) installPackageContext(ctx context.Context, pkg npm.Package) 
 				}
 			}
 			if denoJson != nil {
-				if len(denoJson.Imports) > 0 {
+				if denoJson.Imports.Len() > 0 {
 					buf.WriteString(`,"imports":{`)
-					for k, v := range denoJson.Imports {
+					for _, k := range denoJson.Imports.Keys() {
+						v, _ := denoJson.Imports.Get(k)
 						if s, ok := v.(string); ok {
 							buf.WriteString(`"` + k + `":"` + s + `",`)
 						}
