@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"testing"
 )
@@ -92,5 +93,49 @@ import ReactDOM = { client: import('https://esm.sh/react-dom@1.0.0/client.d.ts')
 
 	if buf.String() != expectedDts {
 		t.Fatal("transformed dts not match, want:", expectedDts, "got:", buf.String())
+	}
+}
+
+func TestDtsWalkerEdgeCases(t *testing.T) {
+	const rawDts = `type Label = 'import("react")';
+type Comment = unknown; // import("react");
+export { Foo };
+type Text = " from 'pkg' ";
+type Attr = import("pkg", { with: { "resolution-mode": "import" } }).Foo;
+import { "a" as b } from "pkg";
+type Slash = "\\"; export * from "slash";
+`
+	const expectedDts = `type Label = 'import("react")';
+type Comment = unknown; // import("react");
+export { Foo };
+type Text = " from 'pkg' ";
+type Attr = import("/resolved/pkg", { with: { "resolution-mode": "import" } }).Foo;
+import { "a" as b } from "/resolved/pkg";
+type Slash = "\\"; export * from "/resolved/slash";
+`
+
+	buf := bytes.NewBuffer(nil)
+	err := parseDts(bytes.NewBufferString(rawDts), buf, func(specifier string, kind TsImportKind, position int) (string, error) {
+		return "/resolved/" + specifier, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if buf.String() != expectedDts {
+		t.Fatalf("transformed dts not match, want:\n%s\ngot:\n%s", expectedDts, buf.String())
+	}
+}
+
+func TestDtsWalkerResolveError(t *testing.T) {
+	want := errors.New("resolution failed")
+	buf := bytes.NewBuffer(nil)
+	err := parseDts(bytes.NewBufferString(`type T = import("bad").A | import("good").B;`), buf, func(specifier string, kind TsImportKind, position int) (string, error) {
+		if specifier == "bad" {
+			return "", want
+		}
+		return "/resolved/" + specifier, nil
+	})
+	if !errors.Is(err, want) {
+		t.Fatalf("expected %v, got %v", want, err)
 	}
 }

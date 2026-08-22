@@ -6,12 +6,10 @@ import (
 	"os"
 	"path"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/esm-dev/esm.sh/internal/npm"
 	"github.com/esm-dev/esm.sh/internal/storage"
-	"github.com/ije/gox/set"
 	"github.com/ije/gox/utils"
 )
 
@@ -28,18 +26,18 @@ func (ctx *BuildContext) transformDTS(dts string) error {
 }
 
 // transformDTS transforms a `.d.ts` file for deno/editor-lsp
-func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker *set.Set[string]) (n int, err error) {
+func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker map[string]struct{}) (n int, err error) {
 	entry := marker == nil
 	if entry {
-		marker = set.New[string]()
+		marker = map[string]struct{}{}
 	}
 
 	dtsPath := path.Join("/"+ctx.esmPath.PackageId(), buildArgsPrefix, dts)
-	if marker.Has(dtsPath) {
+	if _, ok := marker[dtsPath]; ok {
 		// already transformed
 		return
 	}
-	marker.Add(dtsPath)
+	marker[dtsPath] = struct{}{}
 
 	savePath := normalizeSavePath(path.Join("types", dtsPath))
 	// check if the dts file has been transformed
@@ -61,20 +59,39 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 		}
 		return
 	}
-	defer dtsContent.Close()
-
 	buffer := &bytes.Buffer{}
 
-	deps := set.New[string]()
+	deps := map[string]struct{}{}
+	type resolutionKey struct {
+		specifier string
+		kind      TsImportKind
+	}
+	type resolutionValue struct {
+		specifier string
+		err       error
+	}
+	resolutions := map[resolutionKey]resolutionValue{}
 
-	err = parseDts(dtsContent, buffer, func(specifier string, kind TsImportKind, position int) (string, error) {
+	err = parseDts(dtsContent, buffer, func(specifier string, kind TsImportKind, position int) (resolvedSpecifier string, resolveErr error) {
+		key := resolutionKey{specifier, kind}
+		if cached, ok := resolutions[key]; ok {
+			return cached.specifier, cached.err
+		}
+		defer func() {
+			resolutions[key] = resolutionValue{resolvedSpecifier, resolveErr}
+		}()
+
 		if ctx.esmPath.PkgName == "@types/node" {
 			if strings.HasPrefix(specifier, "node:") || nodeBuiltinModules[specifier] || isRelPathSpecifier(specifier) {
 				return specifier, nil
 			}
 		}
+		if isHttpSpecifier(specifier) {
+			return specifier, nil
+		}
 
 		// normalize specifier
+		rawSpecifier := specifier
 		specifier = normalizeImportSpecifier(specifier)
 
 		if isRelPathSpecifier(specifier) {
@@ -120,7 +137,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 			}
 
 			if endsWith(specifier, ".d.ts", ".d.mts", ".d.cts") {
-				deps.Add(specifier)
+				deps[specifier] = struct{}{}
 			} else {
 				specifier += ".d.ts"
 			}
@@ -136,13 +153,16 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 			return specifier, nil
 		}
 
-		depPkgName, _, subPath := splitEsmPath(specifier)
+		depPkgName, depPkgVersion, subPath := splitEsmPath(specifier)
 		specifier = depPkgName
+		if depPkgVersion != "" {
+			specifier += "@" + depPkgVersion
+		}
 		if len(subPath) > 0 {
 			specifier += "/" + subPath
 		}
 
-		if depPkgName == ctx.esmPath.PkgName {
+		if depPkgName == ctx.esmPath.PkgName && (depPkgVersion == "" || depPkgVersion == ctx.esmPath.PkgVersion) {
 			if strings.ContainsRune(subPath, '*') {
 				return fmt.Sprintf(
 					"{ESM_CDN_ORIGIN}/%s/%s%s",
@@ -171,9 +191,11 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 
 		// respect `?alias` query
 		alias, ok := ctx.args.Alias[depPkgName]
+		aliased := ok
 		if ok {
-			aliasPkgName, _, aliasSubPath := splitEsmPath(alias)
+			aliasPkgName, aliasPkgVersion, aliasSubPath := splitEsmPath(alias)
 			depPkgName = aliasPkgName
+			depPkgVersion = aliasPkgVersion
 			if len(aliasSubPath) > 0 {
 				if len(subPath) > 0 {
 					subPath = aliasSubPath + "/" + subPath
@@ -182,6 +204,9 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 				}
 			}
 			specifier = depPkgName
+			if depPkgVersion != "" {
+				specifier += "@" + depPkgVersion
+			}
 			if len(subPath) > 0 {
 				specifier += "/" + subPath
 			}
@@ -189,17 +214,28 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 
 		// respect `?external` query
 		if ctx.externalAll || ctx.args.External.Has(depPkgName) || isPackageInExternalNamespace(depPkgName, ctx.args.External) {
+			if !aliased && strings.HasPrefix(rawSpecifier, "npm:") {
+				return rawSpecifier, nil
+			}
 			return specifier, nil
 		}
 
 		typesPkgName := npm.ToTypesPackageName(depPkgName)
 		if _, ok := ctx.pkgJson.Dependencies[typesPkgName]; ok {
 			depPkgName = typesPkgName
+			depPkgVersion = ""
 		} else if _, ok := ctx.pkgJson.PeerDependencies[typesPkgName]; ok {
 			depPkgName = typesPkgName
+			depPkgVersion = ""
 		}
 
-		_, p, err := ctx.resolveDependency(depPkgName, true)
+		var p *npm.PackageJSON
+		var err error
+		if depPkgVersion != "" {
+			p, err = ctx.npmrc.getPackageInfoContext(ctx.Context(), depPkgName, depPkgVersion)
+		} else {
+			_, p, err = ctx.resolveDependency(depPkgName, true)
+		}
 		if err != nil {
 			if kind == TsDeclareModule && strings.HasSuffix(err.Error(), " not found") {
 				return specifier, nil
@@ -250,32 +286,23 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 
 		return fmt.Sprintf("{ESM_CDN_ORIGIN}%s", b.Path()), nil
 	})
+	dtsContent.Close()
 	if err != nil {
 		return
+	}
+
+	for s := range deps {
+		var j int
+		j, err = transformDTS(ctx, "./"+path.Join(path.Dir(dts), s), buildArgsPrefix, marker)
+		if err != nil {
+			return
+		}
+		n += j
 	}
 
 	err = ctx.storage.Put(savePath, ctx.rewriteDTS(dts, buffer))
-	if err != nil {
-		return
-	}
-
-	var wg sync.WaitGroup
-	var errors []error
-	for _, s := range deps.Values() {
-		wg.Add(1)
-		go func(s string) {
-			j, err := transformDTS(ctx, "./"+path.Join(path.Dir(dts), s), buildArgsPrefix, marker)
-			if err != nil {
-				errors = append(errors, err)
-			}
-			n += j
-			wg.Done()
-		}(s)
-	}
-	wg.Wait()
-
-	if len(errors) > 0 {
-		err = errors[0]
+	if err == nil && !entry {
+		n++
 	}
 	return
 }

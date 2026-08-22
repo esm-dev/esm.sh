@@ -11,16 +11,12 @@ import (
 var (
 	regexpImportDecl        = regexp.MustCompile(`^import(\s+type)?\s*('|"|[\w\$]+|\*|\{)`)
 	regexpExportDecl        = regexp.MustCompile(`^export(\s+type)?\s*(\*|\{)`)
-	regexpFromExpr          = regexp.MustCompile(`(\}|\*|\s)from\s*['"]`)
 	regexpImportPathDecl    = regexp.MustCompile(`^import\s*['"]`)
-	regexpImportCallExpr    = regexp.MustCompile(`(import|require)\(['"][^'"]+['"]\)`)
-	regexpDeclareModuleStmt = regexp.MustCompile(`^declare\s+module\s*['"].+?['"]`)
+	regexpDeclareModuleStmt = regexp.MustCompile(`^declare\s+module\s*['"]`)
 	regexpTSReferenceTag    = regexp.MustCompile(`^\s*<reference\s+(path|types)\s*=\s*['"](.+?)['"].+>`)
 )
 
 var (
-	bytesSingleQoute  = []byte{'\''}
-	bytesDoubleQoute  = []byte{'"'}
 	bytesCommentStart = []byte{'/', '*'}
 	bytesCommentEnd   = []byte{'*', '/'}
 	bytesDoubleSlash  = []byte{'/', '/'}
@@ -41,6 +37,23 @@ const (
 func parseDts(r io.Reader, w *bytes.Buffer, resolve func(specifier string, kind TsImportKind, position int) (resovledPath string, err error)) (err error) {
 	var multiLineComment bool
 	var importOrExportDeclFound bool
+	var importOrExportDeclDepth int
+	var importOrExportDeclMayEnd bool
+	writeSpecifier := func(stmt []byte, quoteStart int, kind TsImportKind) (bool, error) {
+		quoteEnd := findDtsStringEnd(stmt, quoteStart)
+		if quoteEnd < 0 {
+			return false, nil
+		}
+		res, err := resolve(string(stmt[quoteStart+1:quoteEnd]), kind, w.Len()+quoteStart+1)
+		if err != nil {
+			return true, err
+		}
+		w.Write(stmt[:quoteStart+1])
+		w.WriteString(res)
+		w.Write(stmt[quoteEnd:])
+		return true, nil
+	}
+
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(nil, 1024*1024)
 	for scanner.Scan() {
@@ -64,33 +77,24 @@ func parseDts(r io.Reader, w *bytes.Buffer, resolve func(specifier string, kind 
 				w.Write(line)
 			}
 		} else if after, ok := bytes.CutPrefix(line, bytesStripleSlash); ok {
-			rest := after
-			if regexpTSReferenceTag.Match(rest) {
-				a := regexpTSReferenceTag.FindAllSubmatch(rest, 1)
-				format := string(a[0][1])
-				path := string(a[0][2])
-				if format == "path" || format == "types" {
-					if format == "path" {
-						if !isRelPathSpecifier(path) {
-							path = "./" + path
-						}
-					}
-					kind := TsReferenceTypes
-					if format == "path" {
-						kind = TsReferencePath
-					}
-					var res string
-					res, err = resolve(path, kind, w.Len())
-					if err != nil {
-						return
-					}
-					if len(res) > 0 {
-						fmt.Fprintf(w, `/// <reference %s="%s" />`, format, res)
-					} else {
-						fmt.Fprintf(w, `// ignored <reference %s="%s" />`, format, path)
-					}
+			if a := regexpTSReferenceTag.FindSubmatch(after); a != nil {
+				format := string(a[1])
+				specifier := string(a[2])
+				if format == "path" && !isRelPathSpecifier(specifier) {
+					specifier = "./" + specifier
+				}
+				kind := TsReferenceTypes
+				if format == "path" {
+					kind = TsReferencePath
+				}
+				res, err := resolve(specifier, kind, w.Len())
+				if err != nil {
+					return err
+				}
+				if res != "" {
+					fmt.Fprintf(w, `/// <reference %s="%s" />`, format, res)
 				} else {
-					w.Write(line)
+					fmt.Fprintf(w, `// ignored <reference %s="%s" />`, format, specifier)
 				}
 			} else {
 				w.Write(line)
@@ -98,113 +102,217 @@ func parseDts(r io.Reader, w *bytes.Buffer, resolve func(specifier string, kind 
 		} else if bytes.HasPrefix(line, bytesDoubleSlash) {
 			w.Write(line)
 		} else {
-			var i int
-			stmtScanner := bufio.NewScanner(bytes.NewReader(line))
-			stmtScanner.Buffer(nil, 1024*1024)
-			stmtScanner.Split(splitJSStmt)
-			for stmtScanner.Scan() {
-				if i > 0 {
+			stmtIndex := 0
+			for {
+				advance, rawStmt, _ := splitJSStmt(line, true)
+				if stmtIndex > 0 {
 					w.WriteByte(';')
 				}
-				stmt, trimedLeftSpaces := trimSpace(stmtScanner.Bytes())
+				stmt, trimedLeftSpaces := trimSpace(rawStmt)
 				w.Write(trimedLeftSpaces)
 				if len(stmt) > 0 {
-					if regexpImportCallExpr.Match(stmt) {
-						stmt = regexpImportCallExpr.ReplaceAllFunc(stmt, func(importCallExpr []byte) []byte {
-							q := bytesSingleQoute
-							a := bytes.Split(importCallExpr, q)
-							if len(a) != 3 {
-								q = bytesDoubleQoute
-								a = bytes.Split(importCallExpr, q)
-							}
-							if len(a) == 3 {
-								tmp := &bytes.Buffer{}
-								tmp.Write(a[0])
-								tmp.Write(q)
-								var res string
-								res, err = resolve(string(a[1]), TsImportCall, w.Len())
-								if err != nil {
-									return importCallExpr
-								}
-								tmp.WriteString(res)
-								tmp.Write(q)
-								tmp.Write(a[2])
-								return tmp.Bytes()
-							}
-							return importCallExpr
-						})
+					if importOrExportDeclFound && importOrExportDeclMayEnd {
+						if findDtsFromSpecifier(stmt) < 0 {
+							importOrExportDeclFound = false
+							importOrExportDeclDepth = 0
+						}
+						importOrExportDeclMayEnd = false
 					}
 
-					if !importOrExportDeclFound && (bytes.HasPrefix(stmt, []byte("import")) && regexpImportDecl.Match(stmt)) || (bytes.HasPrefix(stmt, []byte("export")) && regexpExportDecl.Match(stmt)) {
+					if !importOrExportDeclFound && ((bytes.HasPrefix(stmt, []byte("import")) && regexpImportDecl.Match(stmt)) || (bytes.HasPrefix(stmt, []byte("export")) && regexpExportDecl.Match(stmt))) {
 						importOrExportDeclFound = true
+						importOrExportDeclDepth = 0
 					}
-					if bytes.HasPrefix(stmt, []byte("declare")) && regexpDeclareModuleStmt.Match(stmt) {
-						q := bytesSingleQoute
-						a := bytes.Split(stmt, q)
-						if len(a) != 3 {
-							q = bytesDoubleQoute
-							a = bytes.Split(stmt, q)
+
+					var rewritten bytes.Buffer
+					last := 0
+					for i := 0; i < len(stmt); {
+						c := stmt[i]
+						if c == '\'' || c == '"' || c == '`' {
+							end := findDtsStringEnd(stmt, i)
+							if end < 0 {
+								break
+							}
+							i = end + 1
+							continue
 						}
-						if len(a) == 3 {
-							w.Write(a[0])
-							w.Write(q)
-							var res string
-							res, err = resolve(string(a[1]), TsDeclareModule, w.Len())
+						if c == '/' && i+1 < len(stmt) {
+							if stmt[i+1] == '/' {
+								break
+							}
+							if stmt[i+1] == '*' {
+								end := bytes.Index(stmt[i+2:], bytesCommentEnd)
+								if end < 0 {
+									multiLineComment = true
+									break
+								}
+								i += end + 4
+								continue
+							}
+						}
+
+						wordLen := 0
+						if bytes.HasPrefix(stmt[i:], []byte("import")) {
+							wordLen = 6
+						} else if bytes.HasPrefix(stmt[i:], []byte("require")) {
+							wordLen = 7
+						}
+						if wordLen > 0 {
+							beforeOK := i == 0 || (stmt[i-1] != '.' && !isDtsIdentifierByte(stmt[i-1]))
+							after := i + wordLen
+							afterOK := after == len(stmt) || !isDtsIdentifierByte(stmt[after])
+							if beforeOK && afterOK {
+								for after < len(stmt) && (stmt[after] == ' ' || stmt[after] == '\t') {
+									after++
+								}
+								if after < len(stmt) && stmt[after] == '(' {
+									after++
+									for after < len(stmt) && (stmt[after] == ' ' || stmt[after] == '\t') {
+										after++
+									}
+									if after < len(stmt) && (stmt[after] == '\'' || stmt[after] == '"') {
+										end := findDtsStringEnd(stmt, after)
+										if end > after+1 {
+											position := w.Len() + rewritten.Len() + after + 1 - last
+											res, err := resolve(string(stmt[after+1:end]), TsImportCall, position)
+											if err != nil {
+												return err
+											}
+											rewritten.Write(stmt[last : after+1])
+											rewritten.WriteString(res)
+											last = end
+											i = end + 1
+											continue
+										}
+									}
+								}
+							}
+						}
+						i++
+					}
+					if last > 0 {
+						rewritten.Write(stmt[last:])
+						stmt = rewritten.Bytes()
+					}
+
+					if importOrExportDeclFound {
+						importOrExportDeclDepth += bytes.Count(stmt, []byte{'{'}) - bytes.Count(stmt, []byte{'}'})
+					}
+
+					wrote := false
+					if match := regexpDeclareModuleStmt.FindIndex(stmt); match != nil {
+						wrote, err = writeSpecifier(stmt, match[1]-1, TsDeclareModule)
+						if err != nil {
+							return
+						}
+					} else if importOrExportDeclFound {
+						quoteStart := findDtsFromSpecifier(stmt)
+						if quoteStart < 0 && bytes.HasPrefix(stmt, []byte("import")) {
+							if match := regexpImportPathDecl.FindIndex(stmt); match != nil {
+								quoteStart = match[1] - 1
+							}
+						}
+						if quoteStart >= 0 {
+							wrote, err = writeSpecifier(stmt, quoteStart, TsImportDecl)
 							if err != nil {
 								return
 							}
-							w.WriteString(res)
-							w.Write(q)
-							w.Write(a[2])
-						} else {
-							w.Write(stmt)
-						}
-					} else if importOrExportDeclFound {
-						if regexpFromExpr.Match(stmt) || (bytes.HasPrefix(stmt, []byte("import")) && regexpImportPathDecl.Match(stmt)) {
-							q := bytesSingleQoute
-							a := bytes.Split(stmt, q)
-							if len(a) != 3 {
-								q = bytesDoubleQoute
-								a = bytes.Split(stmt, q)
+							if wrote {
+								importOrExportDeclFound = false
+								importOrExportDeclDepth = 0
+								importOrExportDeclMayEnd = false
 							}
-							if len(a) == 3 {
-								w.Write(a[0])
-								w.Write(q)
-								var res string
-								res, err = resolve(string(a[1]), TsImportDecl, w.Len())
-								if err != nil {
-									return
-								}
-								w.WriteString(res)
-								w.Write(q)
-								w.Write(a[2])
-							} else {
-								w.Write(stmt)
-							}
-							importOrExportDeclFound = false
-						} else {
-							w.Write(stmt)
 						}
-					} else {
+					}
+					if !wrote {
 						w.Write(stmt)
 					}
+					if advance > 0 && importOrExportDeclFound {
+						importOrExportDeclFound = false
+						importOrExportDeclDepth = 0
+						importOrExportDeclMayEnd = false
+					}
 				}
-				i++
+				stmtIndex++
+				if advance == 0 {
+					break
+				}
+				line = line[advance:]
 			}
-			err = stmtScanner.Err()
-			if err != nil {
-				return
+			if importOrExportDeclFound && importOrExportDeclDepth <= 0 {
+				importOrExportDeclMayEnd = true
 			}
 		}
 		w.WriteByte('\n')
 	}
-	err = scanner.Err()
-	return
+	return scanner.Err()
+}
+
+func findDtsStringEnd(data []byte, start int) int {
+	quote := data[start]
+	for i := start + 1; i < len(data); i++ {
+		if data[i] == quote && !isDtsEscaped(data, i) {
+			return i
+		}
+	}
+	return -1
+}
+
+func findDtsFromSpecifier(data []byte) int {
+	for i := 0; i < len(data); {
+		if data[i] == '\'' || data[i] == '"' || data[i] == '`' {
+			end := findDtsStringEnd(data, i)
+			if end < 0 {
+				return -1
+			}
+			i = end + 1
+			continue
+		}
+		if data[i] == '/' && i+1 < len(data) {
+			if data[i+1] == '/' {
+				return -1
+			}
+			if data[i+1] == '*' {
+				end := bytes.Index(data[i+2:], bytesCommentEnd)
+				if end < 0 {
+					return -1
+				}
+				i += end + 4
+				continue
+			}
+		}
+		if bytes.HasPrefix(data[i:], []byte("from")) && (i == 0 || !isDtsIdentifierByte(data[i-1])) {
+			end := i + 4
+			if end == len(data) || !isDtsIdentifierByte(data[end]) {
+				for end < len(data) && (data[end] == ' ' || data[end] == '\t') {
+					end++
+				}
+				if end < len(data) && (data[end] == '\'' || data[end] == '"') {
+					return end
+				}
+			}
+		}
+		i++
+	}
+	return -1
+}
+
+func isDtsIdentifierByte(c byte) bool {
+	return c == '$' || c == '_' || c >= '0' && c <= '9' || c >= 'A' && c <= 'Z' || c >= 'a' && c <= 'z'
+}
+
+func isDtsEscaped(data []byte, index int) bool {
+	n := 0
+	for i := index - 1; i >= 0 && data[i] == '\\'; i-- {
+		n++
+	}
+	return n%2 == 1
 }
 
 // A split function for bufio.Scanner to split javascript statement
 func splitJSStmt(data []byte, atEOF bool) (advance int, token []byte, err error) {
 	var commentScope bool
+	var lineCommentScope bool
 	var stringScope byte
 	for i := range data {
 		var prev, next byte
@@ -218,24 +326,28 @@ func splitJSStmt(data []byte, atEOF bool) (advance int, token []byte, err error)
 		switch c {
 		case '/':
 			if stringScope == 0 {
-				if commentScope {
+				if lineCommentScope {
+					continue
+				} else if commentScope {
 					if prev == '*' {
 						commentScope = false
 					}
 				} else if next == '*' {
 					commentScope = true
+				} else if next == '/' {
+					lineCommentScope = true
 				}
 			}
 		case '\'', '"', '`':
-			if !commentScope {
+			if !commentScope && !lineCommentScope {
 				if stringScope == 0 {
 					stringScope = c
-				} else if stringScope == c && prev != '\\' {
+				} else if stringScope == c && !isDtsEscaped(data, i) {
 					stringScope = 0
 				}
 			}
 		case ';':
-			if stringScope == 0 && !commentScope {
+			if stringScope == 0 && !commentScope && !lineCommentScope {
 				return i + 1, data[:i], nil
 			}
 		}
@@ -243,9 +355,6 @@ func splitJSStmt(data []byte, atEOF bool) (advance int, token []byte, err error)
 	if !atEOF {
 		return 0, nil, nil
 	}
-	// There is one final token to be delivered, which may be the empty string.
-	// Returning bufio.ErrFinalToken here tells Scan there are no more tokens after this
-	// but does not trigger an error to be returned from Scan itself.
 	return 0, data, bufio.ErrFinalToken
 }
 
