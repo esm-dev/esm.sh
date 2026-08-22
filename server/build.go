@@ -291,6 +291,9 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 		meta = &BuildMeta{CSSEntry: entry.main}
 		return
 	}
+	if analyzeMode && strings.HasSuffix(entry.main, ".map") {
+		return
+	}
 
 	// json module
 	if strings.HasSuffix(entry.main, ".json") {
