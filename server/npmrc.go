@@ -284,6 +284,27 @@ func (npmrc *NpmRC) getPackageInfoContext(ctx context.Context, pkgName string, v
 	})
 }
 
+// invalidateDistTagCacheIfNewer drops the cached "latest" (and its 404)
+// resolution of pkgName once a newer exact version has been built
+// successfully, so the default (bare-name) URL follows it without waiting for
+// the npm query cache TTL. Only call it after a build succeeds: replaying it
+// at resolution time would keep forcing npm re-queries and could pin the
+// default URL to a version whose build fails.
+func invalidateDistTagCacheIfNewer(pkgName string, version string) {
+	version = npm.NormalizePackageVersion(version)
+	if !npm.IsExactVersion(version) {
+		return
+	}
+	key := "npm:" + pkgName + "@latest"
+	v, ok := getCacheItem(key)
+	latest, ok := v.(*npm.PackageJSON)
+	if !ok || !semverLessThan(latest.Version, version) {
+		return
+	}
+	deleteCacheItem(key)
+	deleteCacheItem("404:" + pkgName + "@latest")
+}
+
 func (npmrc *NpmRC) getPackageInfoByDate(pkgName string, targetDate time.Time) (packageJson *npm.PackageJSON, err error) {
 	return npmrc.getPackageInfoByDateContext(context.Background(), pkgName, targetDate)
 }

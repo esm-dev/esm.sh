@@ -41,6 +41,10 @@ func setCacheItem(key string, data any, cacheTtl time.Duration) {
 	cacheStore.Store(key, &cacheItem{exp.UnixMilli(), data})
 }
 
+func deleteCacheItem(key string) {
+	cacheStore.Delete(key)
+}
+
 func withCache[T any](key string, cacheTtl time.Duration, fetch func() (data T, aliasKey string, err error)) (data T, err error) {
 	if cacheTtl == 0 {
 		data, _, err = fetch()

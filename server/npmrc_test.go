@@ -14,7 +14,32 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
+
+	"github.com/esm-dev/esm.sh/internal/npm"
 )
+
+func TestInvalidateDistTagCacheIfNewer(t *testing.T) {
+	tests := []struct {
+		request string
+		invalid bool
+	}{
+		{"1.2.0", false},  // equal to the cached `latest`
+		{"1.1.0", false},  // older
+		{"2.0.0", true},   // newer
+		{"latest", false}, // non-exact
+		{"v2.0.0", true},  // v-prefixed newer
+	}
+	for _, test := range tests {
+		setCacheItem("npm:cache-test@latest", &npm.PackageJSON{Version: "1.2.0"}, time.Minute)
+		setCacheItem("404:cache-test@latest", "boom", time.Minute)
+		invalidateDistTagCacheIfNewer("cache-test", test.request)
+		_, ok := getCacheItem("npm:cache-test@latest")
+		if invalid := !ok; invalid != test.invalid {
+			t.Fatalf("request %q: expected invalidated=%v, got %v", test.request, test.invalid, invalid)
+		}
+	}
+}
 
 func TestSameURLOrigin(t *testing.T) {
 	registryUrl, _ := url.Parse("https://registry.example/package")
