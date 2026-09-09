@@ -108,7 +108,10 @@ func TestAddPackages(t *testing.T) {
 
 func TestResolve(t *testing.T) {
 	im := Blank()
-	im.AddImportFromSpecifier("react-dom@19/client", false)
+	_, errors := im.AddImportFromSpecifier("react-dom@19.2.4/client", false)
+	if len(errors) > 0 {
+		t.Fatalf("Failed to add react-dom/client: %v", errors)
+	}
 	referrer, _ := url.Parse("file:///main.js")
 	modUrl, ok := im.Resolve("react", referrer)
 	if !ok {
