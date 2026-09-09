@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha1"
 	"crypto/sha512"
 	"encoding/base64"
@@ -61,7 +62,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 	var (
 		startTime  = time.Now()
 		globalETag = fmt.Sprintf(`W/"%s"`, VERSION)
-		buildQueue = NewBuildQueue(int(config.BuildConcurrency))
+		buildQueue = NewBuildQueue(int(config.BuildConcurrency), time.Duration(config.BuildTimeout)*time.Second)
 		npmrc      = DefaultNpmRC()
 		metaDB     = NewBuildMetaDB(esmStorage)
 	)
@@ -1251,25 +1252,28 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 					externalAll: externalAll,
 					target:      "types",
 				}
-				ch := buildQueue.Add(buildCtx)
-				select {
-				case output := <-ch:
-					if output.err != nil {
-						if output.err.Error() == "types not found" {
-							if isExactVersion {
-								header.Set("Cache-Control", ccImmutable)
-							} else {
-								header.Set("Cache-Control", ccOneDay)
-							}
-							writeStatus(w, 404, "Types Not Found")
-							return
-						}
-						writeStatus(w, 500, "Failed to build types: "+output.err.Error())
-						return
-					}
-				case <-time.After(time.Duration(config.BuildWaitTime) * time.Second):
+				waitCtx, cancel := context.WithTimeout(r.Context(), time.Duration(config.BuildWaitTime)*time.Second)
+				_, err = buildQueue.Build(waitCtx, buildCtx)
+				cancel()
+				if r.Context().Err() != nil {
+					return
+				}
+				if errors.Is(err, context.DeadlineExceeded) {
 					header.Set("Cache-Control", ccMustRevalidate)
 					writeStatus(w, http.StatusRequestTimeout, "timeout, the types is waiting to be built, please try refreshing the page.")
+					return
+				}
+				if err != nil {
+					if err.Error() == "types not found" {
+						if isExactVersion {
+							header.Set("Cache-Control", ccImmutable)
+						} else {
+							header.Set("Cache-Control", ccOneDay)
+						}
+						writeStatus(w, 404, "Types Not Found")
+						return
+					}
+					writeStatus(w, 500, "Failed to build types: "+err.Error())
 					return
 				}
 				content, _, err = readDts()
@@ -1364,27 +1368,29 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 			return
 		}
 		if !ok {
-			ch := buildQueue.Add(build)
-			select {
-			case output := <-ch:
-				if output.err != nil {
-					msg := output.err.Error()
-					if msg == "could not resolve build entry" || strings.HasSuffix(msg, " not found") || strings.Contains(msg, "is not exported from package") || strings.Contains(msg, "no such file or directory") {
-						header.Set("Cache-Control", fmt.Sprintf("public, max-age=%d", config.NpmQueryCacheTTL))
-						writeStatus(w, 404, msg)
-						return
-					}
-					writeStatus(w, 500, msg)
-					return
-				}
-				buildMeta = output.meta
-				// Follow a freshly built version in the default URL immediately.
-				invalidateDistTagCacheIfNewer(esmPath.PkgName, esmPath.PkgVersion)
-			case <-time.After(time.Duration(config.BuildWaitTime) * time.Second):
+			waitCtx, cancel := context.WithTimeout(r.Context(), time.Duration(config.BuildWaitTime)*time.Second)
+			buildMeta, err = buildQueue.Build(waitCtx, build)
+			cancel()
+			if r.Context().Err() != nil {
+				return
+			}
+			if errors.Is(err, context.DeadlineExceeded) {
 				header.Set("Cache-Control", ccMustRevalidate)
 				writeStatus(w, http.StatusRequestTimeout, "timeout, the module is waiting to be built, please try refreshing the page.")
 				return
 			}
+			if err != nil {
+				msg := err.Error()
+				if msg == "could not resolve build entry" || strings.HasSuffix(msg, " not found") || strings.Contains(msg, "is not exported from package") || strings.Contains(msg, "no such file or directory") {
+					header.Set("Cache-Control", fmt.Sprintf("public, max-age=%d", config.NpmQueryCacheTTL))
+					writeStatus(w, 404, msg)
+					return
+				}
+				writeStatus(w, 500, msg)
+				return
+			}
+			// Follow a freshly built version in the default URL immediately.
+			invalidateDistTagCacheIfNewer(esmPath.PkgName, esmPath.PkgVersion)
 		}
 
 		if buildMeta.CSSEntry != "" {
