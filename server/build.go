@@ -15,6 +15,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync/atomic"
 
 	"github.com/esm-dev/esm.sh/internal/npm"
 	"github.com/esm-dev/esm.sh/internal/npm_replacements"
@@ -48,8 +49,7 @@ type BuildContext struct {
 	wd          string
 	pkgJson     *npm.PackageJSON
 	path        string
-	rawPath     string
-	status      string
+	status      atomic.Value
 	splitting   *set.ReadOnlySet[string]
 	esmImports  [][2]string
 	cjsRequires [][3]string
@@ -154,7 +154,7 @@ func (ctx *BuildContext) Build(buildCtx context.Context) (meta *BuildMeta, err e
 	}
 
 	// install the package
-	ctx.status = "install"
+	ctx.status.Store("install")
 	err = ctx.install()
 	if err != nil {
 		return
@@ -171,12 +171,12 @@ func (ctx *BuildContext) Build(buildCtx context.Context) (meta *BuildMeta, err e
 
 	// analyze splitting modules if bundling
 	if ctx.pkgJson.Exports.Len() > 1 && (ctx.shouldBundle() || ctx.shouldBundleInternalModules()) {
-		ctx.status = "analyze"
+		ctx.status.Store("analyze")
 		ctx.analyzeSplitting()
 	}
 
 	// build the module
-	ctx.status = "build"
+	ctx.status.Store("build")
 	meta, _, err = ctx.buildModule(false)
 	if err != nil {
 		return
@@ -1547,7 +1547,7 @@ REBUILD:
 
 func (ctx *BuildContext) buildTypes() (ret *BuildMeta, err error) {
 	// install the package
-	ctx.status = "install"
+	ctx.status.Store("install")
 	err = ctx.install()
 	if err != nil {
 		return
@@ -1568,7 +1568,7 @@ func (ctx *BuildContext) buildTypes() (ret *BuildMeta, err error) {
 		dts = entry.types
 	}
 
-	ctx.status = "build"
+	ctx.status.Store("build")
 	err = ctx.transformDTS(dts)
 	if err != nil {
 		return
@@ -1622,7 +1622,6 @@ func (ctx *BuildContext) install() (err error) {
 			}
 			if isMainModule {
 				ctx.esmPath.SubPath = ""
-				ctx.rawPath = ctx.path
 				ctx.path = ""
 			}
 		}

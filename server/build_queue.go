@@ -1,187 +1,154 @@
 package server
 
 import (
-	"container/list"
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
 	"time"
 )
 
-// BuildQueue schedules build tasks of esm.sh
+// BuildQueue runs builds in FIFO order, sharing results for the same requested path.
 type BuildQueue struct {
-	lock      sync.Mutex
-	tasks     map[string]*BuildTask
-	queue     map[*BuildTask]struct{}
-	pending   *list.List
-	chann     int
-	scheduler bool
+	lock        sync.Mutex
+	tasks       map[string]*buildTask
+	pending     []*buildTask
+	running     int
+	concurrency int
+	timeout     time.Duration
 }
 
-type BuildTask struct {
-	ctx       *BuildContext
-	waitChans []chan BuildOutput
-	createdAt time.Time
-	startedAt time.Time
+type buildTask struct {
+	ctx         *BuildContext
+	path        string // the queue key stays fixed when installation changes ctx.Path()
+	done        chan struct{}
+	meta        *BuildMeta
+	err         error
+	waitClients int
+	createdAt   time.Time
+	startedAt   time.Time
 }
 
-type BuildOutput struct {
-	meta *BuildMeta
-	err  error
-}
-
-func NewBuildQueue(concurrency int) *BuildQueue {
+func NewBuildQueue(concurrency int, timeout time.Duration) *BuildQueue {
 	if concurrency <= 0 {
-		concurrency = 1 // ensure at least 1 concurrent task
+		concurrency = 1
+	}
+	if timeout <= 0 {
+		timeout = 10 * time.Minute
 	}
 	return &BuildQueue{
-		queue:   map[*BuildTask]struct{}{},
-		pending: list.New(),
-		tasks:   map[string]*BuildTask{},
-		chann:   concurrency,
+		tasks:       map[string]*buildTask{},
+		concurrency: concurrency,
+		timeout:     timeout,
 	}
 }
 
-// Add adds a new build task to the queue.
-func (q *BuildQueue) Add(ctx *BuildContext) chan BuildOutput {
+// Build waits for a shared build. Canceling the wait leaves the build running.
+func (q *BuildQueue) Build(ctx context.Context, build *BuildContext) (*BuildMeta, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	path := build.Path()
 	q.lock.Lock()
-	defer q.lock.Unlock()
-
-	ch := make(chan BuildOutput, 1)
-
-	task, ok := q.tasks[ctx.Path()]
-	if ok {
-		task.waitChans = append(task.waitChans, ch)
-		return ch
+	task := q.tasks[path]
+	if task == nil {
+		task = &buildTask{
+			ctx:       build,
+			path:      path,
+			done:      make(chan struct{}),
+			createdAt: time.Now(),
+		}
+		build.status.Store("pending")
+		q.tasks[path] = task
+		q.pending = append(q.pending, task)
 	}
+	task.waitClients++
+	q.scheduleLocked()
+	q.lock.Unlock()
 
-	task = &BuildTask{
-		ctx:       ctx,
-		createdAt: time.Now(),
-		waitChans: []chan BuildOutput{ch},
+	defer func() {
+		q.lock.Lock()
+		task.waitClients--
+		q.lock.Unlock()
+	}()
+
+	select {
+	case <-task.done:
+		if build != task.ctx {
+			build.path = task.ctx.path
+			build.esmPath = task.ctx.esmPath
+		}
+		return task.meta, task.err
+	case <-ctx.Done():
+		return nil, ctx.Err()
 	}
-	ctx.status = "pending"
-
-	q.pending.PushBack(task)
-	q.tasks[ctx.Path()] = task
-
-	q.startSchedulerLocked()
-
-	return ch
 }
 
 func (q *BuildQueue) Snapshot() []map[string]any {
 	q.lock.Lock()
 	defer q.lock.Unlock()
 
-	items := make([]map[string]any, 0, len(q.queue)+q.pending.Len())
-	for task := range q.queue {
-		items = append(items, map[string]any{
-			"waitClients": len(task.waitChans),
-			"createdAt":   task.createdAt.Format(time.RFC1123),
-			"path":        task.ctx.Path(),
-			"status":      task.ctx.status,
-		})
+	tasks := make([]*buildTask, 0, len(q.tasks))
+	for _, task := range q.tasks {
+		tasks = append(tasks, task)
 	}
-	for el := q.pending.Front(); el != nil; el = el.Next() {
-		task, ok := el.Value.(*BuildTask)
-		if !ok {
-			continue
-		}
+	slices.SortFunc(tasks, func(a, b *buildTask) int {
+		return a.createdAt.Compare(b.createdAt)
+	})
+	items := make([]map[string]any, 0, len(tasks))
+	for _, task := range tasks {
 		items = append(items, map[string]any{
-			"waitClients": len(task.waitChans),
+			"waitClients": task.waitClients,
 			"createdAt":   task.createdAt.Format(time.RFC1123),
-			"path":        task.ctx.Path(),
-			"status":      task.ctx.status,
+			"path":        task.path,
+			"status":      task.ctx.status.Load(),
 		})
 	}
 	return items
 }
 
-func (q *BuildQueue) startSchedulerLocked() {
-	if q.scheduler || q.chann == 0 || q.pending.Len() == 0 {
-		return
-	}
-	q.scheduler = true
-	go q.schedule()
-}
-
-func (q *BuildQueue) schedule() {
-	for {
-		q.lock.Lock()
-		if q.chann == 0 || q.pending.Len() == 0 {
-			q.scheduler = false
-			q.lock.Unlock()
-			return
+// scheduleLocked starts pending tasks while capacity is available.
+func (q *BuildQueue) scheduleLocked() {
+	for q.running < q.concurrency && len(q.pending) > 0 {
+		task := q.pending[0]
+		q.pending[0] = nil
+		q.pending = q.pending[1:]
+		if len(q.pending) == 0 {
+			q.pending = nil
 		}
-
-		task, _ := q.pending.Remove(q.pending.Front()).(*BuildTask)
-		q.queue[task] = struct{}{}
 		task.startedAt = time.Now()
-		q.chann--
-		q.lock.Unlock()
-
+		task.ctx.status.Store("build")
+		q.running++
 		go q.run(task)
 	}
 }
 
-func (q *BuildQueue) run(task *BuildTask) {
-	var output BuildOutput
-
+func (q *BuildQueue) run(task *buildTask) {
 	defer func() {
 		if r := recover(); r != nil {
-			output.err = fmt.Errorf("build panic: %v", r)
-			task.ctx.status = "error"
-			task.ctx.logger.Errorf("build '%s' panicked: %v", task.ctx.Path(), r)
+			task.err = fmt.Errorf("build panic: %v", r)
 		}
-
-		waitChans := task.waitChans
+		if logger := task.ctx.logger; logger != nil {
+			if task.err != nil {
+				logger.Errorf("build '%s': %v", task.path, task.err)
+			} else {
+				logger.Infof("build '%s'(%s) done in %v", task.ctx.Path(), task.ctx.target, time.Since(task.startedAt))
+			}
+		}
 
 		q.lock.Lock()
-		q.chann++
-		delete(q.queue, task)
-		delete(q.tasks, task.ctx.Path())
-		if task.ctx.rawPath != "" {
-			// the `Build` function may have changed the path
-			delete(q.tasks, task.ctx.rawPath)
-		}
-		q.startSchedulerLocked()
+		delete(q.tasks, task.path)
+		q.running--
+		close(task.done)
+		q.scheduleLocked()
 		q.lock.Unlock()
-
-		for _, ch := range waitChans {
-			if ch == nil {
-				continue
-			}
-			select {
-			case ch <- output:
-			default:
-				// the request may have already timed out while waiting on the build
-			}
-		}
 	}()
 
-	buildTimeout := 10 * time.Minute
-	if config != nil && config.BuildTimeout > 0 {
-		buildTimeout = time.Duration(config.BuildTimeout) * time.Second
-	}
-	buildCtx, cancel := context.WithTimeout(context.Background(), buildTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), q.timeout)
 	defer cancel()
-
-	meta, err := task.ctx.Build(buildCtx)
-	if errors.Is(err, context.DeadlineExceeded) {
-		err = fmt.Errorf("build timeout after %d seconds", buildTimeout/time.Second)
+	task.meta, task.err = task.ctx.Build(ctx)
+	if errors.Is(task.err, context.DeadlineExceeded) {
+		task.err = fmt.Errorf("build timeout after %d seconds", q.timeout/time.Second)
 	}
-	if err == nil {
-		task.ctx.status = "done"
-		if task.ctx.target == "types" {
-			task.ctx.logger.Infof("build '%s'(types) done in %v", task.ctx.Path(), time.Since(task.startedAt))
-		} else {
-			task.ctx.logger.Infof("build '%s' done in %v", task.ctx.Path(), time.Since(task.startedAt))
-		}
-	} else {
-		task.ctx.status = "error"
-		task.ctx.logger.Errorf("build '%s': %v", task.ctx.Path(), err)
-	}
-	output = BuildOutput{meta: meta, err: err}
 }
