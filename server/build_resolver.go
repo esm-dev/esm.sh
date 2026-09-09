@@ -765,10 +765,9 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 	isSelfRef := specifier == pkgJson.Name || specifier == pkgJson.PkgName
 	if !isSelfRef && strings.HasPrefix(pkgJson.Name, "@") {
 		_, baseName := utils.SplitByFirstByte(pkgJson.Name[1:], '/')
-		specPkgName := toPackageName(specifier)
-		if specPkgName == baseName {
-			_, inDeps := pkgJson.Dependencies[specPkgName]
-			_, inPeerDeps := pkgJson.PeerDependencies[specPkgName]
+		if specifier == baseName {
+			_, inDeps := pkgJson.Dependencies[baseName]
+			_, inPeerDeps := pkgJson.PeerDependencies[baseName]
 			if !inDeps && !inPeerDeps {
 				isSelfRef = true
 			}
@@ -784,10 +783,9 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 		if ctx.pkgJson.SideEffectsFalse {
 			sideEffects = esbuild.SideEffectsFalse
 		} else if ctx.pkgJson.SideEffects.Len() > 0 {
-			sideEffects = esbuild.SideEffectsFalse
 			entry := ctx.resolveEntry(esmPath)
-			if entry.main != "" && !(ctx.pkgJson.SideEffects.Has(entry.main) || ctx.pkgJson.SideEffects.Has(strings.TrimPrefix(entry.main, "./"))) {
-				sideEffects = esbuild.SideEffectsTrue
+			if entry.main != "" && !ctx.pkgJson.SideEffects.Has(entry.main) && !ctx.pkgJson.SideEffects.Has(strings.TrimPrefix(entry.main, "./")) {
+				sideEffects = esbuild.SideEffectsFalse
 			}
 		}
 		resolvedPath = ctx.getImportPath(esmPath, ctx.getBuildArgsPrefix(false), ctx.externalAll)
@@ -823,10 +821,9 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 			if ctx.pkgJson.SideEffectsFalse {
 				sideEffects = esbuild.SideEffectsFalse
 			} else if ctx.pkgJson.SideEffects.Len() > 0 {
-				sideEffects = esbuild.SideEffectsFalse
 				entry := ctx.resolveEntry(subModule)
-				if entry.main != "" && !(ctx.pkgJson.SideEffects.Has(entry.main) || ctx.pkgJson.SideEffects.Has(strings.TrimPrefix(entry.main, "./"))) {
-					sideEffects = esbuild.SideEffectsTrue
+				if entry.main != "" && !ctx.pkgJson.SideEffects.Has(entry.main) && !ctx.pkgJson.SideEffects.Has(strings.TrimPrefix(entry.main, "./")) {
+					sideEffects = esbuild.SideEffectsFalse
 				}
 			}
 			if withTypeJSON {
@@ -1311,8 +1308,8 @@ func (ctx *BuildContext) lexer(entry *BuildEntry) (ret *BuildMeta, cjsExports []
 func matchAsteriskExport(exportName string, subModuleName string) (diff string, match bool) {
 	if strings.ContainsRune(exportName, '*') {
 		prefix, suffix := utils.SplitByLastByte(exportName, '*')
-		if strings.HasPrefix("./"+subModuleName, prefix) && strings.HasSuffix(subModuleName, suffix) {
-			return strings.TrimPrefix("./"+subModuleName, prefix), true
+		if name := "./" + subModuleName; len(name) >= len(prefix)+len(suffix) && strings.HasPrefix(name, prefix) && strings.HasSuffix(name, suffix) {
+			return name[len(prefix) : len(name)-len(suffix)], true
 		}
 	}
 	return "", false

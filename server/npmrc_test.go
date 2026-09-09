@@ -13,11 +13,46 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
 	"github.com/esm-dev/esm.sh/internal/npm"
 )
+
+func TestResolveSemverVersion(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		version string
+		tags    map[string]string
+		want    string
+	}{
+		{"missing latest", "latest", nil, ""},
+		{"unknown tag without latest", "unknown", nil, ""},
+		{"dangling latest", "latest", map[string]string{"latest": "3.0.0"}, ""},
+		{"latest", "latest", map[string]string{"latest": "1.2.0"}, "1.2.0"},
+		{"unknown tag falls back to latest", "unknown", map[string]string{"latest": "1.2.0"}, "1.2.0"},
+		{"named tag", "next", map[string]string{"next": "2.0.0-beta.1"}, "2.0.0-beta.1"},
+		{"highest matching version", "^1", nil, "1.10.0"},
+		{"stable wildcard", "*", nil, "1.10.0"},
+		{"no matching version", "^3", nil, ""},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			metadata := &npm.PackageMetadata{
+				DistTags: test.tags,
+				Versions: map[string]npm.PackageJSONRaw{
+					"1.2.0":        {Version: "1.2.0"},
+					"1.10.0":       {Version: "1.10.0"},
+					"2.0.0-beta.1": {Version: "2.0.0-beta.1"},
+				},
+			}
+			got, err := resolveSemverVersion(metadata, test.version)
+			if got != test.want || (err != nil) != (test.want == "") {
+				t.Fatalf("resolveSemverVersion(%q) = %q, %v; want %q", test.version, got, err, test.want)
+			}
+		})
+	}
+}
 
 func TestInvalidateDistTagCacheIfNewer(t *testing.T) {
 	tests := []struct {
@@ -125,6 +160,84 @@ func TestFetchPackageTarballAuthorization(t *testing.T) {
 	}
 	if got := <-redirectAuthorization; got != "" {
 		t.Fatalf("expected redirect to strip Authorization header, got %q", got)
+	}
+}
+
+func TestFetchPackageTarballBackup(t *testing.T) {
+	var tarball bytes.Buffer
+	gw := gzip.NewWriter(&tarball)
+	tw := tar.NewWriter(gw)
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := gw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, test := range []struct {
+		name           string
+		primaryStatus  int
+		backupStatus   int
+		rateLimited    bool
+		redirectBackup bool
+		wantRequests   []string
+		wantErr        bool
+	}{
+		{"primary succeeds", 200, 200, false, false, []string{"primary Bearer secret"}, false},
+		{"first rate limit", 429, 200, false, false, []string{"primary Bearer secret", "backup Bearer secret"}, false},
+		{"already rate limited", 429, 200, true, false, []string{"backup Bearer secret"}, false},
+		{"backup rate limited", 429, 429, false, false, []string{"primary Bearer secret", "backup Bearer secret"}, true},
+		{"backup redirects to untrusted origin", 429, 200, false, true, []string{"primary Bearer secret", "backup Bearer secret", "external "}, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			requests := make(chan string, 16)
+			external := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				requests <- "external " + r.Header.Get("Authorization")
+				_, _ = w.Write(tarball.Bytes())
+			}))
+			defer external.Close()
+			backup := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				requests <- "backup " + r.Header.Get("Authorization")
+				if r.URL.RequestURI() != "/test-package.tgz?download=1" {
+					t.Errorf("backup request lost path or query: %s", r.URL)
+				}
+				if test.redirectBackup {
+					http.Redirect(w, r, external.URL+"/test-package.tgz", http.StatusFound)
+					return
+				}
+				w.WriteHeader(test.backupStatus)
+				_, _ = w.Write(tarball.Bytes())
+			}))
+			defer backup.Close()
+			primary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				requests <- "primary " + r.Header.Get("Authorization")
+				w.WriteHeader(test.primaryStatus)
+				_, _ = w.Write(tarball.Bytes())
+			}))
+			defer primary.Close()
+			reg := &NpmRegistry{NpmRegistryConfig: NpmRegistryConfig{
+				Registry: primary.URL + "/", BackupRegistry: backup.URL + "/", Token: "secret",
+			}}
+			if test.rateLimited {
+				reg.rateLimited.Store(1)
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			err := fetchPackageTarballContext(ctx, reg, t.TempDir(), "test-package", primary.URL+"/test-package.tgz?download=1")
+			if (err != nil) != test.wantErr {
+				t.Fatalf("fetchPackageTarballContext() = %v; want error: %v", err, test.wantErr)
+			}
+			if test.primaryStatus == 429 && !reg.isRateLimited() {
+				t.Fatal("registry rate limit was not recorded")
+			}
+			got := make([]string, 0, len(requests))
+			for len(requests) > 0 {
+				got = append(got, <-requests)
+			}
+			if !slices.Equal(got, test.wantRequests) {
+				t.Fatalf("requests = %q; want %q", got, test.wantRequests)
+			}
+		})
 	}
 }
 

@@ -1,6 +1,12 @@
 package server
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
+	"crypto/sha1"
+	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -10,9 +16,151 @@ import (
 	"testing"
 	"time"
 
+	"github.com/esm-dev/esm.sh/internal/npm"
 	"github.com/esm-dev/esm.sh/internal/storage"
+	esbuild "github.com/ije/esbuild-internal/api"
 	"github.com/ije/gox/log"
 )
+
+func TestRouterModuleResponses(t *testing.T) {
+	previousConfig, previousNpmRC, transport := config, defaultNpmRC, http.DefaultTransport
+	testConfig := *config
+	testConfig.WorkDir = t.TempDir()
+	config, defaultNpmRC = &testConfig, nil
+	t.Cleanup(func() {
+		config, defaultNpmRC, http.DefaultTransport = previousConfig, previousNpmRC, transport
+	})
+	fs, err := storage.NewFSStorage(filepath.Join(config.WorkDir, "storage"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	logger := new(log.Logger)
+	logger.SetOutput(io.Discard)
+	handler := esmRouter(fs, logger)
+
+	t.Run("css module installation", func(t *testing.T) {
+		var archive bytes.Buffer
+		gz := gzip.NewWriter(&archive)
+		tw := tar.NewWriter(gz)
+		for name, content := range map[string]string{
+			"package.json": `{"name":"css-module-test","version":"1.0.0"}`,
+			"style.css":    "body { color: red }",
+		} {
+			if err := tw.WriteHeader(&tar.Header{Name: "package/" + name, Mode: 0644, Size: int64(len(content))}); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := io.WriteString(tw, content); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := tw.Close(); err != nil {
+			t.Fatal(err)
+		}
+		if err := gz.Close(); err != nil {
+			t.Fatal(err)
+		}
+		setCacheItem("npm:css-module-test@1.0.0", &npm.PackageJSON{
+			Name: "css-module-test", Version: "1.0.0",
+			Dist: npm.NpmPackageDist{Tarball: "https://registry.example/css-module-test.tgz"},
+		}, time.Minute)
+		defer deleteCacheItem("npm:css-module-test@1.0.0")
+		downloads := 0
+		http.DefaultTransport = ghTestTransport(func(r *http.Request) (*http.Response, error) {
+			if r.URL.String() != "https://registry.example/css-module-test.tgz" {
+				t.Fatalf("unexpected request: %s", r.URL)
+			}
+			downloads++
+			return &http.Response{StatusCode: 200, Body: io.NopCloser(bytes.NewReader(archive.Bytes()))}, nil
+		})
+		for _, state := range []string{"cold", "warm", "evicted"} {
+			if state == "evicted" {
+				if err := os.RemoveAll(filepath.Join(config.WorkDir, "npm", "css-module-test@1.0.0")); err != nil {
+					t.Fatal(err)
+				}
+			}
+			res := httptest.NewRecorder()
+			handler.ServeHTTP(res, httptest.NewRequest("GET", "http://localhost/css-module-test@1.0.0/style.css?module", nil))
+			if res.Code != 200 || res.Header().Get("Content-Type") != ctJavaScript || !strings.Contains(res.Body.String(), `stylesheet.replaceSync("body{color:red}")`) {
+				t.Fatalf("%s: HTTP %d: %s", state, res.Code, res.Body.String())
+			}
+			wantDownloads := 1
+			if state == "evicted" {
+				wantDownloads = 2
+			}
+			if downloads != wantDownloads {
+				t.Fatalf("%s: got %d downloads, want %d", state, downloads, wantDownloads)
+			}
+		}
+	})
+
+	t.Run("commonjs default export", func(t *testing.T) {
+		build := &BuildContext{esmPath: EsmPath{PkgName: "cjs-exports-test", PkgVersion: "1.0.0"}, target: "es2022"}
+		defer cacheLRU.Remove(build.Path())
+		if err := NewBuildMetaDB(fs).Put(build.Path(), encodeBuildMeta(&BuildMeta{CJS: true, ExportDefault: true})); err != nil {
+			t.Fatal(err)
+		}
+		for _, exports := range []string{"default", "answer,default", "answer"} {
+			res := httptest.NewRecorder()
+			handler.ServeHTTP(res, httptest.NewRequest("GET", "http://localhost/cjs-exports-test@1.0.0?target=es2022&exports="+exports, nil))
+			if res.Code != 200 {
+				t.Fatalf("HTTP %d: %s", res.Code, res.Body.String())
+			}
+			code := res.Body.String()
+			parsed := esbuild.Transform(code, esbuild.TransformOptions{Loader: esbuild.LoaderJS})
+			if len(parsed.Errors) > 0 {
+				t.Fatalf("exports=%s: invalid JavaScript: %v\n%s", exports, parsed.Errors, code)
+			}
+			if strings.Contains(code, "export { default }") != strings.Contains(exports, "default") || strings.Contains(code, "export const { answer }") != strings.Contains(exports, "answer") {
+				t.Fatalf("exports=%s: incorrect exports:\n%s", exports, code)
+			}
+		}
+	})
+
+	t.Run("transform filename cache", func(t *testing.T) {
+		options := TransformOptions{Lang: "ts", Code: "export const answer: number = 42;", Target: "esnext", ImportMapRaw: json.RawMessage(`{}`), SourceMap: "external"}
+		for _, filename := range []string{"", "first.ts", "second.ts", "first.ts"} {
+			options.Filename = filename
+			body, err := json.Marshal(options)
+			if err != nil {
+				t.Fatal(err)
+			}
+			res := httptest.NewRecorder()
+			handler.ServeHTTP(res, httptest.NewRequest("POST", "http://localhost/transform", bytes.NewReader(body)))
+			if res.Code != 200 {
+				t.Fatalf("HTTP %d: %s", res.Code, res.Body.String())
+			}
+			var output TransformOutput
+			if err := json.Unmarshal(res.Body.Bytes(), &output); err != nil {
+				t.Fatal(err)
+			}
+			var sourceMap struct{ Sources []string }
+			if err := json.Unmarshal([]byte(output.Map), &sourceMap); err != nil {
+				t.Fatal(err)
+			}
+			wantSource := filename
+			if wantSource == "" {
+				wantSource = "source.ts"
+				// /tsx computes this hash before calling the transform API.
+				hash := sha1.Sum([]byte(options.Lang + options.Code + options.Target + string(options.ImportMapRaw) + options.SourceMap + "false"))
+				if !strings.Contains(output.Code, fmt.Sprintf("sourceMappingURL=+%x.mjs.map", hash)) {
+					t.Fatal("transform without a filename changed its cache URL")
+				}
+			}
+			if len(sourceMap.Sources) != 1 || sourceMap.Sources[0] != wantSource {
+				t.Fatalf("filename=%q: unexpected source map: %s", filename, output.Map)
+			}
+			_, mapURL, ok := strings.Cut(output.Code, "//# sourceMappingURL=")
+			if !ok {
+				t.Fatal("missing source map URL")
+			}
+			cached := httptest.NewRecorder()
+			handler.ServeHTTP(cached, httptest.NewRequest("GET", "http://localhost/"+mapURL, nil))
+			if cached.Code != 200 || cached.Body.String() != output.Map {
+				t.Fatalf("filename=%q: cached source map does not match the transform", filename)
+			}
+		}
+	})
+}
 
 func TestCSSEntryRedirectURL(t *testing.T) {
 	origin := "https://esm.sh"

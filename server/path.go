@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
-	"sort"
 	"strings"
 	"time"
 
@@ -324,23 +323,17 @@ func resolveGhPackageVersion(esm EsmPath) (version string, err error) {
 			}
 			// try to find the 'semver' tag
 			if semv, erro := semver.NewConstraint(strings.TrimPrefix(esm.PkgVersion, "semver:")); erro == nil {
-				semtags := make([]*semver.Version, len(refs))
-				i := 0
+				var latest *semver.Version
 				for _, ref := range refs {
 					if after, ok := strings.CutPrefix(ref.Ref, "refs/tags/"); ok {
 						v, e := semver.NewVersion(after)
-						if e == nil && semv.Check(v) {
-							semtags[i] = v
-							i++
+						if e == nil && semv.Check(v) && (latest == nil || v.GreaterThan(latest)) {
+							latest = v
+							version = ref.Sha[:7]
 						}
 					}
 				}
-				if i > 0 {
-					semtags = semtags[:i]
-					if i > 1 {
-						sort.Sort(semver.Collection(semtags))
-					}
-					version = semtags[i-1].String()
+				if latest != nil {
 					return
 				}
 			}

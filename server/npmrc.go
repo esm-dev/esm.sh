@@ -202,7 +202,7 @@ CHECK:
 			return distVersion, nil
 		}
 	} else {
-		if version == "lastest" {
+		if version == "latest" {
 			return "", fmt.Errorf("version %s not found", version)
 		}
 		c, err := semver.NewConstraint(version)
@@ -652,7 +652,8 @@ func fetchPackageTarballContext(ctx context.Context, reg *NpmRegistry, installDi
 		return false
 	}
 
-	if reg.isRateLimited() && reg.BackupRegistry != "" && strings.HasPrefix(tarballUrlStr, reg.Registry) {
+	useBackup := reg.isRateLimited() && reg.BackupRegistry != "" && strings.HasPrefix(tarballUrlStr, reg.Registry)
+	if useBackup {
 		var backupUrl *url.URL
 		backupUrl, err = url.Parse(reg.BackupRegistry)
 		if err != nil {
@@ -706,7 +707,7 @@ RETRY:
 		return
 	}
 
-	if res.StatusCode == 429 && reg.isRateLimited() && reg.BackupRegistry != "" && strings.HasPrefix(tarballUrlStr, reg.Registry) {
+	if res.StatusCode == 429 && !useBackup && reg.BackupRegistry != "" && strings.HasPrefix(tarballUrlStr, reg.Registry) {
 		var backupUrl *url.URL
 		backupUrl, err = url.Parse(reg.BackupRegistry)
 		if err != nil {
@@ -716,6 +717,7 @@ RETRY:
 		backupUrl.RawQuery = tarballUrl.RawQuery
 		tarballUrl = backupUrl
 		tarballUrlStr = backupUrl.String()
+		useBackup = true
 		reg.hitRateLimit()
 		goto RETRY
 	}

@@ -196,7 +196,7 @@ func customLandingPage(options *LandingPageOptions, next http.Handler) http.Hand
 		h := w.Header()
 		etag := res.Header.Get("Etag")
 		if etag != "" {
-			if r.Header.Get("If-None-Match") == etag {
+			if res.StatusCode == http.StatusOK && r.Header.Get("If-None-Match") == etag {
 				w.WriteHeader(http.StatusNotModified)
 				return
 			}
@@ -205,10 +205,10 @@ func customLandingPage(options *LandingPageOptions, next http.Handler) http.Hand
 			lastModified := res.Header.Get("Last-Modified")
 			if lastModified != "" {
 				v := r.Header.Get("If-Modified-Since")
-				if v != "" {
+				if res.StatusCode == http.StatusOK && v != "" {
 					timeIfModifiedSince, e1 := time.Parse(http.TimeFormat, v)
 					timeLastModified, e2 := time.Parse(http.TimeFormat, lastModified)
-					if e1 == nil && e2 == nil && !timeIfModifiedSince.After(timeLastModified) {
+					if e1 == nil && e2 == nil && !timeLastModified.After(timeIfModifiedSince) {
 						w.WriteHeader(http.StatusNotModified)
 						return
 					}
@@ -222,6 +222,7 @@ func customLandingPage(options *LandingPageOptions, next http.Handler) http.Hand
 		}
 		h.Set("Cache-Control", cacheControl)
 		h.Set("Content-Type", res.Header.Get("Content-Type"))
+		w.WriteHeader(res.StatusCode)
 		io.Copy(w, res.Body)
 	})
 }
