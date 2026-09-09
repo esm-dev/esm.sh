@@ -81,7 +81,7 @@ func TestGhRawAssets(t *testing.T) {
 		{"css", "style.css", "GET", 200, ctCSS, "body { color: red }"},
 		{"json", "data.json", "GET", 200, ctJSON, "{}"},
 		{"source map", "index.js.map", "GET", 200, ctJSON, "{}"},
-		{"relative asset", "es2022/alien.svg", "GET", 200, "image/svg+xml; charset=utf-8", "<svg/>"},
+		{"raw relative asset", "es2022/alien.svg?raw", "GET", 200, "image/svg+xml; charset=utf-8", "<svg/>"},
 		{"raw typescript", "index.ts?raw", "GET", 200, ctTypeScript, "export default 1"},
 		{"missing", "missing.svg", "GET", 404, "", "Not Found"},
 		{"upstream error", "error.svg", "GET", 503, "", "Service Unavailable"},
@@ -102,7 +102,7 @@ func TestGhRawAssets(t *testing.T) {
 				if test.name == "escaped path" && (r.URL.EscapedPath() != "/owner/repo/abcdef0/assets/Alien%20%231.svg" || r.URL.RawQuery != "") {
 					t.Errorf("incorrect escaped path: %s", r.URL)
 				}
-				if test.name == "relative asset" && r.URL.Path != "/owner/repo/abcdef0/alien.svg" {
+				if test.name == "raw relative asset" && r.URL.Path != "/owner/repo/abcdef0/alien.svg" {
 					t.Errorf("incorrect relative asset path: %s", r.URL)
 				}
 				if deadline, ok := r.Context().Deadline(); !ok || time.Until(deadline) > 30*time.Second {
@@ -156,6 +156,29 @@ func TestGhRawAssets(t *testing.T) {
 			}
 			if test.status == 500 && requests != 0 || test.status != 500 && requests != 1 {
 				t.Fatalf("unexpected upstream request count: %d", requests)
+			}
+		})
+	}
+	http.DefaultTransport = ghTestTransport(func(r *http.Request) (*http.Response, error) {
+		t.Errorf("redirect made an upstream request: %s", r.URL)
+		return &http.Response{StatusCode: 404, Body: http.NoBody}, nil
+	})
+	for _, test := range []struct{ path, location string }{
+		{"es2022/alien.svg", "alien.svg"},
+		{"es2022/napi/parser/parser.wasm32-wasi.wasm", "napi/parser/parser.wasm32-wasi.wasm"},
+		{"X-ZHJlYWN0QDE4LjMuMQ/es2022/napi/parser/parser.wasm32-wasi.wasm", "napi/parser/parser.wasm32-wasi.wasm"},
+		{"es2022/assets/Alien%20%231.svg?key=a%2Bb", "assets/Alien%20%231.svg?key=a%2Bb"},
+		{"es2022/data.json?module", "data.json?module"},
+	} {
+		t.Run("redirect/"+test.path, func(t *testing.T) {
+			base := "http://localhost/gh/owner/repo@abcdef0/"
+			res := httptest.NewRecorder()
+			handler.ServeHTTP(res, httptest.NewRequest("GET", base+test.path, nil))
+			if res.Code != 301 || res.Header().Get("Location") != base+test.location {
+				t.Fatalf("unexpected redirect: %d %s", res.Code, res.Header().Get("Location"))
+			}
+			if res.Header().Get("Cache-Control") != ccImmutable {
+				t.Fatal("redirect is not immutable")
 			}
 		})
 	}

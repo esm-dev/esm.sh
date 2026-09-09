@@ -771,6 +771,12 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 			}
 		}
 
+		if esmPath.GhPrefix && hasTargetSegment && pathKind == RawFile && !rawFlag && esmPath.SubPath != "" {
+			assetURL := &url.URL{Path: "/" + esmPath.String(), RawQuery: r.URL.RawQuery}
+			redirect(w, origin+assetURL.String(), true)
+			return
+		}
+
 		// Fetch GitHub assets directly without installing the repository.
 		if esmPath.GhPrefix && pathKind == RawFile && esmPath.SubPath != "" && !(query.Has("module") && endsWith(esmPath.SubPath, ".css", ".json", ".wasm")) {
 			rawURL := &url.URL{
