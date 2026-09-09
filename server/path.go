@@ -256,34 +256,6 @@ func toPackageName(specifier string) string {
 	return name
 }
 
-// func normalizeSemver(version string) string {
-// 	buf := make([]byte, 3*len(version))
-// 	var i int
-// 	for _, char := range version {
-// 		switch char {
-// 		case ' ':
-// 			copy(buf[i:], "%20")
-// 			i += 3
-// 		case '^':
-// 			copy(buf[i:], "%5E")
-// 			i += 3
-// 		case '|':
-// 			copy(buf[i:], "%7C")
-// 			i += 3
-// 		case '<':
-// 			copy(buf[i:], "%3C")
-// 			i += 3
-// 		case '>':
-// 			copy(buf[i:], "%3E")
-// 			i += 3
-// 		default:
-// 			buf[i] = byte(char)
-// 			i++
-// 		}
-// 	}
-// 	return string(buf[:i])
-// }
-
 // isPackageInExternalNamespace checks if a package belongs to an external namespace
 // For example, if "@radix-ui" is in external, then "@radix-ui/react-dropdown" would match
 func isPackageInExternalNamespace(pkgName string, external set.ReadOnlySet[string]) bool {

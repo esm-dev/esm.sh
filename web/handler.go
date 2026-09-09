@@ -3,6 +3,7 @@ package web
 import (
 	"bytes"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -209,25 +210,11 @@ func (s *Handler) ServeHtml(w http.ResponseWriter, r *http.Request, filename str
 	tokenizer := html.NewTokenizer(htmlFile)
 	hotLinks := []string{}
 	frameworkCSS := ""
-	overriding := ""
 
 	for {
 		tt := tokenizer.Next()
 		if tt == html.ErrorToken {
 			break
-		}
-		if overriding != "" {
-			if tt == html.TextToken {
-				continue
-			}
-			if tt == html.EndTagToken {
-				tagName, _ := tokenizer.TagName()
-				if string(tagName) == overriding {
-					overriding = ""
-					continue
-				}
-			}
-			overriding = ""
 		}
 		if tt == html.StartTagToken {
 			tagName, moreAttr := tokenizer.TagName()
@@ -547,9 +534,10 @@ func (s *Handler) ServeCSSModule(w http.ResponseWriter, r *http.Request, query u
 		header.Set("Cache-Control", "public, max-age=0, must-revalidate")
 		header.Set("Etag", etag)
 	}
-	w.Write([]byte("const css=\""))
-	w.Write(bytes.ReplaceAll(css, []byte{'"'}, []byte{'\\', '"'}))
-	w.Write([]byte("\";let style,"))
+	cssJSON, _ := json.Marshal(string(css))
+	w.Write([]byte("const css="))
+	w.Write(cssJSON)
+	w.Write([]byte(";let style,"))
 	w.Write([]byte(`applyCSS=css=>{(style??(style=document.head.appendChild(document.createElement("style")))).textContent=css};`))
 	if s.config.Dev {
 		w.Write([]byte(`import createHot from"/@hmr";`))
@@ -608,7 +596,7 @@ func (s *Handler) ServeFrameworkCSS(w http.ResponseWriter, r *http.Request, quer
 				} else if srcAttr == "" {
 					// inline script content
 					tokenizer.Next()
-					contents = append(contents, tokenizer.Text())
+					contents = append(contents, bytes.Clone(tokenizer.Text()))
 				} else {
 					if hrefAttr != "" && isHttpSepcifier(srcAttr) {
 						if !isHttpSepcifier(hrefAttr) && isModulePath(hrefAttr) {
@@ -621,7 +609,7 @@ func (s *Handler) ServeFrameworkCSS(w http.ResponseWriter, r *http.Request, quer
 			case "link", "meta", "title", "base", "head", "noscript":
 				// ignore
 			default:
-				contents = append(contents, tokenizer.Raw())
+				contents = append(contents, bytes.Clone(tokenizer.Raw()))
 			}
 		}
 	}
@@ -630,8 +618,9 @@ func (s *Handler) ServeFrameworkCSS(w http.ResponseWriter, r *http.Request, quer
 	if err != nil {
 		if os.IsNotExist(err) {
 			http.Error(w, "Not Found", 404)
+		} else {
+			http.Error(w, "Internal Server Error", 500)
 		}
-		http.Error(w, "Internal Server Error", 500)
 		return
 	}
 
@@ -643,7 +632,11 @@ func (s *Handler) ServeFrameworkCSS(w http.ResponseWriter, r *http.Request, quer
 		}
 	}
 	xx := xxhash.New()
-	xx.Write([]byte(configCSS))
+	xx.Write(configCSS)
+	for _, content := range contents {
+		xx.Write(content)
+		xx.Write([]byte{'\n'})
+	}
 	keys := make([]string, 0, len(tree))
 	for k := range tree {
 		keys = append(keys, k)
@@ -659,8 +652,8 @@ func (s *Handler) ServeFrameworkCSS(w http.ResponseWriter, r *http.Request, quer
 		w.WriteHeader(http.StatusNotModified)
 		return
 	}
-	cacheKey := framework
-	etagCacheKey := framework + ".etag"
+	cacheKey := framework + "-" + r.URL.Path
+	etagCacheKey := cacheKey + ".etag"
 	if css, ok := s.loaderCache.Load(cacheKey); ok {
 		if e, ok := s.loaderCache.Load(etagCacheKey); ok {
 			if e.(string) == etag {
@@ -820,6 +813,7 @@ func (s *Handler) getAppImportMap() (importMapRaw []byte, importMap *importmap.I
 
 func (s *Handler) analyzeDependencyTree(entry string, importMap *importmap.ImportMap) (tree map[string][]byte, err error) {
 	tree = make(map[string][]byte)
+	var treeLock sync.Mutex
 	ret := esbuild.Build(esbuild.BuildOptions{
 		EntryPoints:      []string{entry},
 		Target:           esbuild.ES2022,
@@ -856,7 +850,9 @@ func (s *Handler) analyzeDependencyTree(entry string, importMap *importmap.Impor
 						if err != nil {
 							return esbuild.OnLoadResult{}, err
 						}
+						treeLock.Lock()
 						tree[args.Path] = data
+						treeLock.Unlock()
 						contents := string(data)
 						loader := esbuild.LoaderJS
 						pathname := args.PluginData.(string)

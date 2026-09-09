@@ -85,3 +85,51 @@ func TestBuildModuleJSONPathTraversal(t *testing.T) {
 		t.Fatalf("unexpected module output: %s", data)
 	}
 }
+
+func TestBuildTypesArgs(t *testing.T) {
+	for _, filename := range []string{"index.d.ts", "index.d.mts", "index.d.cts"} {
+		t.Run(filename, func(t *testing.T) {
+			wd := t.TempDir()
+			pkgDir := filepath.Join(wd, "node_modules", "example")
+			if err := os.MkdirAll(pkgDir, 0755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(pkgDir, filename), []byte("export {};"), 0644); err != nil {
+				t.Fatal(err)
+			}
+			fs, err := storage.NewFSStorage(filepath.Join(wd, "storage"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			ctx := &BuildContext{
+				wd: wd, target: "types", storage: fs,
+				esmPath: EsmPath{PkgName: "example", PkgVersion: "1.0.0", SubPath: filename},
+				pkgJson: &npm.PackageJSON{Name: "example", Version: "1.0.0", Types: "./" + filename},
+				args:    BuildArgs{Conditions: []string{"custom"}},
+			}
+			want := "/example@1.0.0/" + ctx.getBuildArgsPrefix(true) + filename
+			if got := ctx.Path(); got != want {
+				t.Errorf("build path = %q, want %q", got, want)
+			}
+			meta, err := ctx.buildTypes()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if meta.Dts != want {
+				t.Errorf("types metadata = %q, want %q", meta.Dts, want)
+			}
+			if _, err := fs.Stat(normalizeSavePath("types" + want)); err != nil {
+				t.Fatalf("missing transformed types: %v", err)
+			}
+			ctx.target = "es2022"
+			ctx.path = ""
+			meta, _, err = ctx.buildModule(false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if meta.Dts != want {
+				t.Errorf("types-only module metadata = %q, want %q", meta.Dts, want)
+			}
+		})
+	}
+}

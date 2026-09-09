@@ -1,6 +1,7 @@
 import { chmodSync, createWriteStream, existsSync, linkSync, readFileSync, statSync, unlinkSync } from "node:fs";
 import { createRequire } from "node:module";
 import { Writable } from "node:stream";
+import { fileURLToPath } from "node:url";
 
 const binExtension = process.platform === "win32" ? ".exe" : "";
 
@@ -41,8 +42,7 @@ function resolveBinaryPath() {
 
 async function downloadBinaryFromGitHub() {
   const pkgInfo = JSON.parse(readFileSync(toPackagePath("package.json"), "utf8"));
-  const [_, minor, patch] = pkgInfo.version.split(".");
-  const tag = "v" + minor + (Number(patch) > 0 ? "_" + patch : "");
+  const tag = "v" + pkgInfo.version;
   const url = `https://github.com/esm-dev/esm.sh/releases/download/${tag}/cli-${platform()}-${arch()}${binExtension}.gz`;
   const res = await fetch(url);
   if (!res.ok) {
@@ -74,7 +74,7 @@ function arch() {
 }
 
 function toPackagePath(filename) {
-  return new URL(filename, import.meta.url).pathname;
+  return fileURLToPath(new URL(filename, import.meta.url));
 }
 
 function chmodAddX(path) {

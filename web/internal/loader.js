@@ -155,7 +155,6 @@ async function tailwindCSS(_id, content, config) {
           }
           // todo: load and cache other css from npm
           throw new Error("could not find stylesheet id: " + id + ", sheetBase: " + sheetBase);
-          return null;
         },
       });
     })();
@@ -165,4 +164,3 @@ async function tailwindCSS(_id, content, config) {
   const { extract } = await once.oxide;
   return (await compiler).build(extract(content));
 }
-

@@ -2,7 +2,6 @@ package server
 
 import (
 	"bufio"
-	"io"
 	"os"
 	"path"
 	"strconv"
@@ -51,40 +50,31 @@ func (ctx *BuildContext) analyzeSplitting() {
 			}
 			defer f.Close()
 
-			var a []string
-			var i int
-			var r = bufio.NewReader(f)
-			for {
-				line, readErr := r.ReadString('\n')
-				if readErr == nil || readErr == io.EOF {
-					line = strings.TrimSpace(line)
-					if line != "" {
-						if a == nil {
-							n, e := strconv.Atoi(line)
-							if e != nil {
-								break
-							}
-							a = make([]string, n+1)
-						}
-						a[i] = line
-						i++
+			r := bufio.NewScanner(f)
+			if !r.Scan() {
+				return false
+			}
+			n, err := strconv.Atoi(strings.TrimSpace(r.Text()))
+			if err != nil || n < 0 {
+				return false
+			}
+			var modules []string
+			for r.Scan() {
+				if module := strings.TrimSpace(r.Text()); module != "" {
+					if len(modules) == n {
+						return false
 					}
-				}
-				if readErr != nil {
-					break
+					modules = append(modules, module)
 				}
 			}
-			if len(a) > 0 {
-				n, e := strconv.Atoi(a[0])
-				if e == nil && n <= len(a)-1 {
-					ctx.splitting = set.NewReadOnly(a[1 : n+1]...)
-					if DEBUG {
-						ctx.logger.Debugf("build(%s): splitting.txt found with %d shared modules", ctx.esmPath.String(), ctx.splitting.Len())
-					}
-					return true
-				}
+			if r.Err() != nil || len(modules) != n {
+				return false
 			}
-			return false
+			ctx.splitting = set.NewReadOnly(modules...)
+			if DEBUG {
+				ctx.logger.Debugf("build(%s): splitting.txt found with %d shared modules", ctx.esmPath.String(), ctx.splitting.Len())
+			}
+			return true
 		}
 
 		// check if the splitting has been analyzed

@@ -2,6 +2,7 @@ package storage
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"os"
 	"path"
@@ -9,6 +10,69 @@ import (
 
 	"github.com/ije/gox/crypto/rand"
 )
+
+func TestFSStoragePutKeepsCompleteContent(t *testing.T) {
+	fs, err := NewFSStorage(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = fs.Put("test.txt", bytes.NewBufferString("original")); err != nil {
+		t.Fatal(err)
+	}
+
+	reader, writer := io.Pipe()
+	defer reader.Close()
+	defer writer.Close()
+	done := make(chan error, 1)
+	go func() { done <- fs.Put("test.txt", reader) }()
+	if _, err = writer.Write([]byte("partial")); err != nil {
+		t.Fatal(err)
+	}
+	keys, err := fs.List("")
+	if err != nil || len(keys) != 1 || keys[0] != "test.txt" {
+		t.Fatalf("List during write: keys %v, error %v", keys, err)
+	}
+	content, stat, err := fs.Get("test.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := io.ReadAll(content)
+	content.Close()
+	if err != nil || string(data) != "original" || stat.Size() != 8 {
+		t.Fatalf("read during write: content %q, size %d, error %v", data, stat.Size(), err)
+	}
+
+	writeErr := errors.New("interrupted write")
+	writer.CloseWithError(writeErr)
+	if err = <-done; !errors.Is(err, writeErr) {
+		t.Fatalf("Put returned %v, want %v", err, writeErr)
+	}
+	content, _, err = fs.Get("test.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err = io.ReadAll(content)
+	content.Close()
+	if err != nil || string(data) != "original" {
+		t.Fatalf("read after failed write: content %q, error %v", data, err)
+	}
+	keys, err = fs.List("")
+	if err != nil || len(keys) != 1 || keys[0] != "test.txt" {
+		t.Fatalf("List after failed write: keys %v, error %v", keys, err)
+	}
+	if err = fs.Put("test.txt", bytes.NewBufferString("replacement")); err != nil {
+		t.Fatal(err)
+	}
+	content, stat, err = fs.Get("test.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err = io.ReadAll(content)
+	content.Close()
+	if err != nil || string(data) != "replacement" || stat.Size() != 11 {
+		t.Fatalf("read after replacement: content %q, size %d, error %v", data, stat.Size(), err)
+	}
+}
 
 func TestFSStorage(t *testing.T) {
 	root := path.Join(os.TempDir(), "storage_test_"+rand.Hex.String(8))

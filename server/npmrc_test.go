@@ -8,12 +8,15 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -49,6 +52,111 @@ func TestResolveSemverVersion(t *testing.T) {
 			got, err := resolveSemverVersion(metadata, test.version)
 			if got != test.want || (err != nil) != (test.want == "") {
 				t.Fatalf("resolveSemverVersion(%q) = %q, %v; want %q", test.version, got, err, test.want)
+			}
+		})
+	}
+}
+
+func TestResolveSemverOriginalVersion(t *testing.T) {
+	metadata := &npm.PackageMetadata{Versions: map[string]npm.PackageJSONRaw{
+		"v1.2.0": {Version: "v1.2.0"},
+	}}
+	got, err := resolveSemverVersion(metadata, "^1")
+	if err != nil || got != "v1.2.0" {
+		t.Fatalf("resolved version = %q, %v; want the original metadata key", got, err)
+	}
+}
+
+func BenchmarkResolveSemverVersion(b *testing.B) {
+	for _, count := range []int{100, 1000, 10000} {
+		b.Run(fmt.Sprint(count), func(b *testing.B) {
+			metadata := &npm.PackageMetadata{Versions: make(map[string]npm.PackageJSONRaw, count)}
+			for i := range count {
+				version := fmt.Sprintf("1.%d.0", i)
+				metadata.Versions[version] = npm.PackageJSONRaw{Version: version}
+			}
+			b.ReportAllocs()
+			b.ResetTimer()
+			for b.Loop() {
+				if _, err := resolveSemverVersion(metadata, "^1"); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
+func TestInstallDependenciesSkipsTypes(t *testing.T) {
+	transport := http.DefaultTransport
+	t.Cleanup(func() { http.DefaultTransport = transport })
+	http.DefaultTransport = ghTestTransport(func(r *http.Request) (*http.Response, error) {
+		t.Errorf("unexpected request for a types-only dependency: %s", r.URL)
+		return &http.Response{StatusCode: http.StatusNotFound, Body: http.NoBody}, nil
+	})
+	npmrc := &NpmRC{globalRegistry: &NpmRegistry{NpmRegistryConfig: NpmRegistryConfig{Registry: npmRegistry}}}
+	err := npmrc.installDependencies(t.TempDir(), &npm.PackageJSON{
+		Name: "test", Version: "1.0.0",
+		Dependencies: map[string]string{"@types/test": "1.0.0", "types-alias": "npm:@types/test@1.0.0"},
+	}, false, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestInstallGithubDenoConfig(t *testing.T) {
+	workDir, transport := config.WorkDir, http.DefaultTransport
+	config.WorkDir = t.TempDir()
+	t.Cleanup(func() { config.WorkDir, http.DefaultTransport = workDir, transport })
+	for _, test := range []struct {
+		name, filename, content string
+	}{
+		{"escaped strings", "deno.json", `{"imports":{"quote\"name":"./quote\"file.ts"},"exports":{".":"./a\\b.ts"}}`},
+		{"non-string entries", "deno.json", `{"imports":{"ignored":{"default":"./index.ts"}},"exports":{".":{"default":"./index.ts"}}}`},
+		{"comments", "deno.jsonc", "{\n// comment\n\"exports\":{\".\":\"./index.ts\"}}"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var archive bytes.Buffer
+			gz := gzip.NewWriter(&archive)
+			tw := tar.NewWriter(gz)
+			if err := tw.WriteHeader(&tar.Header{Name: "repo/" + test.filename, Mode: 0644, Size: int64(len(test.content))}); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := io.WriteString(tw, test.content); err != nil {
+				t.Fatal(err)
+			}
+			if err := tw.Close(); err != nil {
+				t.Fatal(err)
+			}
+			if err := gz.Close(); err != nil {
+				t.Fatal(err)
+			}
+			http.DefaultTransport = ghTestTransport(func(r *http.Request) (*http.Response, error) {
+				return &http.Response{StatusCode: 200, Body: io.NopCloser(bytes.NewReader(archive.Bytes()))}, nil
+			})
+			pkg := npm.Package{Github: true, Name: "owner/" + strings.ReplaceAll(test.name, " ", "-"), Version: "abcdef0"}
+			info, err := new(NpmRC).installPackage(pkg)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if info.Name != pkg.Name || info.Version != pkg.Version {
+				t.Fatalf("incorrect generated package identity: %s@%s", info.Name, info.Version)
+			}
+			switch test.name {
+			case "escaped strings":
+				if got, _ := info.Imports.Get(`quote"name`); got != `./quote"file.ts` {
+					t.Fatalf("import = %q", got)
+				}
+				if got, _ := info.Exports.Get("."); got != `./a\b.ts` {
+					t.Fatalf("export = %q", got)
+				}
+			case "non-string entries":
+				if info.Imports.Len() != 0 || info.Exports.Len() != 0 {
+					t.Fatal("non-string entries should be omitted")
+				}
+			case "comments":
+				if got, _ := info.Exports.Get("."); got != "./index.ts" {
+					t.Fatalf("export = %q", got)
+				}
 			}
 		})
 	}

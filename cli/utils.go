@@ -69,13 +69,14 @@ func lookupClosestFile(name string) (filename string, exists bool, err error) {
 		if err == nil && !fi.IsDir() {
 			return indexHtml, true, nil
 		}
-		if err != nil && os.IsExist(err) {
+		if err != nil && !os.IsNotExist(err) {
 			return "", false, err
 		}
-		dir = filepath.Dir(dir)
-		if dir == "/" || (os.PathSeparator == '\\' && len(dir) <= 3) {
+		parent := filepath.Dir(dir)
+		if parent == dir {
 			break
 		}
+		dir = parent
 	}
 	return filepath.Join(cwd, name), false, nil
 }
