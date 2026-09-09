@@ -687,7 +687,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 			}
 		}
 
-		if pathKind == RawFile && !rawFlag && esmPath.SubPath != "" && strings.HasSuffix(esmPath.SubPath, ".map") {
+		if pathKind == RawFile && !esmPath.GhPrefix && !rawFlag && esmPath.SubPath != "" && strings.HasSuffix(esmPath.SubPath, ".map") {
 			pkgJson, err := npmrc.installPackage(esmPath.Package())
 			if err != nil {
 				writeStatus(w, 500, err.Error())
@@ -771,6 +771,78 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 			}
 		}
 
+		if esmPath.GhPrefix && hasTargetSegment && pathKind == RawFile && !rawFlag && esmPath.SubPath != "" {
+			assetURL := &url.URL{Path: "/" + esmPath.String(), RawQuery: r.URL.RawQuery}
+			redirect(w, origin+assetURL.String(), true)
+			return
+		}
+
+		// Fetch GitHub assets directly without installing the repository.
+		if esmPath.GhPrefix && pathKind == RawFile && esmPath.SubPath != "" && !(query.Has("module") && endsWith(esmPath.SubPath, ".css", ".json", ".wasm")) {
+			rawURL := &url.URL{
+				Scheme: "https",
+				Host:   "raw.githubusercontent.com",
+				Path:   "/" + esmPath.PkgName + "/" + esmPath.PkgVersion + "/" + esmPath.SubPath,
+			}
+			requestHeader := http.Header{}
+			if etag := r.Header.Get("If-None-Match"); etag != "" {
+				requestHeader.Set("If-None-Match", etag)
+			}
+			client := fetch.NewClient("esmd/"+VERSION, 30, false)
+			res, err := client.FetchWithContext(r.Context(), rawURL, requestHeader)
+			if err != nil {
+				writeStatus(w, 502, err.Error())
+				return
+			}
+			defer res.Body.Close()
+			if res.StatusCode != 200 && res.StatusCode != 304 {
+				if res.StatusCode == 404 {
+					header.Set("Cache-Control", ccImmutable)
+				}
+				writeStatus(w, res.StatusCode, http.StatusText(res.StatusCode))
+				return
+			}
+			if res.ContentLength > maxAssetFileSize {
+				header.Set("Cache-Control", ccImmutable)
+				writeStatus(w, 403, "File Too Large")
+				return
+			}
+			data, err := io.ReadAll(io.LimitReader(res.Body, maxAssetFileSize+1))
+			if err != nil {
+				writeStatus(w, 502, err.Error())
+				return
+			}
+			if len(data) > maxAssetFileSize {
+				header.Set("Cache-Control", ccImmutable)
+				writeStatus(w, 403, "File Too Large")
+				return
+			}
+			for _, key := range []string{"ETag", "Last-Modified"} {
+				if value := res.Header.Get(key); value != "" {
+					header.Set(key, value)
+				}
+			}
+			header.Set("Cache-Control", ccImmutable)
+			if res.StatusCode == 304 {
+				w.WriteHeader(304)
+				return
+			}
+			contentType := mime.GetContentType(esmPath.SubPath)
+			if endsWith(esmPath.SubPath, ".ts", ".mts", ".cts", ".tsx") {
+				contentType = ctTypeScript
+			} else if contentType == "" {
+				contentType = res.Header.Get("Content-Type")
+			}
+			header.Set("Content-Type", contentType)
+			if r.Method == http.MethodHead {
+				header.Set("Content-Length", fmt.Sprintf("%d", len(data)))
+				w.WriteHeader(200)
+				return
+			}
+			writeBody(w, data)
+			return
+		}
+
 		// fix url that is related to `import.meta.url`
 		if hasTargetSegment && isExactVersion && pathKind == RawFile && !rawFlag {
 			extname := path.Ext(esmPath.SubPath)
@@ -837,6 +909,12 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 
 			// return css file as a `CSSStyleSheet` object when `?module` query is present
 			if pathKind == RawFile && strings.HasSuffix(esmPath.SubPath, ".css") && query.Has("module") {
+				if esmPath.GhPrefix {
+					if _, err := npmrc.installPackageContext(r.Context(), esmPath.Package()); err != nil {
+						writeStatus(w, 500, err.Error())
+						return
+					}
+				}
 				filename := path.Join(npmrc.StoreDir(), esmPath.PackageId(), "node_modules", esmPath.PkgName, esmPath.SubPath)
 				css, err := os.ReadFile(filename)
 				if err != nil {

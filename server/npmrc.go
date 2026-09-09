@@ -739,14 +739,18 @@ func extractPackageTarball(installDir string, pkgName string, tarball io.Reader)
 }
 
 func extractPackageTarballContext(ctx context.Context, installDir string, pkgName string, tarball io.Reader) (err error) {
-	// pkgName is joined into the extraction path below.
-	if !filepath.IsLocal(pkgName) {
-		return errors.New("invalid package name: " + pkgName)
-	}
-
 	unziped, err := gzip.NewReader(&contextReader{ctx: ctx, reader: tarball})
 	if err != nil {
 		return
+	}
+	defer unziped.Close()
+	return extractPackageTarContext(ctx, installDir, pkgName, unziped)
+}
+
+func extractPackageTarContext(ctx context.Context, installDir string, pkgName string, archive io.Reader) (err error) {
+	// pkgName is joined into the extraction path below.
+	if !filepath.IsLocal(pkgName) {
+		return errors.New("invalid package name: " + pkgName)
 	}
 
 	// Confine every write to installDir, including when a symlink is already at
@@ -761,7 +765,7 @@ func extractPackageTarballContext(ctx context.Context, installDir string, pkgNam
 	defer root.Close()
 
 	// extract tarball
-	tr := tar.NewReader(unziped)
+	tr := tar.NewReader(&contextReader{ctx: ctx, reader: archive})
 	for {
 		if err := ctx.Err(); err != nil {
 			return err

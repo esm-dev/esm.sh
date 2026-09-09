@@ -3,6 +3,7 @@ package server
 import (
 	"bufio"
 	"bytes"
+	"compress/gzip"
 	"context"
 	"errors"
 	"fmt"
@@ -10,11 +11,17 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/esm-dev/esm.sh/internal/fetch"
 	"github.com/ije/gox/utils"
 )
+
+const ghInstallTimeout = 30 * time.Second
+
+var errRepoTooLarge = errors.New("repo is too large")
 
 type GitRef struct {
 	Ref string
@@ -69,12 +76,45 @@ func ghInstall(wd, name, tag string) (err error) {
 }
 
 func ghInstallContext(ctx context.Context, wd, name, tag string) (err error) {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	tooLargeFile := filepath.Join(config.WorkDir, "gh-too-large", url.PathEscape(strings.ToLower(name)))
+	if existsFile(tooLargeFile) {
+		return errRepoTooLarge
+	}
+
+	installCtx, cancel := context.WithTimeout(ctx, ghInstallTimeout)
+	defer cancel()
+	defer func() {
+		if err == nil {
+			err = installCtx.Err()
+		}
+		if errors.Is(err, errRepoTooLarge) {
+			recordErr := ensureDir(filepath.Dir(tooLargeFile))
+			if recordErr == nil {
+				recordErr = os.WriteFile(tooLargeFile, []byte(name+"\n"), 0644)
+			}
+			if recordErr != nil {
+				err = errors.Join(err, fmt.Errorf("record oversized repo: %w", recordErr))
+			}
+		} else if ctx.Err() != nil {
+			err = ctx.Err()
+		} else if errors.Is(installCtx.Err(), context.DeadlineExceeded) {
+			err = errors.New("github: install timeout after 30 seconds")
+		}
+		if err != nil {
+			// A partial extraction must not be treated as an installed package.
+			os.RemoveAll(wd)
+		}
+	}()
+
 	u, err := url.Parse(fmt.Sprintf("https://codeload.github.com/%s/tar.gz/%s", name, tag))
 	if err != nil {
 		return
 	}
-	client := fetch.NewClient("esmd/"+VERSION, 30, false)
-	res, err := client.FetchWithContext(ctx, u, nil)
+	client := fetch.NewClient("esmd/"+VERSION, 0, false)
+	res, err := client.FetchWithContext(installCtx, u, nil)
 	if err != nil {
 		return
 	}
@@ -88,11 +128,23 @@ func ghInstallContext(ctx context.Context, wd, name, tag string) (err error) {
 		return fmt.Errorf("fetch %s failed: %s", u, res.Status)
 	}
 
-	err = extractPackageTarballContext(ctx, wd, name, io.LimitReader(res.Body, maxPackageTarballSize))
+	if res.ContentLength > maxPackageTarballSize {
+		return errRepoTooLarge
+	}
+	download := &io.LimitedReader{R: res.Body, N: maxPackageTarballSize + 1}
+	unzip, err := gzip.NewReader(&contextReader{ctx: installCtx, reader: download})
 	if err != nil {
-		// clear wd if failed to extract tarball, otherwise the partial
-		// extraction would be treated as a completed installation
-		os.RemoveAll(wd)
+		return err
+	}
+	defer unzip.Close()
+	unpacked := &io.LimitedReader{R: unzip, N: maxPackageTarballSize + 1}
+	err = extractPackageTarContext(installCtx, wd, name, unpacked)
+	if err == nil {
+		// Read through the gzip trailer and count any remaining archive data.
+		_, err = io.Copy(io.Discard, &contextReader{ctx: installCtx, reader: unpacked})
+	}
+	if download.N == 0 || unpacked.N == 0 {
+		err = errRepoTooLarge
 	}
 	return
 }
