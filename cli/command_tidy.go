@@ -42,7 +42,7 @@ func Tidy() {
 func tidy(noSRI bool) (err error) {
 	indexHtml, exists, err := lookupClosestFile("index.html")
 	if err != nil {
-		err = fmt.Errorf("Failed to lookup index.html: %w", err)
+		err = fmt.Errorf("failed to lookup index.html: %w", err)
 		return
 	}
 
@@ -55,12 +55,16 @@ func tidy(noSRI bool) (err error) {
 	if err != nil {
 		return
 	}
+	defer f.Close()
 
 	tokenizer := html.NewTokenizer(f)
 	buf := bytes.NewBuffer(nil)
 	for {
 		token := tokenizer.Next()
-		if token == html.ErrorToken && tokenizer.Err() == io.EOF {
+		if token == html.ErrorToken {
+			if tokenizer.Err() != io.EOF {
+				return tokenizer.Err()
+			}
 			break
 		}
 		if token == html.StartTagToken {
@@ -96,15 +100,16 @@ func tidy(noSRI bool) (err error) {
 					importMap := importmap.Blank()
 					importMap.SetConfig(prevImportMap.Config())
 					importMap.SetIntegrity(prevImportMap.Integrity())
+					cdn := prevImportMap.Config().CDN
+					if !strings.HasPrefix(cdn, "https://") && !strings.HasPrefix(cdn, "http://") {
+						cdn = "https://esm.sh"
+					}
 					imports := make([]importmap.Import, 0, prevImportMap.Imports.Len())
 					prevImportMap.Imports.Range(func(specifier string, url string) bool {
-						if strings.HasPrefix(url, "https://") || strings.HasPrefix(url, "http://") {
-							// todo: check hostname
+						if strings.HasPrefix(url, cdn+"/") {
 							imp, err := importmap.ParseEsmPath(url)
-							if err == nil {
-								if npm.IsExactVersion(imp.Version) {
-									imports = append(imports, imp)
-								}
+							if err == nil && npm.IsExactVersion(imp.Version) && specifier == imp.Specifier(false) {
+								imports = append(imports, imp)
 								return true // continue
 							}
 						}
@@ -112,11 +117,8 @@ func tidy(noSRI bool) (err error) {
 						return true
 					})
 					prevImportMap.RangeScopes(func(scope string, imports *importmap.Imports) bool {
-						if strings.HasPrefix(scope, "https://") || strings.HasPrefix(scope, "http://") {
-							// todo: check hostname
-							if strings.HasSuffix(scope, "/") {
-								return true // continue
-							}
+						if strings.HasPrefix(scope, cdn+"/") && strings.HasSuffix(scope, "/") {
+							return true // continue
 						}
 						importMap.SetScopeImports(scope, imports)
 						return true
@@ -130,12 +132,11 @@ func tidy(noSRI bool) (err error) {
 						specifiers = append(specifiers, imp.Specifier(true))
 					}
 					sort.Strings(specifiers)
-					addImports(importMap, specifiers, false, true, noSRI)
+					if !addImports(importMap, specifiers, false, true, noSRI) {
+						return fmt.Errorf("could not resolve imports")
+					}
 					buf.WriteString(importMap.FormatJSON(2))
 					buf.WriteString("\n  ")
-					if token == html.EndTagToken {
-						buf.Write(tokenizer.Raw())
-					}
 					continue
 				}
 			}

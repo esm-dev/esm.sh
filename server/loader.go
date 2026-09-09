@@ -14,9 +14,8 @@ import (
 )
 
 type LoaderOutput struct {
-	Lang  string `json:"lang"`
-	Code  string `json:"code"`
-	Error string `json:"error"`
+	Lang string
+	Code string
 }
 
 func runLoaderContext(ctx context.Context, loaderJsPath string, filename string, code string) (out *LoaderOutput, err error) {

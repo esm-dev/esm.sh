@@ -2,12 +2,16 @@ package storage
 
 import (
 	"bytes"
+	"crypto/md5"
+	"encoding/base64"
 	"encoding/xml"
 	"errors"
+	"fmt"
 	"html"
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -61,7 +65,9 @@ func NewS3Storage(options *StorageOptions) (Storage, error) {
 }
 
 type s3ListResult struct {
-	Contents []struct {
+	IsTruncated           bool
+	NextContinuationToken string
+	Contents              []struct {
 		Key string
 	}
 }
@@ -173,13 +179,16 @@ func (s3 *s3Storage) Get(name string) (content io.ReadCloser, stat Stat, err err
 	if err != nil {
 		return
 	}
+	defer func() {
+		if err != nil {
+			resp.Body.Close()
+		}
+	}()
 	if resp.StatusCode == 404 {
-		defer resp.Body.Close()
 		err = ErrNotFound
 		return
 	}
 	if resp.StatusCode >= 400 {
-		defer resp.Body.Close()
 		return nil, nil, parseS3Error(resp)
 	}
 	contentLengthHeader := resp.Header.Get("Content-Length")
@@ -210,6 +219,7 @@ func (s3 *s3Storage) Get(name string) (content io.ReadCloser, stat Stat, err err
 		cacheKey := s3.fsCacheKey(name)
 		pr, pw := io.Pipe()
 		go func() {
+			defer resp.Body.Close()
 			unlock := s3.fsCacheLock.Lock(name)
 			defer unlock()
 			_, err := s3.fsCache.Stat(cacheKey)
@@ -220,7 +230,6 @@ func (s3 *s3Storage) Get(name string) (content io.ReadCloser, stat Stat, err err
 			}
 			err = s3.fsCache.Put(cacheKey, io.TeeReader(resp.Body, pw))
 			pw.CloseWithError(err)
-			resp.Body.Close()
 		}()
 		content = pr
 	} else {
@@ -319,26 +328,35 @@ func (s3 *s3Storage) List(prefix string) (keys []string, err error) {
 	if prefix != "" {
 		query.Set("prefix", prefix)
 	}
-	req, _ := http.NewRequest("GET", s3.apiEndpoint+"?"+query.Encode(), nil)
-	s3.sign(req)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return
+	keys = []string{}
+	for {
+		req, _ := http.NewRequest("GET", s3.apiEndpoint+"?"+query.Encode(), nil)
+		s3.sign(req)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return keys, err
+		}
+		var ret s3ListResult
+		if resp.StatusCode >= 400 {
+			err = parseS3Error(resp)
+		} else {
+			err = xml.NewDecoder(resp.Body).Decode(&ret)
+		}
+		resp.Body.Close()
+		if err != nil {
+			return keys, err
+		}
+		for _, content := range ret.Contents {
+			keys = append(keys, content.Key)
+		}
+		if !ret.IsTruncated {
+			return keys, nil
+		}
+		if ret.NextContinuationToken == "" || ret.NextContinuationToken == query.Get("continuation-token") {
+			return keys, errors.New("invalid S3 continuation token")
+		}
+		query.Set("continuation-token", ret.NextContinuationToken)
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode >= 400 {
-		return nil, parseS3Error(resp)
-	}
-	var ret s3ListResult
-	err = xml.NewDecoder(resp.Body).Decode(&ret)
-	if err != nil {
-		return
-	}
-	keys = make([]string, len(ret.Contents))
-	for i, content := range ret.Contents {
-		keys[i] = content.Key
-	}
-	return
 }
 
 func (s3 *s3Storage) DeleteAll(prefix string) (deletedKeys []string, err error) {
@@ -355,32 +373,42 @@ func (s3 *s3Storage) DeleteAll(prefix string) (deletedKeys []string, err error) 
 	if len(keysToDelete) == 0 {
 		return []string{}, nil
 	}
-	buf := new(bytes.Buffer)
-	buf.WriteString("<Delete>")
-	for _, key := range keysToDelete {
-		buf.WriteString("<Object><Key>")
-		buf.WriteString(html.EscapeString(key))
-		buf.WriteString("</Key></Object>")
-	}
-	buf.WriteString("</Delete>")
-	req, _ := http.NewRequest("POST", s3.apiEndpoint+"?delete", buf)
-	s3.sign(req)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode >= 400 {
-		return nil, parseS3Error(resp)
-	}
-	var ret s3DeleteResult
-	err = xml.NewDecoder(resp.Body).Decode(&ret)
-	if err != nil {
-		return
-	}
-	deletedKeys = make([]string, len(ret.Deleted))
-	for i, deleted := range ret.Deleted {
-		deletedKeys[i] = deleted.Key
+	for batch := range slices.Chunk(keysToDelete, 1000) {
+		buf := new(bytes.Buffer)
+		buf.WriteString("<Delete>")
+		for _, key := range batch {
+			buf.WriteString("<Object><Key>")
+			buf.WriteString(html.EscapeString(key))
+			buf.WriteString("</Key></Object>")
+		}
+		buf.WriteString("</Delete>")
+		checksum := md5.Sum(buf.Bytes())
+		req, _ := http.NewRequest("POST", s3.apiEndpoint+"?delete", buf)
+		req.Header.Set("Content-MD5", base64.StdEncoding.EncodeToString(checksum[:]))
+		s3.sign(req)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return deletedKeys, err
+		}
+		var ret s3DeleteResult
+		if resp.StatusCode >= 400 {
+			err = parseS3Error(resp)
+		} else {
+			err = xml.NewDecoder(resp.Body).Decode(&ret)
+		}
+		resp.Body.Close()
+		if err != nil {
+			return deletedKeys, err
+		}
+		for _, deleted := range ret.Deleted {
+			deletedKeys = append(deletedKeys, deleted.Key)
+		}
+		for _, failure := range ret.Error {
+			err = errors.Join(err, fmt.Errorf("failed to delete %q: %w", failure.Key, s3Error{Code: failure.Code, Message: failure.Message}))
+		}
+		if err != nil {
+			return deletedKeys, err
+		}
 	}
 	return
 }

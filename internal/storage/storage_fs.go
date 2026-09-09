@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"crypto/rand"
 	"errors"
 	"io"
 	"os"
@@ -75,9 +76,12 @@ func (fs *fsStorage) Get(key string) (content io.ReadCloser, stat Stat, err erro
 	if err != nil {
 		return
 	}
-	content = file
-	stat, err = os.Stat(filename)
-	return
+	stat, err = file.Stat()
+	if err != nil {
+		file.Close()
+		return nil, nil, err
+	}
+	return file, stat, nil
 }
 
 func (fs *fsStorage) Put(key string, content io.Reader) (err error) {
@@ -90,17 +94,20 @@ func (fs *fsStorage) Put(key string, content io.Reader) (err error) {
 		return
 	}
 
-	file, err := os.Create(filename)
+	file, err := os.OpenFile(filepath.Join(filepath.Dir(filename), ".storage-"+rand.Text()), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0666)
 	if err != nil {
 		return
 	}
+	defer os.Remove(file.Name())
 
 	_, err = io.Copy(file, content)
-	file.Close()
-	if err != nil {
-		os.Remove(filename) // clean up if error occurs
+	if closeErr := file.Close(); err == nil {
+		err = closeErr
 	}
-	return
+	if err != nil {
+		return err
+	}
+	return os.Rename(file.Name(), filename)
 }
 
 func (fs *fsStorage) Delete(key string) (err error) {
@@ -178,11 +185,8 @@ func findFiles(root string, parentDir string) ([]string, error) {
 			if err != nil {
 				return nil, err
 			}
-			newFiles := make([]string, len(files)+len(subFiles))
-			copy(newFiles, files)
-			copy(newFiles[len(files):], subFiles)
-			files = newFiles
-		} else {
+			files = append(files, subFiles...)
+		} else if !strings.HasPrefix(name, ".storage-") {
 			files = append(files, path)
 		}
 	}

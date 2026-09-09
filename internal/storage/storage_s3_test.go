@@ -2,10 +2,99 @@ package storage
 
 import (
 	"bytes"
+	"crypto/md5"
+	"encoding/base64"
+	"encoding/xml"
+	"fmt"
 	"io"
+	"net/http"
 	"os"
+	"slices"
+	"strings"
 	"testing"
+	"time"
 )
+
+type s3TestTransport func(*http.Request) (*http.Response, error)
+
+func (transport s3TestTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	return transport(req)
+}
+
+type s3TestBody struct {
+	io.Reader
+	closed chan struct{}
+}
+
+func (body *s3TestBody) Close() error {
+	close(body.closed)
+	return nil
+}
+
+func TestS3StorageGetClosesInvalidResponse(t *testing.T) {
+	for _, headers := range []http.Header{
+		{},
+		{"Content-Length": {"invalid"}},
+		{"Content-Length": {"4"}},
+		{"Content-Length": {"4"}, "Last-Modified": {"invalid"}},
+	} {
+		t.Run(headers.Get("Content-Length")+"/"+headers.Get("Last-Modified"), func(t *testing.T) {
+			body := &s3TestBody{Reader: strings.NewReader("data"), closed: make(chan struct{})}
+			client := http.DefaultClient
+			t.Cleanup(func() { http.DefaultClient = client })
+			http.DefaultClient = &http.Client{Transport: s3TestTransport(func(*http.Request) (*http.Response, error) {
+				return &http.Response{StatusCode: 200, Header: headers, Body: body}, nil
+			})}
+			s3 := &s3Storage{apiEndpoint: "https://storage.test"}
+			if _, _, err := s3.Get("test.txt"); err == nil {
+				t.Fatal("expected a metadata error")
+			}
+			select {
+			case <-body.closed:
+			default:
+				t.Fatal("response body was not closed")
+			}
+		})
+	}
+}
+
+func TestS3StorageGetClosesResponseWhenCacheIsFilled(t *testing.T) {
+	cache, err := NewFSStorage(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := &s3TestBody{Reader: strings.NewReader("data"), closed: make(chan struct{})}
+	client := http.DefaultClient
+	t.Cleanup(func() { http.DefaultClient = client })
+	http.DefaultClient = &http.Client{Transport: s3TestTransport(func(*http.Request) (*http.Response, error) {
+		if err := cache.Put("test.txt", strings.NewReader("data")); err != nil {
+			return nil, err
+		}
+		return &http.Response{
+			StatusCode: 200,
+			Header: http.Header{
+				"Content-Length": {"4"},
+				"Last-Modified":  {time.Now().UTC().Format(http.TimeFormat)},
+			},
+			Body: body,
+		}, nil
+	})}
+	s3 := &s3Storage{apiEndpoint: "https://storage.test", fsCache: cache.(*fsStorage)}
+	content, _, err := s3.Get("test.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer content.Close()
+	data, err := io.ReadAll(content)
+	if err != nil || string(data) != "data" {
+		t.Fatalf("content %q, error %v", data, err)
+	}
+	select {
+	case <-body.closed:
+	case <-time.After(time.Second):
+		t.Fatal("response body was not closed")
+	}
+}
 
 func TestS3StorageFSCacheKey(t *testing.T) {
 	s3 := &s3Storage{}
@@ -17,6 +106,148 @@ func TestS3StorageFSCacheKey(t *testing.T) {
 	}
 	if got = s3.fsCacheKey("v135/react@19.2.0/esnext/react.mjs"); got != "v135/react@19.2.0/esnext/react.mjs" {
 		t.Fatalf("invalid cache key %q", got)
+	}
+}
+
+func TestS3StorageListPagination(t *testing.T) {
+	client := http.DefaultClient
+	t.Cleanup(func() { http.DefaultClient = client })
+	const token = "next+/=&?"
+	var previous *s3TestBody
+	requests := 0
+	http.DefaultClient = &http.Client{Transport: s3TestTransport(func(req *http.Request) (*http.Response, error) {
+		requests++
+		if previous != nil {
+			select {
+			case <-previous.closed:
+			default:
+				t.Error("previous page body was not closed")
+			}
+		}
+		if req.URL.Query().Get("prefix") != "test/" || req.URL.Query().Get("list-type") != "2" {
+			t.Fatalf("unexpected list query: %s", req.URL.RawQuery)
+		}
+		var body string
+		switch requests {
+		case 1:
+			body = `<ListBucketResult><Contents><Key>test/a</Key></Contents><IsTruncated>true</IsTruncated><NextContinuationToken>next+/=&amp;?</NextContinuationToken></ListBucketResult>`
+		case 2:
+			if req.URL.Query().Get("continuation-token") != token {
+				t.Fatalf("unexpected continuation token: %s", req.URL.RawQuery)
+			}
+			body = `<ListBucketResult><Contents><Key>test/b</Key></Contents><IsTruncated>false</IsTruncated></ListBucketResult>`
+		default:
+			t.Fatal("unexpected extra list request")
+		}
+		previous = &s3TestBody{Reader: strings.NewReader(body), closed: make(chan struct{})}
+		return &http.Response{StatusCode: 200, Body: previous}, nil
+	})}
+	s3 := &s3Storage{apiEndpoint: "https://storage.test"}
+	keys, err := s3.List("test/")
+	if err != nil || !slices.Equal(keys, []string{"test/a", "test/b"}) {
+		t.Fatalf("list = %v, %v", keys, err)
+	}
+	select {
+	case <-previous.closed:
+	default:
+		t.Fatal("last page body was not closed")
+	}
+}
+
+func TestS3StorageListInvalidPagination(t *testing.T) {
+	for _, token := range []string{"", "repeated"} {
+		t.Run(token, func(t *testing.T) {
+			client := http.DefaultClient
+			t.Cleanup(func() { http.DefaultClient = client })
+			requests := 0
+			http.DefaultClient = &http.Client{Transport: s3TestTransport(func(*http.Request) (*http.Response, error) {
+				requests++
+				if requests > 2 {
+					t.Fatal("pagination did not stop on an invalid token")
+				}
+				body := "<ListBucketResult><IsTruncated>true</IsTruncated><NextContinuationToken>" + token + "</NextContinuationToken></ListBucketResult>"
+				return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body))}, nil
+			})}
+			s3 := &s3Storage{apiEndpoint: "https://storage.test"}
+			if _, err := s3.List("test/"); err == nil {
+				t.Fatal("expected invalid pagination to fail")
+			}
+		})
+	}
+}
+
+func TestS3StorageDeleteAllBatches(t *testing.T) {
+	client := http.DefaultClient
+	t.Cleanup(func() { http.DefaultClient = client })
+	keys := make([]string, 2005)
+	for i := range keys {
+		keys[i] = fmt.Sprintf("test/%04d", i)
+	}
+	var batches []int
+	var deleted []string
+	http.DefaultClient = &http.Client{Transport: s3TestTransport(func(req *http.Request) (*http.Response, error) {
+		var response strings.Builder
+		if req.Method == http.MethodGet {
+			start := 0
+			if _, err := fmt.Sscanf(req.URL.Query().Get("continuation-token"), "%d", &start); err != nil && req.URL.Query().Has("continuation-token") {
+				t.Fatal(err)
+			}
+			end := min(start+1000, len(keys))
+			response.WriteString("<ListBucketResult>")
+			for _, key := range keys[start:end] {
+				fmt.Fprintf(&response, "<Contents><Key>%s</Key></Contents>", key)
+			}
+			if end < len(keys) {
+				fmt.Fprintf(&response, "<IsTruncated>true</IsTruncated><NextContinuationToken>%d</NextContinuationToken>", end)
+			}
+			response.WriteString("</ListBucketResult>")
+		} else {
+			if req.Method != http.MethodPost || !req.URL.Query().Has("delete") {
+				t.Fatalf("unexpected delete request: %s %s", req.Method, req.URL)
+			}
+			data, err := io.ReadAll(req.Body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			checksum := md5.Sum(data)
+			if req.Header.Get("Content-MD5") != base64.StdEncoding.EncodeToString(checksum[:]) {
+				t.Error("missing or incorrect delete body checksum")
+			}
+			var body struct{ Object []struct{ Key string } }
+			if err := xml.Unmarshal(data, &body); err != nil {
+				t.Fatal(err)
+			}
+			batches = append(batches, len(body.Object))
+			response.WriteString("<DeleteResult>")
+			for _, object := range body.Object {
+				deleted = append(deleted, object.Key)
+				fmt.Fprintf(&response, "<Deleted><Key>%s</Key></Deleted>", object.Key)
+			}
+			response.WriteString("</DeleteResult>")
+		}
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(response.String()))}, nil
+	})}
+	s3 := &s3Storage{apiEndpoint: "https://storage.test"}
+	got, err := s3.DeleteAll("test/")
+	if err != nil || !slices.Equal(got, keys) || !slices.Equal(deleted, keys) || !slices.Equal(batches, []int{1000, 1000, 5}) {
+		t.Fatalf("delete: %d results, %d requested keys, batches %v, error %v", len(got), len(deleted), batches, err)
+	}
+}
+
+func TestS3StorageDeleteAllPartialError(t *testing.T) {
+	client := http.DefaultClient
+	t.Cleanup(func() { http.DefaultClient = client })
+	http.DefaultClient = &http.Client{Transport: s3TestTransport(func(req *http.Request) (*http.Response, error) {
+		body := `<ListBucketResult><Contents><Key>test/a</Key></Contents><Contents><Key>test/b</Key></Contents></ListBucketResult>`
+		if req.Method == http.MethodPost {
+			body = `<DeleteResult><Deleted><Key>test/a</Key></Deleted><Error><Key>test/b</Key><Code>AccessDenied</Code><Message>Access Denied</Message></Error></DeleteResult>`
+		}
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body))}, nil
+	})}
+	s3 := &s3Storage{apiEndpoint: "https://storage.test"}
+	deleted, err := s3.DeleteAll("test/")
+	if !slices.Equal(deleted, []string{"test/a"}) || err == nil || !strings.Contains(err.Error(), "test/b") || !strings.Contains(err.Error(), "AccessDenied") {
+		t.Fatalf("partial delete = %v, %v", deleted, err)
 	}
 }
 

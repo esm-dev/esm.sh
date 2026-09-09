@@ -2,7 +2,6 @@ package server
 
 import (
 	"archive/tar"
-	"bytes"
 	"compress/gzip"
 	"context"
 	"encoding/base64"
@@ -16,7 +15,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -210,24 +208,19 @@ CHECK:
 			version = "latest"
 			goto CHECK
 		}
-		vs := make([]*semver.Version, len(metadata.Versions))
-		i := 0
+		var latest *semver.Version
+		includePrerelease := strings.ContainsRune(version, '-')
 		for v := range metadata.Versions {
-			if !strings.ContainsRune(version, '-') && strings.ContainsRune(v, '-') {
+			if !includePrerelease && strings.ContainsRune(v, '-') {
 				continue
 			}
 			sv, err := semver.NewVersion(v)
-			if err == nil && c.Check(sv) {
-				vs[i] = sv
-				i++
+			if err == nil && c.Check(sv) && (latest == nil || sv.GreaterThan(latest)) {
+				latest = sv
 			}
 		}
-		if i > 0 {
-			vs = vs[:i]
-			if i > 1 {
-				sort.Sort(semver.Collection(vs))
-			}
-			return vs[i-1].String(), nil
+		if latest != nil {
+			return latest.Original(), nil
 		}
 	}
 	return "", fmt.Errorf("version %s not found", version)
@@ -296,7 +289,7 @@ func invalidateDistTagCacheIfNewer(pkgName string, version string) {
 		return
 	}
 	key := "npm:" + pkgName + "@latest"
-	v, ok := getCacheItem(key)
+	v, _ := getCacheItem(key)
 	latest, ok := v.(*npm.PackageJSON)
 	if !ok || !semverLessThan(latest.Version, version) {
 		return
@@ -370,8 +363,7 @@ func (npmrc *NpmRC) installPackageContext(ctx context.Context, pkg npm.Package) 
 		err = ghInstallContext(ctx, installDir, pkg.Name, pkg.Version)
 		// ensure 'package.json' file if not exists after installing from github
 		if err == nil && !existsFile(packageJsonPath) {
-			buf := bytes.NewBuffer(nil)
-			buf.WriteString(`{"name":"` + pkg.Name + `","version":"` + pkg.Version + `"`)
+			packageData := map[string]any{"name": pkg.Name, "version": pkg.Version}
 			var denoJson *npm.PackageJSON
 			if deonJsonPath := filepath.Join(installDir, "node_modules", pkg.Name, "deno.json"); existsFile(deonJsonPath) {
 				var raw npm.PackageJSONRaw
@@ -388,32 +380,23 @@ func (npmrc *NpmRC) installPackageContext(ctx context.Context, pkg npm.Package) 
 				}
 			}
 			if denoJson != nil {
-				if denoJson.Imports.Len() > 0 {
-					buf.WriteString(`,"imports":{`)
-					for _, k := range denoJson.Imports.Keys() {
-						v, _ := denoJson.Imports.Get(k)
-						if s, ok := v.(string); ok {
-							buf.WriteString(`"` + k + `":"` + s + `",`)
+				for field, object := range map[string]npm.JSONObject{"imports": denoJson.Imports, "exports": denoJson.Exports} {
+					values := map[string]string{}
+					for key, value := range object.Values() {
+						if s, ok := value.(string); ok {
+							values[key] = s
 						}
 					}
-					buf.Truncate(buf.Len() - 1)
-					buf.WriteByte('}')
-				}
-				if denoJson.Exports.Len() > 0 {
-					buf.WriteString(`,"exports":{`)
-					for _, k := range denoJson.Exports.Keys() {
-						if v, ok := denoJson.Exports.Get(k); ok {
-							if s, ok := v.(string); ok {
-								buf.WriteString(`"` + k + `":"` + s + `",`)
-							}
-						}
+					if len(values) > 0 {
+						packageData[field] = values
 					}
-					buf.Truncate(buf.Len() - 1)
-					buf.WriteByte('}')
 				}
 			}
-			buf.WriteByte('}')
-			err = os.WriteFile(packageJsonPath, buf.Bytes(), 0644)
+			data, encodeErr := json.Marshal(packageData)
+			if encodeErr != nil {
+				return nil, encodeErr
+			}
+			err = os.WriteFile(packageJsonPath, data, 0644)
 			if err != nil {
 				return
 			}
@@ -504,7 +487,7 @@ func (npmrc *NpmRC) installDependenciesContext(ctx context.Context, wd string, p
 			if p.Name != "" {
 				pkg = p
 			}
-			if strings.HasSuffix(pkg.Name, "@types/") {
+			if strings.HasPrefix(pkg.Name, "@types/") {
 				// skip installing `@types/*` packages
 				return
 			}

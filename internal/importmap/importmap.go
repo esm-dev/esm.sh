@@ -11,7 +11,6 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/esm-dev/esm.sh/internal/npm"
-	"github.com/ije/gox/set"
 	"github.com/ije/gox/term"
 	"github.com/ije/gox/utils"
 )
@@ -172,6 +171,17 @@ func (im *ImportMap) SetScopeImports(scope string, imports *Imports) {
 	im.lock.Unlock()
 }
 
+func (im *ImportMap) getOrCreateScopeImports(scope string) *Imports {
+	im.lock.Lock()
+	defer im.lock.Unlock()
+	imports, ok := im.scopes[scope]
+	if !ok {
+		imports = newImports(nil)
+		im.scopes[scope] = imports
+	}
+	return imports
+}
+
 // RangeScopes ranges over the scopes of the import map.
 func (im *ImportMap) RangeScopes(fn func(scope string, imports *Imports) bool) {
 	im.lock.RLock()
@@ -188,10 +198,6 @@ func (im *ImportMap) RangeScopes(fn func(scope string, imports *Imports) bool) {
 // This function follows the import maps specification:
 // https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/script/type/importmap
 func (im *ImportMap) Resolve(specifier string, referrer *url.URL) (string, bool) {
-	if im.baseUrl == nil {
-		im.baseUrl, _ = url.Parse("file:///")
-	}
-
 	var hash string
 	specifier, hash = utils.SplitByFirstByte(specifier, '#')
 	if hash != "" {
@@ -204,19 +210,21 @@ func (im *ImportMap) Resolve(specifier string, referrer *url.URL) (string, bool)
 		query = "?" + query
 	}
 
-	if referrer != nil && len(im.scopes) > 0 {
-		scopeKeys := make(ScopeKeys, 0, len(im.scopes))
-		for prefix := range im.scopes {
-			scopeKeys = append(scopeKeys, prefix)
-		}
+	if referrer != nil {
+		referrerURL := referrer.String()
+		var scopeKeys ScopeKeys
+		im.RangeScopes(func(scope string, _ *Imports) bool {
+			if strings.HasPrefix(referrerURL, scope) {
+				scopeKeys = append(scopeKeys, scope)
+			}
+			return true
+		})
 		sort.Sort(scopeKeys)
 		for _, scopeKey := range scopeKeys {
-			if strings.HasPrefix(referrer.String(), scopeKey) {
-				imports, _ := im.GetScopeImports(scopeKey)
-				ret, ok := im.resolveWith(specifier, imports)
-				if ok {
-					return ret + query + hash, true
-				}
+			imports, _ := im.GetScopeImports(scopeKey)
+			ret, ok := im.resolveWith(specifier, imports)
+			if ok {
+				return ret + query + hash, true
 			}
 		}
 	}
@@ -230,24 +238,22 @@ func (im *ImportMap) Resolve(specifier string, referrer *url.URL) (string, bool)
 }
 
 func (im *ImportMap) resolveWith(specifier string, imports *Imports) (string, bool) {
-	if len(imports.imports) == 0 {
-		return "", false
-	}
 	if url, ok := imports.Get(specifier); ok {
 		return normalizeUrl(im.baseUrl, url), true
 	}
 	// try to match tailing slash specifier
 	if strings.ContainsRune(specifier, '/') {
 		var matchedUrl string
+		var matchedLen int
 		imports.Range(func(k string, v string) bool {
-			if strings.HasSuffix(k, "/") && strings.HasPrefix(specifier, k) {
-				matchedUrl = normalizeUrl(im.baseUrl, v+specifier[len(k):])
-				return false
+			if len(k) > matchedLen && strings.HasSuffix(k, "/") && strings.HasPrefix(specifier, k) {
+				matchedUrl = v
+				matchedLen = len(k)
 			}
 			return true
 		})
-		if matchedUrl != "" {
-			return matchedUrl, true
+		if matchedLen > 0 {
+			return normalizeUrl(im.baseUrl, matchedUrl+specifier[matchedLen:]), true
 		}
 	}
 	return "", false
@@ -303,23 +309,18 @@ func (im *ImportMap) AddImportFromSpecifier(specifier string, noSRI bool) (warni
 
 // AddImport adds an import to the import map.
 func (im *ImportMap) AddImport(imp ImportMeta, noSRI bool) (warnings []string, errors []error) {
-	return im.addImport(set.New[string](), imp, false, nil, noSRI)
+	return im.addImport(new(sync.Map), imp, false, nil, noSRI)
 }
 
 // addImport adds an import to the import map.
-func (im *ImportMap) addImport(mark *set.Set[string], imp ImportMeta, indirect bool, targetImports *Imports, noSRI bool) (warnings []string, errors []error) {
+func (im *ImportMap) addImport(mark *sync.Map, imp ImportMeta, indirect bool, targetImports *Imports, noSRI bool) (warnings []string, errors []error) {
 	specifier := imp.Specifier(false)
-	if mark.Has(specifier) {
+	if _, loaded := mark.LoadOrStore(specifier, struct{}{}); loaded {
 		return
 	}
-	mark.Add(specifier)
 
 	cdnOrigin := im.cdnOrigin()
-	cdnScopeImportsMap, cdnScoped := im.GetScopeImports(cdnOrigin + "/")
-	if !cdnScoped {
-		cdnScopeImportsMap = &Imports{imports: map[string]string{}}
-		im.SetScopeImports(cdnOrigin+"/", cdnScopeImportsMap)
-	}
+	cdnScopeImportsMap := im.getOrCreateScopeImports(cdnOrigin + "/")
 
 	imports := im.Imports
 	if indirect {
@@ -396,9 +397,14 @@ func (im *ImportMap) addImport(mark *set.Set[string], imp ImportMeta, indirect b
 		if importsLen > 0 {
 			copy(allImports[peerImportsLen:], imp.Imports)
 		}
+		results := make([]struct {
+			warnings []string
+			errors   []error
+		}, len(allImports))
 		wg := sync.WaitGroup{}
 		for i, pathname := range allImports {
 			isPeer := i < peerImportsLen
+			result := &results[i]
 			wg.Go(func() {
 				if strings.HasPrefix(pathname, "/node/") {
 					// ignore node built-in modules
@@ -406,7 +412,7 @@ func (im *ImportMap) addImport(mark *set.Set[string], imp ImportMeta, indirect b
 				}
 				depImport, err := ParseEsmPath(pathname)
 				if err != nil {
-					errors = append(errors, err)
+					result.errors = append(result.errors, err)
 					return
 				}
 				// if the dependency is the same as the current import, use the version of the current import
@@ -436,30 +442,27 @@ func (im *ImportMap) addImport(mark *set.Set[string], imp ImportMeta, indirect b
 								return
 							}
 							if isPeer {
-								warnings = append(warnings, "incorrect peer dependency "+depImport.Name+"@"+addedImport.Version+term.Dim("(unmet "+depImport.Version+")"))
+								result.warnings = append(result.warnings, "incorrect peer dependency "+depImport.Name+"@"+addedImport.Version+term.Dim("(unmet "+depImport.Version+")"))
 								return
 							}
-							var ok bool
 							scope := cdnOrigin + "/" + imp.EsmSpecifier() + "/"
-							targetImports, ok = im.GetScopeImports(scope)
-							if !ok {
-								targetImports = newImports(nil)
-								im.SetScopeImports(scope, targetImports)
-							}
+							targetImports = im.getOrCreateScopeImports(scope)
 						}
 					}
 				}
 				meta, err := im.FetchImportMeta(depImport)
 				if err != nil {
-					errors = append(errors, err)
+					result.errors = append(result.errors, err)
 					return
 				}
-				warns, errs := im.addImport(mark, meta, !isPeer, targetImports, noSRI)
-				warnings = append(warnings, warns...)
-				errors = append(errors, errs...)
+				result.warnings, result.errors = im.addImport(mark, meta, !isPeer, targetImports, noSRI)
 			})
 		}
 		wg.Wait()
+		for _, result := range results {
+			warnings = append(warnings, result.warnings...)
+			errors = append(errors, result.errors...)
+		}
 	}
 
 	return
@@ -620,7 +623,10 @@ func newImports(imports map[string]string) *Imports {
 }
 
 func normalizeUrl(baseUrl *url.URL, path string) string {
-	if baseUrl != nil && (strings.HasPrefix(path, "./") || strings.HasPrefix(path, "../")) {
+	if strings.HasPrefix(path, "./") || strings.HasPrefix(path, "../") {
+		if baseUrl == nil {
+			baseUrl = &url.URL{Scheme: "file", Path: "/"}
+		}
 		return baseUrl.ResolveReference(&url.URL{Path: path}).String()
 	}
 	return path

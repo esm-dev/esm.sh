@@ -94,23 +94,28 @@ func updateImportMap(specifiers []string, all bool, noPrompt bool, noSRI bool) (
 		if err != nil {
 			return
 		}
+		defer f.Close()
 		tokenizer := html.NewTokenizer(f)
 		buf := bytes.NewBuffer(nil)
 		updated := false
 		for {
 			token := tokenizer.Next()
-			if token == html.ErrorToken && tokenizer.Err() == io.EOF {
+			if token == html.ErrorToken {
+				if tokenizer.Err() != io.EOF {
+					return tokenizer.Err()
+				}
 				break
 			}
 			if token == html.EndTagToken {
 				tagName, _ := tokenizer.TagName()
 				if string(tagName) == "head" && !updated {
 					buf.WriteString("  <script type=\"importmap\">\n")
-					var importMap importmap.ImportMap
-					if addImports(&importMap, specifiers, all, noPrompt, noSRI) {
-						buf.WriteString(importMap.FormatJSON(2))
-						buf.WriteString("\n  </script>\n")
+					importMap := importmap.Blank()
+					if !addImports(importMap, specifiers, all, noPrompt, noSRI) {
+						return fmt.Errorf("could not resolve imports")
 					}
+					buf.WriteString(importMap.FormatJSON(2))
+					buf.WriteString("\n  </script>\n")
 					buf.Write(tokenizer.Raw())
 					updated = true
 					continue
@@ -131,10 +136,11 @@ func updateImportMap(specifiers []string, all bool, noPrompt bool, noSRI bool) (
 					if typeAttr != "importmap" && !updated {
 						buf.WriteString("<script type=\"importmap\">\n")
 						importMap := importmap.Blank()
-						if addImports(importMap, specifiers, all, noPrompt, noSRI) {
-							buf.WriteString(importMap.FormatJSON(2))
-							buf.WriteString("\n  </script>\n  ")
+						if !addImports(importMap, specifiers, all, noPrompt, noSRI) {
+							return fmt.Errorf("could not resolve imports")
 						}
+						buf.WriteString(importMap.FormatJSON(2))
+						buf.WriteString("\n  </script>\n  ")
 						buf.Write(tokenizer.Raw())
 						updated = true
 						continue
@@ -154,13 +160,12 @@ func updateImportMap(specifiers []string, all bool, noPrompt bool, noSRI bool) (
 								}
 							}
 						}
-						if addImports(importMap, specifiers, all, noPrompt, noSRI) {
-							buf.WriteString("\n")
-							buf.WriteString(importMap.FormatJSON(2))
-							buf.WriteString("\n  ")
-						} else {
-							buf.Write(tagContent)
+						if !addImports(importMap, specifiers, all, noPrompt, noSRI) {
+							return fmt.Errorf("could not resolve imports")
 						}
+						buf.WriteString("\n")
+						buf.WriteString(importMap.FormatJSON(2))
+						buf.WriteString("\n  ")
 						if token == html.EndTagToken {
 							buf.Write(tokenizer.Raw())
 						}
@@ -179,21 +184,18 @@ func updateImportMap(specifiers []string, all bool, noPrompt bool, noSRI bool) (
 		err = os.WriteFile(indexHtml, buf.Bytes(), fi.Mode())
 	} else {
 		importMap := importmap.Blank()
-		if addImports(importMap, specifiers, all, noPrompt, noSRI) {
-			err = os.WriteFile(indexHtml, fmt.Appendf(nil, htmlTemplate, importMap.FormatJSON(2), specifiers[0]), 0644)
-			if err == nil {
-				fmt.Println(term.Dim("Created index.html with importmap script."))
-			}
+		if !addImports(importMap, specifiers, all, noPrompt, noSRI) {
+			return fmt.Errorf("could not resolve imports")
+		}
+		err = os.WriteFile(indexHtml, fmt.Appendf(nil, htmlTemplate, importMap.FormatJSON(2), specifiers[0]), 0644)
+		if err == nil {
+			fmt.Println(term.Dim("Created index.html with importmap script."))
 		}
 	}
 	return
 }
 
 func addImports(im *importmap.ImportMap, specifiers []string, all bool, noPrompt bool, noSRI bool) bool {
-	// for debug
-	// im.AddImportFromSpecifier(specifiers[0], noSRI)
-	// return true
-
 	term.HideCursor()
 	defer term.ShowCursor()
 
@@ -213,10 +215,13 @@ func addImports(im *importmap.ImportMap, specifiers []string, all bool, noPrompt
 	var addedSpecifiers []string
 	var warnings []string
 	var errors []error
+	var lock sync.Mutex
 	var wg sync.WaitGroup
 	for _, specifier := range specifiers {
 		wg.Go(func() {
 			imp, err := im.ParseImport(specifier)
+			lock.Lock()
+			defer lock.Unlock()
 			if err != nil {
 				errors = append(errors, err)
 				return
@@ -246,6 +251,8 @@ func addImports(im *importmap.ImportMap, specifiers []string, all bool, noPrompt
 								Jsr:     imp.Jsr,
 								Dev:     imp.Dev,
 							})
+							lock.Lock()
+							defer lock.Unlock()
 							if err != nil {
 								errors = append(errors, err)
 								return
@@ -275,7 +282,7 @@ func addImports(im *importmap.ImportMap, specifiers []string, all bool, noPrompt
 
 	spinner.Stop()
 
-	if !noPrompt {
+	if !noPrompt && !all {
 		term := newTermRaw()
 		if term.isTTY() {
 			for _, imp := range resolvedImports {
@@ -332,7 +339,6 @@ type subModuleSelectUI struct {
 	spinnerIndex int
 	spinnerTimer *time.Timer
 	spinnerChars []string
-	termWidth    int
 	termHeight   int
 }
 
@@ -343,9 +349,8 @@ func (ui *subModuleSelectUI) init(subModules []string) {
 	ui.state = make([]uint8, len(ui.subModules))
 	ui.state[0] = 1
 	ui.spinnerChars = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
-	width, height, err := ui.term.GetSize()
+	_, height, err := ui.term.GetSize()
 	if err == nil {
-		ui.termWidth = width
 		ui.termHeight = height
 	}
 }
@@ -383,7 +388,7 @@ func (ui *subModuleSelectUI) show() {
 				ui.state[cur] = 2
 				ui.startSpinner()
 				go func() {
-					errors, _ := ui.im.AddImportFromSpecifier(ui.toSpecifier(cur, true), ui.noSRI)
+					_, errors := ui.im.AddImportFromSpecifier(ui.toSpecifier(cur, true), ui.noSRI)
 					if len(errors) > 0 {
 						ui.state[cur] = 3
 					} else {
@@ -404,7 +409,7 @@ func (ui *subModuleSelectUI) show() {
 					ui.state[i] = 2
 					ui.startSpinner()
 					go func() {
-						errors, _ := ui.im.AddImportFromSpecifier(specifier, ui.noSRI)
+						_, errors := ui.im.AddImportFromSpecifier(specifier, ui.noSRI)
 						if len(errors) > 0 {
 							ui.state[i] = 3
 						} else {
@@ -445,16 +450,14 @@ func (ui *subModuleSelectUI) isPending() bool {
 }
 
 func (ui *subModuleSelectUI) clearLines() {
-	func() {
-		height := ui.maxLines() + 1
-		term.MoveCursorUp(height)
-		for range height {
-			term.ClearLine()
-			os.Stdout.Write(EOL) // move to the next line
-		}
+	height := ui.maxLines() + 1
+	term.MoveCursorUp(height)
+	for range height {
 		term.ClearLine()
-		term.MoveCursorUp(height)
-	}()
+		os.Stdout.Write(EOL) // move to the next line
+	}
+	term.ClearLine()
+	term.MoveCursorUp(height)
 }
 
 func (ui *subModuleSelectUI) maxLines() int {

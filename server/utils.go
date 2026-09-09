@@ -138,10 +138,7 @@ func findFiles(root string, dir string, filter func(filename string) bool) ([]st
 			if err != nil {
 				return nil, err
 			}
-			newFiles := make([]string, len(files)+len(subFiles))
-			copy(newFiles, files)
-			copy(newFiles[len(files):], subFiles)
-			files = newFiles
+			files = append(files, subFiles...)
 		} else {
 			if filter(filename) {
 				files = append(files, filename)

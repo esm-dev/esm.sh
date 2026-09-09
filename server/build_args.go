@@ -168,6 +168,9 @@ func resolveBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esm EsmP
 			}
 			if args.External.Len() > 0 {
 				for _, name := range args.External.Values() {
+					if strings.HasPrefix(name, "node:") || (name == esm.PkgName && esm.SubPath != "") {
+						continue
+					}
 					if !deps.Has(name) {
 						return nil, false, nil
 					}

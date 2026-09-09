@@ -203,8 +203,10 @@ func installCjsModuleLexerContext(ctx context.Context) (err error) {
 	if DEBUG {
 		localBuild := "../cjs-module-lexer/target/release/native"
 		if existsFile(localBuild) {
-			ensureDir(installDir)
-			_, err = utils.CopyFile(localBuild, installPath)
+			if err = ensureDir(installDir); err != nil {
+				return err
+			}
+			_, err = utils.CopyFile(localBuild, path.Join(installDir, "cjs-module-lexer-dev"))
 			if err == nil {
 				cjsModuleLexerVersion = "dev"
 			}
@@ -245,15 +247,26 @@ func installCjsModuleLexerContext(ctx context.Context) (err error) {
 	}
 	defer gr.Close()
 
-	ensureDir(installDir)
-	f, err := os.OpenFile(installPath, os.O_CREATE|os.O_WRONLY, 0755)
+	if err = ensureDir(installDir); err != nil {
+		return err
+	}
+	f, err := os.CreateTemp(installDir, ".cjs-module-lexer-*")
 	if err != nil {
 		return fmt.Errorf("failed to create cjs-module-lexer: %v", err)
 	}
+	defer os.Remove(f.Name())
 	defer f.Close()
 
-	_, err = io.Copy(f, &contextReader{ctx: ctx, reader: gr})
-	return
+	if _, err = io.Copy(f, &contextReader{ctx: ctx, reader: gr}); err != nil {
+		return err
+	}
+	if err = f.Chmod(0755); err != nil {
+		return err
+	}
+	if err = f.Close(); err != nil {
+		return err
+	}
+	return os.Rename(f.Name(), installPath)
 }
 
 func getCjsModuleLexerDownloadURL() (string, error) {

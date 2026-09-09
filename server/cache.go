@@ -110,17 +110,14 @@ func withLRUCache[T any](key string, fetch func() (T, error)) (data T, err error
 }
 
 func gc(now time.Time) {
-	expKeys := []string{}
+	expires := now.UnixMilli()
 	cacheStore.Range(func(key, value any) bool {
 		item := value.(*cacheItem)
-		if item.exp > 0 && item.exp < now.UnixMilli() {
-			expKeys = append(expKeys, key.(string))
+		if item.exp > 0 && item.exp < expires {
+			cacheStore.CompareAndDelete(key, value)
 		}
 		return true
 	})
-	for _, key := range expKeys {
-		cacheStore.Delete(key)
-	}
 }
 
 func init() {

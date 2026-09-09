@@ -203,7 +203,7 @@ func (ctx *BuildContext) buildPath() {
 
 	esm := ctx.esmPath
 	if ctx.target == "types" {
-		if strings.HasSuffix(esm.SubPath, ".d.ts") {
+		if endsWith(esm.SubPath, ".d.ts", ".d.mts", ".d.cts") {
 			ctx.path = fmt.Sprintf(
 				"/%s%s/%s%s",
 				asteriskPrefix,
@@ -275,7 +275,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 		}
 		meta = &BuildMeta{
 			TypesOnly: true,
-			Dts:       "/" + ctx.esmPath.PackageId() + entry.types[1:],
+			Dts:       "/" + ctx.esmPath.PackageId() + "/" + ctx.getBuildArgsPrefix(true) + strings.TrimPrefix(entry.types, "./"),
 		}
 		return
 	}
@@ -1573,7 +1573,7 @@ func (ctx *BuildContext) buildTypes() (ret *BuildMeta, err error) {
 		return
 	}
 
-	ret = &BuildMeta{Dts: "/" + ctx.esmPath.PackageId() + dts[1:]}
+	ret = &BuildMeta{Dts: "/" + ctx.esmPath.PackageId() + "/" + ctx.getBuildArgsPrefix(true) + strings.TrimPrefix(dts, "./")}
 	return
 }
 
