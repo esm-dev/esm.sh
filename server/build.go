@@ -170,12 +170,9 @@ func (ctx *BuildContext) Build(buildCtx context.Context) (meta *BuildMeta, err e
 	}
 
 	// analyze splitting modules if bundling
-	if ctx.pkgJson.Exports.Len() > 1 && ctx.shouldBundle() {
+	if ctx.pkgJson.Exports.Len() > 1 && (ctx.shouldBundle() || ctx.shouldBundleInternalModules()) {
 		ctx.status = "analyze"
-		err = ctx.analyzeSplitting()
-		if err != nil {
-			return
-		}
+		ctx.analyzeSplitting()
 	}
 
 	// build the module
@@ -806,7 +803,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 						// - it's not a dynamic import and the `?bundle=false` flag is not present
 						// - it's not in the `splitting` list
 						isDynamicImport := args.Kind == esbuild.ResolveJSDynamicImport
-						bundleInternalModule := exportAs == "" && !isDynamicImport && ctx.bundleMode != BundleFalse && ctx.pkgJson.Type == "module"
+						bundleInternalModule := exportAs == "" && !isDynamicImport && ctx.shouldBundleInternalModules()
 						if modulePath == entry.main || exportAs == entrySpecifier || (!isDynamicImport && !noBundle) || bundleInternalModule {
 							if existsFile(resolvedFilename) {
 								pkgDir := path.Join(ctx.wd, "node_modules", pkgName)
@@ -1653,6 +1650,12 @@ func (ctx *BuildContext) install() (err error) {
 		return
 	}
 	return
+}
+
+// internal modules of an ESM package are bundled into every entry point even when `shouldBundle`
+// is false, so the analysis must run for them, or module-level state is duplicated per entry.
+func (ctx *BuildContext) shouldBundleInternalModules() bool {
+	return ctx.bundleMode != BundleFalse && ctx.pkgJson.Type == "module"
 }
 
 func (ctx *BuildContext) shouldBundle() bool {

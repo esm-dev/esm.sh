@@ -2,7 +2,6 @@ package server
 
 import (
 	"bufio"
-	"fmt"
 	"io"
 	"os"
 	"path"
@@ -18,7 +17,7 @@ type Ref struct {
 	importers *set.Set[string]
 }
 
-func (ctx *BuildContext) analyzeSplitting() (err error) {
+func (ctx *BuildContext) analyzeSplitting() {
 	exportNames := set.New[string]()
 
 	for _, exportName := range ctx.pkgJson.Exports.Keys() {
@@ -145,10 +144,12 @@ func (ctx *BuildContext) analyzeSplitting() (err error) {
 			}
 			_, includes, err := b.buildModule(true)
 			if err != nil {
-				if err.Error() == "could not resolve build entry" {
-					continue // ignore non-existent exports
+				// splitting is an optimization, so ignore an export that can't be analyzed,
+				// like an asset esbuild has no loader for
+				if err.Error() != "could not resolve build entry" {
+					ctx.logger.Warnf("build(%s): failed to analyze %s: %v", ctx.esmPath.String(), esmPath.String(), err)
 				}
-				return fmt.Errorf("failed to analyze %s: %v", esmPath.String(), err)
+				continue
 			}
 			for _, include := range includes {
 				module, importer := include[0], include[1]
@@ -205,6 +206,4 @@ func (ctx *BuildContext) analyzeSplitting() (err error) {
 			}
 		}
 	}
-
-	return
 }
