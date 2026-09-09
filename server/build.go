@@ -582,10 +582,9 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 					isSelfRef := specifier == ctx.esmPath.PkgName
 					if !isSelfRef && strings.HasPrefix(ctx.esmPath.PkgName, "@") {
 						_, baseName := utils.SplitByFirstByte(ctx.esmPath.PkgName[1:], '/')
-						specPkgName := toPackageName(specifier)
-						if specPkgName == baseName {
-							_, inDeps := pkgJson.Dependencies[specPkgName]
-							_, inPeerDeps := pkgJson.PeerDependencies[specPkgName]
+						if specifier == baseName {
+							_, inDeps := pkgJson.Dependencies[baseName]
+							_, inPeerDeps := pkgJson.PeerDependencies[baseName]
 							if !inDeps && !inPeerDeps {
 								isSelfRef = true
 							}

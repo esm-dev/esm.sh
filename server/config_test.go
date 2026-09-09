@@ -4,6 +4,31 @@ import (
 	"testing"
 )
 
+func TestNpmQueryCacheTTL(t *testing.T) {
+	for _, test := range []struct {
+		env      string
+		setting  uint32
+		expected uint32
+	}{
+		{"", 0, 600},
+		{"30", 0, 30},
+		{"0", 0, 0},
+		{"invalid", 0, 600},
+		{"-1", 0, 600},
+		{"4294967296", 0, 600},
+		{"30", 90, 90},
+	} {
+		t.Run(test.env, func(t *testing.T) {
+			t.Setenv("NPM_QUERY_CACHE_TTL", test.env)
+			c := &Config{NpmQueryCacheTTL: test.setting}
+			normalizeConfig(c)
+			if c.NpmQueryCacheTTL != test.expected {
+				t.Fatalf("NpmQueryCacheTTL = %d, want %d", c.NpmQueryCacheTTL, test.expected)
+			}
+		})
+	}
+}
+
 func TestExtractPackageName(t *testing.T) {
 	type want struct {
 		packageId string

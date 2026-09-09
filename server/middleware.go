@@ -3,6 +3,7 @@ package server
 import (
 	"compress/gzip"
 	"io"
+	"mime"
 	"net"
 	"net/http"
 	"runtime/debug"
@@ -95,15 +96,43 @@ func (w *loggedResponseWriter) Unwrap() http.ResponseWriter {
 // or gzip if the client accepts it.
 func withCompress(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var encoding string
-		if acceptEncoding := r.Header.Get("Accept-Encoding"); strings.Contains(acceptEncoding, "br") {
-			encoding = "br"
-		} else if strings.Contains(acceptEncoding, "gzip") {
-			encoding = "gzip"
+		brQuality, gzipQuality, wildcardQuality, identityQuality := -1.0, -1.0, 0.0, 0.0
+		for _, value := range r.Header.Values("Accept-Encoding") {
+			for part := range strings.SplitSeq(value, ",") {
+				coding, params, err := mime.ParseMediaType(part)
+				if err != nil {
+					continue
+				}
+				quality := 1.0
+				if q, ok := params["q"]; ok {
+					quality, err = strconv.ParseFloat(q, 64)
+					if err != nil || quality < 0 || quality > 1 {
+						quality = 0
+					}
+				}
+				switch coding {
+				case "br":
+					brQuality = quality
+				case "gzip":
+					gzipQuality = quality
+				case "*":
+					wildcardQuality = quality
+				case "identity":
+					identityQuality = quality
+				}
+			}
 		}
-		if encoding == "" {
-			next.ServeHTTP(w, r)
-			return
+		if brQuality < 0 {
+			brQuality = wildcardQuality
+		}
+		if gzipQuality < 0 {
+			gzipQuality = wildcardQuality
+		}
+		var encoding string
+		if brQuality > 0 && brQuality >= gzipQuality && brQuality >= identityQuality {
+			encoding = "br"
+		} else if gzipQuality > 0 && gzipQuality >= identityQuality {
+			encoding = "gzip"
 		}
 		wr := &compressResponseWriter{ResponseWriter: w, encoding: encoding}
 		defer wr.Close()
@@ -135,12 +164,14 @@ func (w *compressResponseWriter) WriteHeader(code int) {
 		}
 		if size < 0 || size >= compressMinSize {
 			appendVaryHeader(h, "Accept-Encoding")
-			h.Set("Content-Encoding", w.encoding)
-			h.Del("Content-Length")
-			if w.encoding == "br" {
-				w.zWriter = brotli.NewWriterLevel(w.ResponseWriter, brotli.BestSpeed)
-			} else {
-				w.zWriter, _ = gzip.NewWriterLevel(w.ResponseWriter, gzip.BestSpeed)
+			if w.encoding != "" {
+				h.Set("Content-Encoding", w.encoding)
+				h.Del("Content-Length")
+				if w.encoding == "br" {
+					w.zWriter = brotli.NewWriterLevel(w.ResponseWriter, brotli.BestSpeed)
+				} else {
+					w.zWriter, _ = gzip.NewWriterLevel(w.ResponseWriter, gzip.BestSpeed)
+				}
 			}
 		}
 	}

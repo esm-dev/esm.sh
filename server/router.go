@@ -127,6 +127,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 				h.Write([]byte(options.JSXImportSource))
 				h.Write([]byte(options.SourceMap))
 				fmt.Fprintf(h, "%v", options.Minify)
+				h.Write([]byte(options.Filename))
 				hash := hex.EncodeToString(h.Sum(nil))
 				savePath := normalizeSavePath(fmt.Sprintf("modules/transform/%s.mjs", hash))
 
@@ -910,14 +911,15 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 
 			// return css file as a `CSSStyleSheet` object when `?module` query is present
 			if pathKind == RawFile && strings.HasSuffix(esmPath.SubPath, ".css") && query.Has("module") {
-				if esmPath.GhPrefix {
-					if _, err := npmrc.installPackageContext(r.Context(), esmPath.Package()); err != nil {
+				filename := path.Join(npmrc.StoreDir(), esmPath.PackageId(), "node_modules", esmPath.PkgName, esmPath.SubPath)
+				css, err := os.ReadFile(filename)
+				if os.IsNotExist(err) {
+					if _, err = npmrc.installPackageContext(r.Context(), esmPath.Package()); err != nil {
 						writeStatus(w, 500, err.Error())
 						return
 					}
+					css, err = os.ReadFile(filename)
 				}
-				filename := path.Join(npmrc.StoreDir(), esmPath.PackageId(), "node_modules", esmPath.PkgName, esmPath.SubPath)
-				css, err := os.ReadFile(filename)
 				if err != nil {
 					writeStatus(w, 500, err.Error())
 					return
@@ -1736,9 +1738,14 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 			if buildMeta.ExportDefault && (len(exports) == 0 || slices.Contains(exports, "default")) {
 				fmt.Fprintf(buf, "export { default } from \"%s\";\n", esmPath)
 			}
-			if buildMeta.CJS && len(exports) > 0 {
-				fmt.Fprintf(buf, "import _ from \"%s\";\n", esmPath)
-				fmt.Fprintf(buf, "export const { %s } = _;\n", strings.Join(exports, ", "))
+			if buildMeta.CJS {
+				if i := slices.Index(exports, "default"); i >= 0 {
+					exports = slices.Delete(exports, i, i+1)
+				}
+				if len(exports) > 0 {
+					fmt.Fprintf(buf, "import _ from \"%s\";\n", esmPath)
+					fmt.Fprintf(buf, "export const { %s } = _;\n", strings.Join(exports, ", "))
+				}
 			}
 			header.Set("X-ESM-Path", esmPath)
 			if noDts := query.Has("no-dts") || query.Has("no-check"); !noDts && buildMeta.Dts != "" {

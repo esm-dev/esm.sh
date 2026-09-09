@@ -256,16 +256,12 @@ func normalizeConfig(config *Config) {
 		config.NpmScopedRegistries = regs
 	}
 	if config.NpmQueryCacheTTL == 0 {
-		v := os.Getenv("NPM_QUERY_CACHE_TTL")
-		if v != "" {
-			i, e := strconv.Atoi(v)
-			if e == nil && i >= 0 {
+		config.NpmQueryCacheTTL = 600
+		if v := os.Getenv("NPM_QUERY_CACHE_TTL"); v != "" {
+			if i, err := strconv.ParseUint(v, 10, 32); err == nil {
 				config.NpmQueryCacheTTL = uint32(i)
-			} else {
-				config.NpmQueryCacheTTL = 600
 			}
 		}
-		config.NpmQueryCacheTTL = 600
 	}
 	config.Compress = !(bytes.Equal(config.CompressRaw, []byte("false")) || os.Getenv("COMPRESS") == "false")
 	config.SourceMap = !(bytes.Equal(config.SourceMapRaw, []byte("false")) || (os.Getenv("SOURCEMAP") == "false" || os.Getenv("SOURCE_MAP") == "false"))
