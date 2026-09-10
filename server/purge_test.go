@@ -65,31 +65,48 @@ func solvePowForTest(challenge *powChallengeResponse) string {
 }
 
 func TestPowChallenge(t *testing.T) {
-	challenge := newPowChallenge()
-	if challenge == nil {
-		t.Fatal("expected a challenge to be minted")
+	challenge, err := newPowChallenge("purge")
+	if err != nil {
+		t.Fatalf("expected a challenge to be minted: %v", err)
 	}
 	nonce := solvePowForTest(challenge)
 
 	// a correctly solved challenge passes and is consumed (single-use)
-	if !powVerify(challenge.ID, nonce) {
+	if !powVerify("purge", challenge.ID, nonce) {
 		t.Fatal("expected the solved challenge to verify")
 	}
-	if powVerify(challenge.ID, nonce) {
+	if powVerify("purge", challenge.ID, nonce) {
 		t.Fatal("expected the challenge to be single-use")
 	}
 
 	// an unsolved challenge is rejected
-	unsolved := newPowChallenge()
-	if powVerify(unsolved.ID, "0") {
+	unsolved, err := newPowChallenge("purge")
+	if err != nil {
+		t.Fatalf("expected a challenge to be minted: %v", err)
+	}
+	if powVerify("purge", unsolved.ID, "0") {
 		t.Fatal("expected an invalid nonce to be rejected")
+	}
+
+	// a challenge is only valid for the scope it was minted for
+	scoped, err := newPowChallenge("purge")
+	if err != nil {
+		t.Fatalf("expected a challenge to be minted: %v", err)
+	}
+	if powVerify("other", scoped.ID, solvePowForTest(scoped)) {
+		t.Fatal("expected a challenge to be rejected by another scope")
+	}
+
+	// an unknown scope cannot be minted
+	if _, err := newPowChallenge("nope"); !errors.Is(err, errUnknownPowScope) {
+		t.Fatalf("expected an unknown scope error, got %v", err)
 	}
 
 	// an expired challenge is rejected
 	powChallengeStore.Lock()
-	powChallengeStore.m["expired"] = powChallenge{salt: "s", expiresAt: time.Now().Add(-time.Minute)}
+	powChallengeStore.m["expired"] = powChallenge{salt: "s", scope: "purge", difficulty: 1, expiresAt: time.Now().Add(-time.Minute)}
 	powChallengeStore.Unlock()
-	if powVerify("expired", "0") {
+	if powVerify("purge", "expired", "0") {
 		t.Fatal("expected an expired challenge to be rejected")
 	}
 }
@@ -429,4 +446,72 @@ func TestCloudflarePurge(t *testing.T) {
 	if batches[0][0] != "https://esm.sh/pkg@0" || batches[1][0] != "https://esm.sh/pkg@30" {
 		t.Fatalf("unexpected cloudflare urls: %v", batches)
 	}
+}
+
+func TestPowChallengeRoute(t *testing.T) {
+	previousConfig, previousNpmRC := config, defaultNpmRC
+	testConfig := *config
+	testConfig.WorkDir = t.TempDir()
+	config, defaultNpmRC = &testConfig, nil
+	t.Cleanup(func() { config, defaultNpmRC = previousConfig, previousNpmRC })
+
+	fs, err := storage.NewFSStorage(filepath.Join(config.WorkDir, "storage"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	logger := new(log.Logger)
+	logger.SetOutput(io.Discard)
+	handler := esmRouter(fs, logger)
+
+	request := func(target string) *httptest.ResponseRecorder {
+		res := httptest.NewRecorder()
+		handler.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "http://localhost"+target, nil))
+		return res
+	}
+
+	t.Run("generic scope", func(t *testing.T) {
+		res := request("/pow/challenge?scope=purge")
+		if res.Code != 200 || res.Header().Get("Cache-Control") != "no-store" {
+			t.Fatalf("HTTP %d: %s", res.Code, res.Body.String())
+		}
+		var challenge powChallengeResponse
+		if err := json.Unmarshal(res.Body.Bytes(), &challenge); err != nil {
+			t.Fatal(err)
+		}
+		if challenge.ID == "" || challenge.Scope != "purge" || challenge.Difficulty != powPolicies["purge"].difficulty {
+			t.Fatalf("unexpected challenge: %+v", challenge)
+		}
+	})
+
+	t.Run("purge alias", func(t *testing.T) {
+		res := request("/purge/challenge")
+		if res.Code != 200 {
+			t.Fatalf("HTTP %d: %s", res.Code, res.Body.String())
+		}
+		var challenge powChallengeResponse
+		if err := json.Unmarshal(res.Body.Bytes(), &challenge); err != nil {
+			t.Fatal(err)
+		}
+		if challenge.Scope != "purge" {
+			t.Fatalf("expected the alias to mint a purge challenge, got scope %q", challenge.Scope)
+		}
+	})
+
+	t.Run("unknown scope", func(t *testing.T) {
+		if res := request("/pow/challenge?scope=nope"); res.Code != 400 {
+			t.Fatalf("expected 400, got %d: %s", res.Code, res.Body.String())
+		}
+	})
+
+	t.Run("shared assets", func(t *testing.T) {
+		for _, test := range []struct{ path, contentType string }{
+			{"/embed/shared.css", "text/css"},
+			{"/embed/shared.mjs", "application/javascript"},
+		} {
+			res := request(test.path)
+			if res.Code != 200 || !strings.HasPrefix(res.Header().Get("Content-Type"), test.contentType) {
+				t.Fatalf("%s: HTTP %d content-type %q", test.path, res.Code, res.Header().Get("Content-Type"))
+			}
+		}
+	})
 }

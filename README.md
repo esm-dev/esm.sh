@@ -19,7 +19,7 @@ next request rebuilds the package from scratch. Use it like [jsDelivr's purge to
 
 ```bash
 # 1. fetch a proof-of-work challenge
-challenge=$(curl -s https://esm.sh/purge/challenge)
+challenge=$(curl -s "https://esm.sh/pow/challenge?scope=purge")
 id=$(echo "$challenge" | jq -r .id)
 salt=$(echo "$challenge" | jq -r .salt)
 difficulty=$(echo "$challenge" | jq -r .difficulty)
@@ -42,7 +42,9 @@ JSON response lists everything that was purged plus a URL to trigger the rebuild
 follows the new version immediately after a purge, no need to wait out the npm query cache TTL.
 
 Every purge requires solving a proof-of-work challenge (the page solves it automatically in the browser), so
-mass purge-and-rebuild attacks are not free.
+mass purge-and-rebuild attacks are not free. The challenge endpoint is generic —
+`GET /pow/challenge?scope=<scope>`, currently the `purge` scope — and `/purge/challenge` remains as a
+backward-compatible alias.
 
 ### Self-hosting options
 

@@ -216,7 +216,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 					writeJSONError(w, 400, "require valid json body")
 					return
 				}
-				if !powVerify(req.Challenge, req.Nonce) {
+				if !powVerify("purge", req.Challenge, req.Nonce) {
 					writeJSONError(w, 400, "invalid or expired proof-of-work challenge")
 					return
 				}
@@ -497,10 +497,21 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 			writeBody(w, data)
 			return
 
-		case "/purge/challenge":
-			challenge := newPowChallenge()
-			if challenge == nil {
-				writeStatus(w, 500, "too many pending challenges")
+		case "/pow/challenge", "/purge/challenge":
+			// generic proof-of-work challenge endpoint; `/purge/challenge` is
+			// kept as a backward-compatible alias that always mints a `purge`
+			// challenge (see server/pow.go)
+			scope := r.URL.Query().Get("scope")
+			if pathname == "/purge/challenge" && scope == "" {
+				scope = "purge"
+			}
+			challenge, err := newPowChallenge(scope)
+			if err != nil {
+				if errors.Is(err, errUnknownPowScope) {
+					writeStatus(w, 400, err.Error())
+				} else {
+					writeStatus(w, 500, err.Error())
+				}
 				return
 			}
 			header.Set("Cache-Control", "no-store")

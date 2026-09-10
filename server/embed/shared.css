@@ -1,0 +1,49 @@
+:root {
+  color-scheme: light dark;
+  --text: #232323;
+  --muted: #757575;
+  --bg: #fff;
+  --card: #fff;
+  --border: #eaeaea;
+  --accent: #d63369;
+  --code-bg: #f5f6f6;
+  --ok: #2da44e;
+  --err: #d1242f;
+  --mono: "Geist Mono", "Dank Mono", "Source Code Pro", "Courier Prime Code", "Liberation Mono", Consolas, Menlo, monospace;
+  --sans: system-ui, -apple-system, BlinkMacSystemFont, Inter, "Geist", "Segoe UI", "Helvetica Neue", Helvetica, Roboto, Ubuntu, Tahoma, Arial, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --text: #e6e1d9;
+    --muted: #999;
+    --bg: #0e1011;
+    --card: #16191b;
+    --border: #323232;
+    --code-bg: #232323;
+    color-scheme: dark;
+  }
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  border: none;
+  outline: none;
+  font: inherit;
+  font-size: 100%;
+  vertical-align: baseline;
+  box-sizing: border-box;
+  background: transparent;
+}
+
+html {
+  font-size: 15px;
+}
+
+body {
+  text-rendering: optimizeLegibility;
+  font-family: var(--sans);
+  color: var(--text);
+  background-color: var(--bg);
+}

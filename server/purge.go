@@ -1,9 +1,6 @@
 package server
 
 import (
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"os"
 	"path/filepath"
@@ -16,78 +13,6 @@ import (
 	"github.com/esm-dev/esm.sh/internal/storage"
 	"github.com/ije/gox/log"
 )
-
-// proof-of-work parameters for `POST /purge`. Every purge must first solve a
-// hashcash-style SHA-256 challenge, so bots cannot drive the expensive
-// purge-then-rebuild cycle for free. When GitHub OAuth is configured the
-// challenge is stacked on top of the login requirement.
-const (
-	powDifficulty       = 4 // leading zero hex chars required
-	powChallengeTTL     = 2 * time.Minute
-	powChallengeMaxSize = 10000 // in-memory cap of pending challenges
-)
-
-type powChallenge struct {
-	salt      string
-	expiresAt time.Time
-}
-
-var powChallengeStore = struct {
-	sync.Mutex
-	m map[string]powChallenge
-}{m: make(map[string]powChallenge)}
-
-// powChallengeResponse is the JSON body of `GET /purge/challenge`.
-type powChallengeResponse struct {
-	ID         string `json:"id"`
-	Salt       string `json:"salt"`
-	Difficulty int    `json:"difficulty"`
-}
-
-// randomHex returns cryptographically-secure random bytes encoded as hex.
-func randomHex(size int) string {
-	buffer := make([]byte, size)
-	rand.Read(buffer) // crypto/rand.Read never fails since Go 1.24
-	return hex.EncodeToString(buffer)
-}
-
-// newPowChallenge mints a one-time proof-of-work challenge. Returns nil when
-// too many challenges are pending (kept in check by garbage collecting
-// expired ones once the store runs full).
-func newPowChallenge() *powChallengeResponse {
-	now := time.Now()
-	powChallengeStore.Lock()
-	defer powChallengeStore.Unlock()
-	if len(powChallengeStore.m) >= powChallengeMaxSize {
-		for id, stored := range powChallengeStore.m {
-			if now.After(stored.expiresAt) {
-				delete(powChallengeStore.m, id)
-			}
-		}
-		if len(powChallengeStore.m) >= powChallengeMaxSize {
-			return nil
-		}
-	}
-	challenge := powChallenge{salt: randomHex(16), expiresAt: now.Add(powChallengeTTL)}
-	id := randomHex(16)
-	powChallengeStore.m[id] = challenge
-	return &powChallengeResponse{ID: id, Salt: challenge.salt, Difficulty: powDifficulty}
-}
-
-// powVerify checks a solved challenge. A challenge is single-use: it is
-// consumed on the first verification attempt, so a valid solution cannot be
-// replayed to purge repeatedly.
-func powVerify(id string, nonce string) bool {
-	powChallengeStore.Lock()
-	challenge, ok := powChallengeStore.m[id]
-	delete(powChallengeStore.m, id)
-	powChallengeStore.Unlock()
-	if !ok || time.Now().After(challenge.expiresAt) {
-		return false
-	}
-	sum := sha256.Sum256([]byte(challenge.salt + nonce))
-	return strings.HasPrefix(hex.EncodeToString(sum[:]), strings.Repeat("0", powDifficulty))
-}
 
 // purgeLimiter bounds how often a single client can purge caches, since each
 // purge forces a costly rebuild of the target package on the next request.
@@ -103,7 +28,7 @@ type purgeRequest struct {
 	// package specifier (e.g. `react@19.0.0`, `@scope/pkg`, `gh/user/repo@main`).
 	URL string `json:"url"`
 	// Challenge and Nonce are the solved proof-of-work from
-	// `GET /purge/challenge` (see newPowChallenge / powVerify).
+	// `GET /pow/challenge?scope=purge` (see newPowChallenge / powVerify).
 	Challenge string `json:"challenge"`
 	Nonce     string `json:"nonce"`
 }
