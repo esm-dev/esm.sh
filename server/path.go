@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
-	"github.com/esm-dev/esm.sh/internal/fetch"
 	"github.com/esm-dev/esm.sh/internal/npm"
 	"github.com/ije/gox/set"
 	"github.com/ije/gox/utils"
@@ -322,7 +321,7 @@ func resolvePrPackageVersion(esm EsmPath) (version string, err error) {
 			return
 		}
 		versionRegex := regexp.MustCompile(`[^/]@([\da-f]{7,})$`)
-		client := fetch.NewClient("esmd/"+VERSION, 30, false)
+		client := newFetchClient("esmd/"+VERSION, 30)
 		version = esm.PkgVersion
 		client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 			match := versionRegex.FindStringSubmatch(req.URL.Path)

@@ -5,10 +5,9 @@ A _no-build_ JavaScript CDN for modern web development.
 ## Project Structure
 
 - `cli/`: Command-line interface (releases as the npm `esm.sh` CLI).
-- `internal/`: Shared Go packages reused by both the server and the CLI—NPM resolution, storage, build helpers, and related utilities.
+- `internal/`: Go packages for import maps, NPM resolution, storage, and module replacements.
 - `server/`: Main HTTP service: request handling, bundling, and CDN behavior.
 - `test/`: Deno-based integration suites; each subdirectory exercises imports against a running server (`test/.template` is the scaffold for new cases).
-- `web/`: Landing site and docs: static assets plus Go handlers that serve them alongside the CDN.
 
 ## Running the Server in Debug Mode
 

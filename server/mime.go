@@ -1,4 +1,4 @@
-package mime
+package server
 
 import (
 	"path"
@@ -56,7 +56,7 @@ var mimeExts = map[string][]string{
 	"video/ogg":               {"ogv"},
 	"video/webm":              {"webm"},
 }
-var mineMap = map[string]string{}
+var mimeTypes = map[string]string{}
 
 func init() {
 	for k, v := range mimeExts {
@@ -64,17 +64,17 @@ func init() {
 			k = strings.TrimSuffix(k, ";") + "; charset=utf-8"
 		}
 		for _, ext := range v {
-			mineMap["."+ext] = k
+			mimeTypes["."+ext] = k
 		}
 	}
 	mimeExts = nil
 }
 
-// GetContentType returns the MIME type of the file with the given filename.
-func GetContentType(filename string) string {
+// getContentType returns the MIME type of the file with the given filename.
+func getContentType(filename string) string {
 	extname := path.Ext(filename)
 	if extname == ".gz" && strings.HasSuffix(filename, ".tar.gz") {
 		extname = ".tar.gz"
 	}
-	return mineMap[extname]
+	return mimeTypes[extname]
 }

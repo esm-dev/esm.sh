@@ -20,9 +20,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/esm-dev/esm.sh/internal/fetch"
 	"github.com/esm-dev/esm.sh/internal/importmap"
-	"github.com/esm-dev/esm.sh/internal/mime"
 	"github.com/esm-dev/esm.sh/internal/storage"
 	esbuild "github.com/ije/esbuild-internal/api"
 	"github.com/ije/esbuild-internal/xxhash"
@@ -253,7 +251,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 			indexHTML, err := withCache("index.html", time.Duration(cacheTtl)*time.Second, func() (indexHTML []byte, _ string, err error) {
 				readme, err := os.ReadFile("README.md")
 				if err != nil {
-					fetchClient := fetch.NewClient(r.UserAgent(), 15, false)
+					fetchClient := newFetchClient(r.UserAgent(), 15)
 					readmeUrl, _ := url.Parse("https://raw.githubusercontent.com/esm-dev/esm.sh/refs/heads/main/README.md")
 					var res *http.Response
 					res, err = fetchClient.Fetch(readmeUrl, nil)
@@ -516,7 +514,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 				header.Set("Etag", etag)
 				header.Set("Cache-Control", ccOneDay)
 			}
-			contentType := mime.GetContentType(pathname)
+			contentType := getContentType(pathname)
 			if contentType != "" {
 				header.Set("Content-Type", contentType)
 			}
@@ -790,7 +788,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 			if etag := r.Header.Get("If-None-Match"); etag != "" {
 				requestHeader.Set("If-None-Match", etag)
 			}
-			client := fetch.NewClient("esmd/"+VERSION, 30, false)
+			client := newFetchClient("esmd/"+VERSION, 30)
 			res, err := client.FetchWithContext(r.Context(), rawURL, requestHeader)
 			if err != nil {
 				writeStatus(w, 502, err.Error())
@@ -829,7 +827,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 				w.WriteHeader(304)
 				return
 			}
-			contentType := mime.GetContentType(esmPath.SubPath)
+			contentType := getContentType(esmPath.SubPath)
 			if endsWith(esmPath.SubPath, ".ts", ".mts", ".cts", ".tsx") {
 				contentType = ctTypeScript
 			} else if contentType == "" {
@@ -1036,7 +1034,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 				} else if strings.HasSuffix(esmPath.SubPath, ".jsx") {
 					header.Set("Content-Type", "text/jsx; charset=utf-8")
 				} else {
-					contentType := mime.GetContentType(esmPath.SubPath)
+					contentType := getContentType(esmPath.SubPath)
 					if contentType != "" {
 						header.Set("Content-Type", contentType)
 					}

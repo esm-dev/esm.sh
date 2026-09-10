@@ -15,7 +15,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/esm-dev/esm.sh/internal/fetch"
 	"github.com/ije/gox/utils"
 )
 
@@ -113,7 +112,7 @@ func ghInstallContext(ctx context.Context, wd, name, tag string) (err error) {
 	if err != nil {
 		return
 	}
-	client := fetch.NewClient("esmd/"+VERSION, 0, false)
+	client := newFetchClient("esmd/"+VERSION, 0)
 	res, err := client.FetchWithContext(installCtx, u, nil)
 	if err != nil {
 		return
