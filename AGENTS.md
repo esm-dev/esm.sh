@@ -43,6 +43,25 @@ vi test/test-case-name/test.ts
 make test/server dir=test-case-name
 ```
 
+## Running Server Unit Tests
+
+```bash
+go test ./server/...
+```
+
+On Windows the `server` package does not compile natively because `server/disk.go` uses the unix-only
+`syscall.Statfs`. To run the unit tests there, swap that file for a stub with `go test -overlay` (no repo
+change needed):
+
+```powershell
+# stub with the same exported symbols as disk.go (see server/disk.go)
+go test -overlay="$tmp\overlay.json" ./server/...
+```
+
+where `overlay.json` maps the absolute `server/disk.go` path to a stub that returns `DiskStatusOk`. Note that
+a few tests are still platform/network bound and fail on Windows (`TestInstallCjsModuleLexerRetry` reports
+`unsupported os`, `TestGhInstall` needs GitHub access).
+
 ## CDN
 
 The project has been deployed to https://esm.sh.
