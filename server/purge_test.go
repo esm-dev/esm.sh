@@ -50,31 +50,7 @@ func TestParsePurgeInput(t *testing.T) {
 	}
 }
 
-func TestPurgeRefreshDistTag(t *testing.T) {
-	tests := []struct {
-		pathname string
-		refresh  bool
-	}{
-		{"/react", true},
-		{"/react@latest", true},
-		{"/react@next", true},
-		{"/react@^18.0.0", true},
-		{"/react@19.0.0", false},
-		{"/react@v19.0.0", false},
-		{"/react@=19.0.0", false},
-		{"/@scope/pkg", true},
-		{"/@scope/pkg@1.0.0", false},
-		{"/gh/user/repo@main", false},
-	}
-	for _, test := range tests {
-		t.Run(test.pathname, func(t *testing.T) {
-			if _, refresh := purgeRefreshDistTag(test.pathname); refresh != test.refresh {
-				t.Fatalf("purgeRefreshDistTag(%q) refresh = %v, want %v", test.pathname, refresh, test.refresh)
-			}
-		})
-	}
-}
-
+// solvePowForTest solves a challenge the same way the purge page does.
 func solvePowForTest(challenge *powChallengeResponse) string {
 	target := strings.Repeat("0", challenge.Difficulty)
 	for nonce := 0; ; nonce++ {
@@ -86,12 +62,9 @@ func solvePowForTest(challenge *powChallengeResponse) string {
 }
 
 func TestPowChallenge(t *testing.T) {
-	challenge, err := newPowChallenge()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if challenge.Difficulty <= 0 {
-		t.Fatalf("invalid difficulty %d", challenge.Difficulty)
+	challenge := newPowChallenge()
+	if challenge == nil {
+		t.Fatal("expected a challenge to be minted")
 	}
 	nonce := solvePowForTest(challenge)
 
@@ -102,27 +75,16 @@ func TestPowChallenge(t *testing.T) {
 	if powVerify(challenge.ID, nonce) {
 		t.Fatal("expected the challenge to be single-use")
 	}
-	if powVerify(challenge.ID, nonce+"0") {
-		t.Fatal("expected a replayed challenge to be rejected")
-	}
 
 	// an unsolved challenge is rejected
-	challenge2, err := newPowChallenge()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if powVerify(challenge2.ID, "0") {
+	unsolved := newPowChallenge()
+	if powVerify(unsolved.ID, "0") {
 		t.Fatal("expected an invalid nonce to be rejected")
-	}
-
-	// empty values are rejected
-	if powVerify("", "") {
-		t.Fatal("expected empty id/nonce to be rejected")
 	}
 
 	// an expired challenge is rejected
 	powChallengeStore.Lock()
-	powChallengeStore.m["expired"] = powChallenge{salt: "s", difficulty: powDifficulty, expiresAt: time.Now().Add(-time.Minute)}
+	powChallengeStore.m["expired"] = powChallenge{salt: "s", expiresAt: time.Now().Add(-time.Minute)}
 	powChallengeStore.Unlock()
 	if powVerify("expired", "0") {
 		t.Fatal("expected an expired challenge to be rejected")

@@ -18,6 +18,7 @@
       --code-bg: #f5f6f6;
       --ok: #2da44e;
       --err: #d1242f;
+      --mono: "Geist Mono", "Dank Mono", "Source Code Pro", "Courier Prime Code", "Liberation Mono", Consolas, Menlo, monospace;
     }
 
     @media (prefers-color-scheme: dark) {
@@ -140,7 +141,7 @@
       border: 1px solid var(--border);
       border-radius: 8px;
       color: var(--text);
-      font-family: "Geist Mono", "Dank Mono", "Source Code Pro", "Courier Prime Code", "Liberation Mono", Consolas, Menlo, monospace;
+      font-family: var(--mono);
       background: var(--code-bg);
     }
 
@@ -183,7 +184,7 @@
       border-radius: 999px;
       font-weight: 500;
       font-size: 0.85rem;
-      font-family: "Geist Mono", "Dank Mono", "Source Code Pro", "Courier Prime Code", "Liberation Mono", Consolas, Menlo, monospace;
+      font-family: var(--mono);
       color: var(--accent);
       background: transparent;
     }
@@ -197,7 +198,7 @@
       margin-top: 16px;
       padding: 14px;
       border-radius: 8px;
-      font-family: "Geist Mono", "Dank Mono", "Source Code Pro", "Courier Prime Code", "Liberation Mono", Consolas, Menlo, monospace;
+      font-family: var(--mono);
       font-size: 0.85rem;
       line-height: 1.5;
       overflow-x: auto;
@@ -278,19 +279,21 @@
   </footer>
 
   <script type="module">
-    const form = document.getElementById("purge-form");
     const urlInput = document.getElementById("url");
     const purgeBtn = document.getElementById("purge-btn");
     const result = document.getElementById("result");
 
+    function showError(text) {
+      result.className = "err";
+      result.textContent = text;
+    }
+
     async function solvePow(salt, difficulty) {
-      const encoder = new TextEncoder();
-      const target = "0".repeat(difficulty);
       for (let nonce = 0; ; nonce++) {
-        const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", encoder.encode(salt + nonce)));
+        const bytes = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(salt + nonce)));
         let hex = "";
-        for (const b of digest) hex += b.toString(16).padStart(2, "0");
-        if (hex.startsWith(target)) return String(nonce);
+        for (const byte of bytes) hex += byte.toString(16).padStart(2, "0");
+        if (hex.startsWith("0".repeat(difficulty))) return String(nonce);
       }
     }
 
@@ -300,51 +303,42 @@
       result.className = "";
       result.textContent = "Solving the proof-of-work challenge…";
       try {
-        const chRes = await fetch("/purge/challenge");
-        if (!chRes.ok) throw new Error("failed to get a challenge: " + chRes.status);
-        const challenge = await chRes.json();
+        const challenge = await (await fetch("/purge/challenge")).json();
         const nonce = await solvePow(challenge.salt, challenge.difficulty);
         result.textContent = "Purging…";
-        const res = await fetch("/purge", {
+        const response = await fetch("/purge", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ url, challenge: challenge.id, nonce }),
         });
-        const data = await res.json();
-        if (!res.ok) {
-          result.className = "err";
-          result.textContent = "Error " + res.status + ": " + (data.message || JSON.stringify(data, null, 2));
-          return;
-        }
+        const report = await response.json();
+        if (!response.ok) return showError("Error " + response.status + ": " + report.message);
         result.className = "ok";
-        const counts = data.purged.length + " files, " + (data.cacheKeys || []).length + " cache keys";
-        result.textContent = `Purged ${data.package}@${data.version} (${counts}):\n` +
-          (data.purged || []).map((p) => "  " + p).join("\n") +
-          "\n\nNext request for " + data.rebuild + " will rebuild from scratch.";
+        result.textContent = `Purged ${report.package}@${report.version} (${report.purged.length} files, ${report.cacheKeys.length} cache keys):\n` +
+          report.purged.map((path) => "  " + path).join("\n") +
+          `\n\nNext request for ${report.rebuild} will rebuild from scratch.`;
         const link = document.createElement("a");
-        link.href = data.rebuild;
-        link.textContent = "Open " + data.rebuild;
+        link.href = report.rebuild;
+        link.textContent = "Open " + report.rebuild;
         link.target = "_blank";
         result.appendChild(link);
       } catch (err) {
-        result.className = "err";
-        result.textContent = "Request failed: " + err.message;
+        showError("Request failed: " + err.message);
       } finally {
         purgeBtn.disabled = false;
       }
     }
 
-    form.addEventListener("submit", (e) => {
-      e.preventDefault();
+    document.getElementById("purge-form").addEventListener("submit", (event) => {
+      event.preventDefault();
       const url = urlInput.value.trim();
-      if (!url) return;
-      purge(url);
+      if (url) purge(url);
     });
 
-    document.querySelectorAll(".examples button").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        urlInput.value = btn.dataset.url;
-        purge(btn.dataset.url);
+    document.querySelectorAll(".examples button").forEach((button) => {
+      button.addEventListener("click", () => {
+        urlInput.value = button.dataset.url;
+        purge(button.dataset.url);
       });
     });
   </script>

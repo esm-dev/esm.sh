@@ -215,12 +215,6 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 					writeJSONError(w, 400, err.Error())
 					return
 				}
-				// refresh the cached resolution first when the request did not pin
-				// an exact version, so a stale "latest" cannot survive the purge
-				if pkgName, refresh := purgeRefreshDistTag(pathname); refresh {
-					deleteCacheItem("npm:" + pkgName + "@latest")
-					deleteCacheItem("404:" + pkgName + "@latest")
-				}
 				esmPath, _, _, _, _, err := parseEsmPath(npmrc, pathname)
 				if err != nil {
 					writeJSONError(w, 400, err.Error())
@@ -494,9 +488,9 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 			return
 
 		case "/purge/challenge":
-			challenge, err := newPowChallenge()
-			if err != nil {
-				writeStatus(w, 500, err.Error())
+			challenge := newPowChallenge()
+			if challenge == nil {
+				writeStatus(w, 500, "too many pending challenges")
 				return
 			}
 			header.Set("Cache-Control", "no-store")
