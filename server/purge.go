@@ -31,6 +31,9 @@ type purgeResponse struct {
 	Purged    []string `json:"purged"`
 	CacheKeys []string `json:"cacheKeys,omitempty"`
 	Rebuild   string   `json:"rebuild,omitempty"`
+	// ResolutionOnly is set when the request only refreshed the version
+	// resolution (a floating specifier), keeping the build in place.
+	ResolutionOnly bool `json:"resolutionOnly,omitempty"`
 }
 
 // parsePurgeInput normalizes a user-supplied esm.sh URL or bare package
@@ -55,15 +58,16 @@ func parsePurgeInput(input string) (string, error) {
 	return input, nil
 }
 
-// purgePackageCache removes every cached artifact of a resolved package/version:
-//   - the in-memory resolution caches of the package (the exact version plus the
-//     raw requested specifier, so a stale range/dist-tag/date/git-ref never survives),
-//   - the build outputs, source maps and type declarations in the storage,
-//   - the build metadata (and its in-memory copy) for each removed module,
-//   - the local npm store copy (so the package is re-installed on the next build).
+// purgePackageCache handles a cache purge. It always drops the in-memory
+// resolution caches of the package, so a stale bare name, semver range,
+// dist-tag, date or git ref is re-resolved on the next request.
 //
-// The next request for the purged URL rebuilds the module from scratch.
-func purgePackageCache(npmrc *NpmRC, metaDB *BuildMetaDB, esmStorage storage.Storage, logger *log.Logger, esmPath EsmPath, origin string) (*purgeResponse, error) {
+// For an exact version it also removes the build outputs, source maps, type
+// declarations and build metadata from the storage (plus the matching CDN edge
+// entries) and the local npm store copy, so the next request rebuilds the
+// module from scratch. For a floating specifier it stops at the resolution
+// refresh: the build is kept and is only rebuilt if the resolved version moves.
+func purgePackageCache(npmrc *NpmRC, metaDB *BuildMetaDB, esmStorage storage.Storage, logger *log.Logger, esmPath EsmPath, exactVersion bool, origin string, pathname string) (*purgeResponse, error) {
 	pkgId := esmPath.PackageId()
 	resp := &purgeResponse{
 		Package:   esmPath.PkgName,
@@ -75,7 +79,7 @@ func purgePackageCache(npmrc *NpmRC, metaDB *BuildMetaDB, esmStorage storage.Sto
 	// 1. drop every in-memory resolution cache of the package. The requested
 	// specifier may be a bare name, a semver range, a dist-tag, a date or a
 	// git ref, each cached under its own key, so matching a single resolved
-	// version is not enough — a manual purge must force a fresh resolution.
+	// version is not enough — a purge must force a fresh resolution.
 	prefixes := []string{
 		"npm:" + esmPath.PkgName + "@",
 		"404:" + esmPath.PkgName + "@",
@@ -88,6 +92,18 @@ func purgePackageCache(npmrc *NpmRC, metaDB *BuildMetaDB, esmStorage storage.Sto
 	}
 	for _, prefix := range prefixes {
 		resp.CacheKeys = append(resp.CacheKeys, deleteCacheItemsWithPrefix(prefix)...)
+	}
+
+	// A floating specifier only asks to re-check which version is current, so
+	// the resolution refresh above is enough: keep the build and let the next
+	// request rebuild it only if the resolved version actually moved. Removing
+	// the artifacts is reserved for an explicit exact version.
+	if !exactVersion {
+		resp.ResolutionOnly = true
+		if origin != "" {
+			resp.Rebuild = origin + pathname
+		}
+		return resp, nil
 	}
 
 	// 2. remove build outputs, source maps and type declarations from storage,

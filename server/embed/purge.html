@@ -224,9 +224,12 @@
     <section class="card">
       <h1>Purge the cache</h1>
       <p>
-        Enter an esm.sh URL or a package name to drop its cached artifacts — built modules, type
-        declarations, the local npm store and the resolution cache — so the next request rebuilds it
-        from scratch. Useful after publishing a new version, the same way the
+        Enter an esm.sh URL or package name. An exact version (<em>react@19.0.0</em>) drops its cached
+        artifacts — built modules, type declarations, the local npm store and the resolution cache — so
+        the next request rebuilds it from scratch. A bare name, dist-tag, range or branch (<em>react</em>,
+        <em>react@next</em>, <em>gh/user/repo@main</em>) only refreshes the version resolution, so the next
+        request picks up a newer version without rebuilding the current one. Useful after publishing a new
+        version, the same way the
         <a href="https://www.jsdelivr.com/tools/purge">jsDelivr purge tool</a> works.
       </p>
       <div class="auth" id="auth" hidden></div>
@@ -311,9 +314,16 @@
           return showError("Error " + response.status + ": " + report.message);
         }
         result.className = "ok";
-        result.textContent = `Purged ${report.package}@${report.version} (${report.purged.length} files, ${report.cacheKeys.length} cache keys):\n` +
-          report.purged.map((path) => "  " + path).join("\n") +
-          `\n\nNext request for ${report.rebuild} will rebuild from scratch.`;
+        const headline = report.resolutionOnly
+          ? `Refreshed the version resolution for ${report.package}@${report.version}`
+          : `Purged ${report.package}@${report.version}`;
+        const details = report.purged.length
+          ? ":\n" + report.purged.map((path) => "  " + path).join("\n")
+          : ".";
+        const next = report.resolutionOnly
+          ? `The next request for ${report.rebuild} will pick up the current version.`
+          : `The next request for ${report.rebuild} will rebuild from scratch.`;
+        result.textContent = `${headline} (${report.purged.length} files, ${report.cacheKeys.length} cache keys)${details}\n\n${next}`;
         const link = document.createElement("a");
         link.href = report.rebuild;
         link.textContent = "Open " + report.rebuild;

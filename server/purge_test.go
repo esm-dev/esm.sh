@@ -175,7 +175,7 @@ func TestPurgePackageCache(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	resp, err := purgePackageCache(newTestNpmRC(), metaDB, fs, logger, esm, "https://esm.sh")
+	resp, err := purgePackageCache(newTestNpmRC(), metaDB, fs, logger, esm, true, "https://esm.sh", "/example@1.0.0")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -184,6 +184,9 @@ func TestPurgePackageCache(t *testing.T) {
 	}
 	if resp.Rebuild != "https://esm.sh/example@1.0.0" {
 		t.Fatalf("rebuild = %q", resp.Rebuild)
+	}
+	if resp.ResolutionOnly {
+		t.Fatal("expected an exact-version purge, not a resolution-only refresh")
 	}
 
 	// all build outputs and types must be gone
@@ -266,7 +269,7 @@ func TestPurgePackageCacheScoped(t *testing.T) {
 		}
 	}
 
-	resp, err := purgePackageCache(newTestNpmRC(), metaDB, fs, logger, esm, "")
+	resp, err := purgePackageCache(newTestNpmRC(), metaDB, fs, logger, esm, true, "", "/@scope/pkg@1.0.0")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -298,7 +301,7 @@ func TestPurgePackageCacheScoped(t *testing.T) {
 	}
 }
 
-func TestPurgePackageCacheGh(t *testing.T) {
+func TestPurgeFloatingSpecifier(t *testing.T) {
 	wd := t.TempDir()
 	fs, err := storage.NewFSStorage(filepath.Join(wd, "storage"))
 	if err != nil {
@@ -311,39 +314,42 @@ func TestPurgePackageCacheGh(t *testing.T) {
 	logger.SetOutput(io.Discard)
 
 	metaDB := NewBuildMetaDB(fs)
-	// `@main` is resolved to its commit before the purge runs
+	// `@main` is resolved to its commit before the purge runs, but a floating
+	// specifier only refreshes the resolution and keeps the existing build.
 	esm := EsmPath{PkgName: "user/repo", PkgVersion: "abc1234", GhPrefix: true}
 	setCacheItem("gh/user/repo@main", "ref", time.Minute)
 	setCacheItem("gh/user/repo@abc1234", "ref", time.Minute)
-	for _, key := range []string{
-		"modules/gh/user/repo@abc1234/es2022/repo.mjs",
-		"modules/gh/ea/user/repo@abc1234/es2022/repo.mjs",
-	} {
-		if err := fs.Put(key, io.NopCloser(strings.NewReader("x"))); err != nil {
-			t.Fatal(err)
-		}
+	if err := fs.Put("modules/gh/user/repo@abc1234/es2022/repo.mjs", io.NopCloser(strings.NewReader("x"))); err != nil {
+		t.Fatal(err)
 	}
 	buildPath := "/gh/user/repo@abc1234/es2022/repo.mjs"
-	externalAllBuildPath := "/*gh/user/repo@abc1234/es2022/repo.mjs"
-	for _, key := range []string{buildPath, externalAllBuildPath} {
-		if err := metaDB.Put(key, encodeBuildMeta(&BuildMeta{})); err != nil {
-			t.Fatal(err)
-		}
+	if err := metaDB.Put(buildPath, encodeBuildMeta(&BuildMeta{})); err != nil {
+		t.Fatal(err)
 	}
 
-	resp, err := purgePackageCache(newTestNpmRC(), metaDB, fs, logger, esm, "")
+	resp, err := purgePackageCache(newTestNpmRC(), metaDB, fs, logger, esm, false, "https://esm.sh", "/gh/user/repo@main")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.Package != "user/repo" || resp.Version != "abc1234" {
-		t.Fatalf("unexpected purge response identity: %+v", resp)
+	if !resp.ResolutionOnly {
+		t.Fatal("expected a resolution-only refresh for a floating specifier")
 	}
-	for _, key := range []string{buildPath, externalAllBuildPath} {
-		if _, err := metaDB.Get(key); err == nil {
-			t.Fatalf("expected build metadata %s to be purged", key)
-		}
+	if resp.Rebuild != "https://esm.sh/gh/user/repo@main" {
+		t.Fatalf("rebuild = %q", resp.Rebuild)
 	}
-	// the ref resolution (`@main`) and its resolved commit must both be dropped
+	if len(resp.Purged) != 0 {
+		t.Fatalf("expected no artifacts to be removed, got %v", resp.Purged)
+	}
+	// the build and its metadata must survive
+	f, _, err := fs.Get("modules/gh/user/repo@abc1234/es2022/repo.mjs")
+	if err != nil {
+		t.Fatalf("expected the build to survive a floating purge, got %v", err)
+	}
+	f.Close()
+	if _, err := metaDB.Get(buildPath); err != nil {
+		t.Fatalf("expected the build metadata to survive a floating purge, got %v", err)
+	}
+	// the ref resolution (`@main`) and its resolved commit are both dropped
 	for _, key := range []string{"gh/user/repo@main", "gh/user/repo@abc1234"} {
 		if _, ok := getCacheItem(key); ok {
 			t.Fatalf("expected cache key %s to be purged", key)
