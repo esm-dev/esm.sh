@@ -169,6 +169,23 @@ func purgeOAuthLogout(w http.ResponseWriter, r *http.Request) {
 	purgeRedirect(w, "/purge")
 }
 
+// githubRequest performs the request and decodes the JSON response into out.
+func githubRequest(req *http.Request, out any) error {
+	res, err := purgeHTTPClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(res.Body, MB))
+	if err != nil {
+		return err
+	}
+	if res.StatusCode != http.StatusOK {
+		return fmt.Errorf("%s: %s", req.URL, res.Status)
+	}
+	return json.Unmarshal(body, out)
+}
+
 // githubUserLogin exchanges an OAuth code for an access token and resolves the
 // authenticated user's login name.
 func githubUserLogin(code string, redirectURI string) (string, error) {
@@ -184,23 +201,11 @@ func githubUserLogin(code string, redirectURI string) (string, error) {
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
-	res, err := purgeHTTPClient.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer res.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(res.Body, MB))
-	if err != nil {
-		return "", err
-	}
-	if res.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("token endpoint returned %s", res.Status)
-	}
 	var token struct {
 		AccessToken string `json:"access_token"`
 		Error       string `json:"error"`
 	}
-	if err := json.Unmarshal(body, &token); err != nil {
+	if err := githubRequest(req, &token); err != nil {
 		return "", err
 	}
 	if token.AccessToken == "" {
@@ -216,22 +221,10 @@ func githubUserLogin(code string, redirectURI string) (string, error) {
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("Authorization", "Bearer "+token.AccessToken)
-	res, err = purgeHTTPClient.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer res.Body.Close()
-	body, err = io.ReadAll(io.LimitReader(res.Body, MB))
-	if err != nil {
-		return "", err
-	}
-	if res.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("user endpoint returned %s", res.Status)
-	}
 	var user struct {
 		Login string `json:"login"`
 	}
-	if err := json.Unmarshal(body, &user); err != nil {
+	if err := githubRequest(req, &user); err != nil {
 		return "", err
 	}
 	if user.Login == "" {

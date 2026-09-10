@@ -205,7 +205,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 					}
 					limiterKey = "user:" + session.Login
 				}
-				if !purgeLimiter.allow(limiterKey) {
+				if !purgeRateAllowed(limiterKey) {
 					writeJSONError(w, 429, "too many purge requests, please try again later")
 					return
 				}
@@ -225,12 +225,12 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 					writeJSONError(w, 400, err.Error())
 					return
 				}
-				esmPath, _, exactVersion, _, _, err := parseEsmPath(npmrc, pathname)
+				esmPath, _, _, _, _, err := parseEsmPath(npmrc, pathname)
 				if err != nil {
 					writeJSONError(w, 400, err.Error())
 					return
 				}
-				resp, err := purgePackageCache(npmrc, metaDB, esmStorage, logger, esmPath, exactVersion, getOrigin(r))
+				resp, err := purgePackageCache(npmrc, metaDB, esmStorage, logger, esmPath, getOrigin(r))
 				if err != nil {
 					writeJSONError(w, 500, "failed to purge cache: "+err.Error())
 					return
@@ -497,15 +497,8 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 			writeBody(w, data)
 			return
 
-		case "/pow/challenge", "/purge/challenge":
-			// generic proof-of-work challenge endpoint; `/purge/challenge` is
-			// kept as a backward-compatible alias that always mints a `purge`
-			// challenge (see server/pow.go)
-			scope := r.URL.Query().Get("scope")
-			if pathname == "/purge/challenge" && scope == "" {
-				scope = "purge"
-			}
-			challenge, err := newPowChallenge(scope)
+		case "/pow/challenge":
+			challenge, err := newPowChallenge(r.URL.Query().Get("scope"))
 			if err != nil {
 				if errors.Is(err, errUnknownPowScope) {
 					writeStatus(w, 400, err.Error())

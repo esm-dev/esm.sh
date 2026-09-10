@@ -42,9 +42,8 @@ JSON response lists everything that was purged plus a URL to trigger the rebuild
 follows the new version immediately after a purge, no need to wait out the npm query cache TTL.
 
 Every purge requires solving a proof-of-work challenge (the page solves it automatically in the browser), so
-mass purge-and-rebuild attacks are not free. The challenge endpoint is generic —
-`GET /pow/challenge?scope=<scope>`, currently the `purge` scope — and `/purge/challenge` remains as a
-backward-compatible alias.
+mass purge-and-rebuild attacks are not free. The challenge endpoint is generic:
+`GET /pow/challenge?scope=<scope>`, currently the `purge` scope.
 
 ### Self-hosting options
 

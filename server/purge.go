@@ -2,25 +2,16 @@ package server
 
 import (
 	"errors"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
-	"sync"
 	"time"
 
-	"github.com/esm-dev/esm.sh/internal/npm"
 	"github.com/esm-dev/esm.sh/internal/storage"
 	"github.com/ije/gox/log"
 )
-
-// purgeLimiter bounds how often a single client can purge caches, since each
-// purge forces a costly rebuild of the target package on the next request.
-var purgeLimiter = &purgeRateLimiter{
-	entries: make(map[string][]int64),
-	window:  time.Minute,
-	max:     5,
-}
 
 // purgeRequest is the JSON body of `POST /purge`.
 type purgeRequest struct {
@@ -44,44 +35,35 @@ type purgeResponse struct {
 
 // parsePurgeInput normalizes a user-supplied esm.sh URL or bare package
 // specifier into the pathname form accepted by `parseEsmPath`.
-func parsePurgeInput(input string) (pathname string, err error) {
+func parsePurgeInput(input string) (string, error) {
 	input = strings.TrimSpace(input)
 	if input == "" {
 		return "", errors.New("url is required")
 	}
-	// strip the scheme and host of a full URL (only the path matters)
-	if i := strings.Index(input, "://"); i >= 0 {
-		rest := input[i+3:]
-		if j := strings.IndexByte(rest, '/'); j >= 0 {
-			input = rest[j:]
-		} else {
-			input = "/"
-		}
-	} else if strings.HasPrefix(input, "esm.sh/") {
-		input = "/" + strings.TrimPrefix(input, "esm.sh/")
+	if u, err := url.Parse(input); err == nil && u.Host != "" {
+		input = u.Path
+	} else if rest, ok := strings.CutPrefix(input, "esm.sh/"); ok {
+		input = "/" + rest
 	}
-	if !strings.HasPrefix(input, "/") {
-		input = "/" + input
-	}
-	// strip the query string
 	if i := strings.IndexByte(input, '?'); i >= 0 {
 		input = input[:i]
 	}
-	// strip the `*` "external all" marker
-	if strings.HasPrefix(input, "/*") {
-		input = "/" + strings.TrimPrefix(input, "/*")
+	input = strings.TrimPrefix(input, "/*")
+	if !strings.HasPrefix(input, "/") {
+		input = "/" + input
 	}
 	return input, nil
 }
 
 // purgePackageCache removes every cached artifact of a resolved package/version:
-//   - the in-memory npm resolution caches (so the next request re-queries the registry),
+//   - the in-memory resolution caches of the package (the exact version plus the
+//     raw requested specifier, so a stale range/dist-tag/date/git-ref never survives),
 //   - the build outputs, source maps and type declarations in the storage,
 //   - the build metadata (and its in-memory copy) for each removed module,
 //   - the local npm store copy (so the package is re-installed on the next build).
 //
 // The next request for the purged URL rebuilds the module from scratch.
-func purgePackageCache(npmrc *NpmRC, metaDB *BuildMetaDB, esmStorage storage.Storage, logger *log.Logger, esmPath EsmPath, exactVersion bool, origin string) (*purgeResponse, error) {
+func purgePackageCache(npmrc *NpmRC, metaDB *BuildMetaDB, esmStorage storage.Storage, logger *log.Logger, esmPath EsmPath, origin string) (*purgeResponse, error) {
 	pkgId := esmPath.PackageId()
 	resp := &purgeResponse{
 		Package:   esmPath.PkgName,
@@ -89,34 +71,23 @@ func purgePackageCache(npmrc *NpmRC, metaDB *BuildMetaDB, esmStorage storage.Sto
 		Purged:    []string{},
 		CacheKeys: []string{},
 	}
-	dropKey := func(key string) {
-		if _, ok := getCacheItem(key); ok {
-			deleteCacheItem(key)
-			resp.CacheKeys = append(resp.CacheKeys, key)
-		}
-	}
 
-	// 1. drop the npm resolution caches so a stale package.json / 404 never
-	// survives the purge. For unpinned requests (bare names / dist-tags /
-	// semver ranges) the dist-tag entry is dropped as well: the target was
-	// resolved through it, and a manual purge is an explicit "give me the
-	// current version" signal.
-	versions := map[string]bool{
-		npm.NormalizePackageVersion(esmPath.PkgVersion): true,
+	// 1. drop every in-memory resolution cache of the package. The requested
+	// specifier may be a bare name, a semver range, a dist-tag, a date or a
+	// git ref, each cached under its own key, so matching a single resolved
+	// version is not enough — a manual purge must force a fresh resolution.
+	prefixes := []string{
+		"npm:" + esmPath.PkgName + "@",
+		"404:" + esmPath.PkgName + "@",
+		npmrc.getRegistryByPackageName(esmPath.PkgName).Registry + esmPath.PkgName + "@",
 	}
-	if !exactVersion {
-		versions["latest"] = true
+	if esmPath.GhPrefix {
+		prefixes = append(prefixes, "gh/"+esmPath.PkgName+"@")
+	} else if esmPath.PrPrefix {
+		prefixes = append(prefixes, "pr/"+esmPath.PkgName+"@")
 	}
-	for version := range versions {
-		dropKey("npm:" + esmPath.PkgName + "@" + version)
-		dropKey("404:" + esmPath.PkgName + "@" + version)
-	}
-	if esmPath.GhPrefix || esmPath.PrPrefix {
-		prefix := "gh/"
-		if esmPath.PrPrefix {
-			prefix = "pr/"
-		}
-		dropKey(prefix + esmPath.PkgName + "@" + esmPath.PkgVersion)
+	for _, prefix := range prefixes {
+		resp.CacheKeys = append(resp.CacheKeys, deleteCacheItemsWithPrefix(prefix)...)
 	}
 
 	// 2. remove build outputs, source maps and type declarations from storage,
@@ -162,25 +133,27 @@ func purgePackageCache(npmrc *NpmRC, metaDB *BuildMetaDB, esmStorage storage.Sto
 	return resp, nil
 }
 
-// purgeRateLimiter is a tiny in-memory per-IP limiter that keeps the (costly)
-// purge-then-rebuild cycle from being abused.
-type purgeRateLimiter struct {
-	mu      sync.Mutex
-	entries map[string][]int64
-	window  time.Duration
-	max     int
-}
-
-func (l *purgeRateLimiter) allow(ip string) bool {
+// purgeRateAllowed reports whether the client is within the purge rate limit,
+// since each purge forces a costly rebuild of the target package. The sliding
+// window lives in the shared TTL cache, so idle clients are garbage collected.
+func purgeRateAllowed(key string) bool {
+	const (
+		window = time.Minute
+		max    = 5
+	)
+	key = "purge-rate:" + key
+	unlock := cacheMutex.Lock(key)
+	defer unlock()
 	now := time.Now().UnixMilli()
-	cutoff := now - l.window.Milliseconds()
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	times := slices.DeleteFunc(l.entries[ip], func(when int64) bool { return when <= cutoff })
-	if len(times) >= l.max {
-		l.entries[ip] = times
+	var times []int64
+	if v, ok := getCacheItem(key); ok {
+		times = v.([]int64)
+	}
+	times = slices.DeleteFunc(times, func(when int64) bool { return now-when > window.Milliseconds() })
+	if len(times) >= max {
+		setCacheItem(key, times, window)
 		return false
 	}
-	l.entries[ip] = append(times, now)
+	setCacheItem(key, append(times, now), window)
 	return true
 }

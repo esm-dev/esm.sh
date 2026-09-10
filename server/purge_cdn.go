@@ -31,7 +31,7 @@ func cdnPurgeURLs(origin string, pkgId string, keys []string) []string {
 	seen := map[string]bool{}
 	urls := []string{}
 	add := func(u string) {
-		if u != "" && !seen[u] {
+		if !seen[u] {
 			seen[u] = true
 			urls = append(urls, u)
 		}
@@ -78,16 +78,8 @@ func purgeCloudflareCache(logger *log.Logger, urls []string) {
 	endpoint := cloudflareAPIBaseURL + "/client/v4/zones/" + config.CloudflareZoneID + "/purge_cache"
 	for start := 0; start < len(urls); start += cloudflarePurgeBatchSize {
 		end := min(start+cloudflarePurgeBatchSize, len(urls))
-		body, err := json.Marshal(map[string]any{"files": urls[start:end]})
-		if err != nil {
-			logger.Errorf("cloudflare purge: marshal request: %v", err)
-			return
-		}
-		req, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(body))
-		if err != nil {
-			logger.Errorf("cloudflare purge: build request: %v", err)
-			return
-		}
+		body, _ := json.Marshal(map[string][]string{"files": urls[start:end]})
+		req, _ := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+config.CloudflareAPIToken)
 		res, err := purgeHTTPClient.Do(req)

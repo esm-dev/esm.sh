@@ -111,6 +111,12 @@ func TestPowChallenge(t *testing.T) {
 	}
 }
 
+const testNpmRegistry = "https://registry.npmjs.org/"
+
+func newTestNpmRC() *NpmRC {
+	return &NpmRC{globalRegistry: &NpmRegistry{NpmRegistryConfig: NpmRegistryConfig{Registry: testNpmRegistry}}}
+}
+
 func TestPurgePackageCache(t *testing.T) {
 	wd := t.TempDir()
 	fs, err := storage.NewFSStorage(filepath.Join(wd, "storage"))
@@ -145,6 +151,12 @@ func TestPurgePackageCache(t *testing.T) {
 	setCacheItem("404:example@latest", "boom", time.Minute)
 	setCacheItem("npm:example@1.0.0", &npm.PackageJSON{Version: "1.0.0"}, time.Minute)
 	setCacheItem("404:example@1.0.0", "boom", time.Minute)
+	// a raw semver range and the registry-scoped date cache must be dropped too
+	setCacheItem("npm:example@^1.0.0", &npm.PackageJSON{Version: "1.0.0"}, time.Minute)
+	setCacheItem(testNpmRegistry+"example@date=2024-01-01", &npm.PackageJSON{Version: "1.0.0"}, time.Minute)
+	setCacheItem(testNpmRegistry+"example@1.0.0", &npm.PackageJSON{Version: "1.0.0"}, time.Minute)
+	// a sibling package sharing a name prefix must survive
+	setCacheItem("npm:example-extra@1.0.0", &npm.PackageJSON{Version: "1.0.0"}, time.Minute)
 
 	oldWorkDir := config.WorkDir
 	config.WorkDir = filepath.Join(wd, "esmd")
@@ -157,7 +169,7 @@ func TestPurgePackageCache(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	resp, err := purgePackageCache(&NpmRC{}, metaDB, fs, logger, esm, true, "https://esm.sh")
+	resp, err := purgePackageCache(newTestNpmRC(), metaDB, fs, logger, esm, "https://esm.sh")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -183,17 +195,28 @@ func TestPurgePackageCache(t *testing.T) {
 	if _, err := metaDB.Get(buildPath); err == nil {
 		t.Fatal("expected build metadata to be purged")
 	}
-	// the resolution caches of the pinned version must be invalidated while
-	// the dist-tag entry of a fixed-version purge is left alone
-	for _, key := range []string{"npm:example@1.0.0", "404:example@1.0.0"} {
+	// every resolution cache of the package must be invalidated: the exact
+	// version, the bare-name/dist-tag entry, the raw semver range and the
+	// registry-scoped date cache
+	for _, key := range []string{
+		"npm:example@1.0.0",
+		"404:example@1.0.0",
+		"npm:example@latest",
+		"404:example@latest",
+		"npm:example@^1.0.0",
+		testNpmRegistry + "example@date=2024-01-01",
+		testNpmRegistry + "example@1.0.0",
+	} {
 		if _, ok := getCacheItem(key); ok {
 			t.Fatalf("expected cache key %s to be purged", key)
 		}
-	}
-	for _, key := range []string{"npm:example@latest", "404:example@latest"} {
-		if _, ok := getCacheItem(key); !ok {
-			t.Fatalf("expected cache key %s to survive a fixed-version purge", key)
+		if !slices.Contains(resp.CacheKeys, key) {
+			t.Fatalf("expected cache key %s in the purge report, got %v", key, resp.CacheKeys)
 		}
+	}
+	// a sibling package sharing a name prefix must survive
+	if _, ok := getCacheItem("npm:example-extra@1.0.0"); !ok {
+		t.Fatal("expected a sibling package cache to survive")
 	}
 	// the local npm store copy must be removed
 	if _, err := os.Lstat(installDir); !os.IsNotExist(err) {
@@ -218,7 +241,7 @@ func TestPurgePackageCacheScoped(t *testing.T) {
 	if err := fs.Put("modules/@scope/pkg@1.0.0/es2022/pkg.mjs", io.NopCloser(strings.NewReader("x"))); err != nil {
 		t.Fatal(err)
 	}
-	resp, err := purgePackageCache(&NpmRC{}, NewBuildMetaDB(fs), fs, logger, esm, false, "")
+	resp, err := purgePackageCache(newTestNpmRC(), NewBuildMetaDB(fs), fs, logger, esm, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -480,20 +503,6 @@ func TestPowChallengeRoute(t *testing.T) {
 		}
 		if challenge.ID == "" || challenge.Scope != "purge" || challenge.Difficulty != powPolicies["purge"].difficulty {
 			t.Fatalf("unexpected challenge: %+v", challenge)
-		}
-	})
-
-	t.Run("purge alias", func(t *testing.T) {
-		res := request("/purge/challenge")
-		if res.Code != 200 {
-			t.Fatalf("HTTP %d: %s", res.Code, res.Body.String())
-		}
-		var challenge powChallengeResponse
-		if err := json.Unmarshal(res.Body.Bytes(), &challenge); err != nil {
-			t.Fatal(err)
-		}
-		if challenge.Scope != "purge" {
-			t.Fatalf("expected the alias to mint a purge challenge, got scope %q", challenge.Scope)
 		}
 	})
 
