@@ -137,6 +137,7 @@ func TestPurgePackageCache(t *testing.T) {
 		"modules/example@1.0.0/es2022/example.mjs",
 		"modules/example@1.0.0/es2022/example.mjs.map",
 		"modules/example@1.0.0/esnext/example.mjs",
+		"modules/example@1.0.0/ea/es2022/example.mjs",
 		"types/example@1.0.0/index.d.ts",
 	} {
 		if err := fs.Put(key, io.NopCloser(strings.NewReader("x"))); err != nil {
@@ -145,6 +146,11 @@ func TestPurgePackageCache(t *testing.T) {
 	}
 	buildPath := "/example@1.0.0/es2022/example.mjs"
 	if err := metaDB.Put(buildPath, encodeBuildMeta(&BuildMeta{Dts: "/example@1.0.0/es2022/index.d.ts"})); err != nil {
+		t.Fatal(err)
+	}
+	// the external-all build is keyed by its original (un-normalized) URL path
+	externalAllBuildPath := "/*example@1.0.0/es2022/example.mjs"
+	if err := metaDB.Put(externalAllBuildPath, encodeBuildMeta(&BuildMeta{})); err != nil {
 		t.Fatal(err)
 	}
 	setCacheItem("npm:example@latest", &npm.PackageJSON{Version: "1.0.0"}, time.Minute)
@@ -185,15 +191,18 @@ func TestPurgePackageCache(t *testing.T) {
 		"modules/example@1.0.0/es2022/example.mjs",
 		"modules/example@1.0.0/es2022/example.mjs.map",
 		"modules/example@1.0.0/esnext/example.mjs",
+		"modules/example@1.0.0/ea/es2022/example.mjs",
 		"types/example@1.0.0/index.d.ts",
 	} {
 		if _, _, err := fs.Get(key); !errors.Is(err, storage.ErrNotFound) {
 			t.Fatalf("expected %s to be purged, got err=%v", key, err)
 		}
 	}
-	// the build metadata must be gone as well
-	if _, err := metaDB.Get(buildPath); err == nil {
-		t.Fatal("expected build metadata to be purged")
+	// the build metadata of both the plain and the external-all build must be gone
+	for _, key := range []string{buildPath, externalAllBuildPath} {
+		if _, err := metaDB.Get(key); err == nil {
+			t.Fatalf("expected build metadata %s to be purged", key)
+		}
 	}
 	// every resolution cache of the package must be invalidated: the exact
 	// version, the bare-name/dist-tag entry, the raw semver range and the
@@ -236,26 +245,112 @@ func TestPurgePackageCacheScoped(t *testing.T) {
 	}
 	logger.SetOutput(io.Discard)
 
+	metaDB := NewBuildMetaDB(fs)
 	esm := EsmPath{PkgName: "@scope/pkg", PkgVersion: "1.0.0"}
 	setCacheItem("npm:@scope/pkg@latest", &npm.PackageJSON{Version: "1.0.0"}, time.Minute)
-	if err := fs.Put("modules/@scope/pkg@1.0.0/es2022/pkg.mjs", io.NopCloser(strings.NewReader("x"))); err != nil {
-		t.Fatal(err)
+	// the external-all build of a scoped package is stored under `@scope/ea/...`,
+	// which no longer nests under the plain `@scope/pkg@1.0.0/` prefix
+	for _, key := range []string{
+		"modules/@scope/pkg@1.0.0/es2022/pkg.mjs",
+		"modules/@scope/ea/pkg@1.0.0/es2022/pkg.mjs",
+	} {
+		if err := fs.Put(key, io.NopCloser(strings.NewReader("x"))); err != nil {
+			t.Fatal(err)
+		}
 	}
-	resp, err := purgePackageCache(newTestNpmRC(), NewBuildMetaDB(fs), fs, logger, esm, "")
+	buildPath := "/@scope/pkg@1.0.0/es2022/pkg.mjs"
+	externalAllBuildPath := "/*@scope/pkg@1.0.0/es2022/pkg.mjs"
+	for _, key := range []string{buildPath, externalAllBuildPath} {
+		if err := metaDB.Put(key, encodeBuildMeta(&BuildMeta{})); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	resp, err := purgePackageCache(newTestNpmRC(), metaDB, fs, logger, esm, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Contains(resp.Purged, "modules/@scope/pkg@1.0.0/es2022/pkg.mjs") {
-		t.Fatalf("expected the module file in purged list, got: %v", resp.Purged)
-	}
-	if !slices.Contains(resp.Purged, "meta:/@scope/pkg@1.0.0/es2022/pkg.mjs") {
-		t.Fatalf("expected the build metadata in purged list, got: %v", resp.Purged)
+	for _, key := range []string{
+		"modules/@scope/pkg@1.0.0/es2022/pkg.mjs",
+		"modules/@scope/ea/pkg@1.0.0/es2022/pkg.mjs",
+		"meta:" + buildPath,
+		"meta:" + externalAllBuildPath,
+	} {
+		if !slices.Contains(resp.Purged, key) {
+			t.Fatalf("expected %s in purged list, got: %v", key, resp.Purged)
+		}
 	}
 	if !slices.Contains(resp.CacheKeys, "npm:@scope/pkg@latest") {
 		t.Fatalf("expected the dist-tag resolution in cache keys, got: %v", resp.CacheKeys)
 	}
-	if _, _, err := fs.Get("modules/@scope/pkg@1.0.0/es2022/pkg.mjs"); !errors.Is(err, storage.ErrNotFound) {
-		t.Fatalf("expected the scoped package build to be purged, got err=%v", err)
+	for _, key := range []string{
+		"modules/@scope/pkg@1.0.0/es2022/pkg.mjs",
+		"modules/@scope/ea/pkg@1.0.0/es2022/pkg.mjs",
+	} {
+		if _, _, err := fs.Get(key); !errors.Is(err, storage.ErrNotFound) {
+			t.Fatalf("expected %s to be purged, got err=%v", key, err)
+		}
+	}
+	for _, key := range []string{buildPath, externalAllBuildPath} {
+		if _, err := metaDB.Get(key); err == nil {
+			t.Fatalf("expected build metadata %s to be purged", key)
+		}
+	}
+}
+
+func TestPurgePackageCacheGh(t *testing.T) {
+	wd := t.TempDir()
+	fs, err := storage.NewFSStorage(filepath.Join(wd, "storage"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	logger, err := log.New("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	logger.SetOutput(io.Discard)
+
+	metaDB := NewBuildMetaDB(fs)
+	// `@main` is resolved to its commit before the purge runs
+	esm := EsmPath{PkgName: "user/repo", PkgVersion: "abc1234", GhPrefix: true}
+	setCacheItem("gh/user/repo@main", "ref", time.Minute)
+	setCacheItem("gh/user/repo@abc1234", "ref", time.Minute)
+	for _, key := range []string{
+		"modules/gh/user/repo@abc1234/es2022/repo.mjs",
+		"modules/gh/ea/user/repo@abc1234/es2022/repo.mjs",
+	} {
+		if err := fs.Put(key, io.NopCloser(strings.NewReader("x"))); err != nil {
+			t.Fatal(err)
+		}
+	}
+	buildPath := "/gh/user/repo@abc1234/es2022/repo.mjs"
+	externalAllBuildPath := "/*gh/user/repo@abc1234/es2022/repo.mjs"
+	for _, key := range []string{buildPath, externalAllBuildPath} {
+		if err := metaDB.Put(key, encodeBuildMeta(&BuildMeta{})); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	resp, err := purgePackageCache(newTestNpmRC(), metaDB, fs, logger, esm, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Package != "user/repo" || resp.Version != "abc1234" {
+		t.Fatalf("unexpected purge response identity: %+v", resp)
+	}
+	for _, key := range []string{buildPath, externalAllBuildPath} {
+		if _, err := metaDB.Get(key); err == nil {
+			t.Fatalf("expected build metadata %s to be purged", key)
+		}
+	}
+	// the ref resolution (`@main`) and its resolved commit must both be dropped
+	for _, key := range []string{"gh/user/repo@main", "gh/user/repo@abc1234"} {
+		if _, ok := getCacheItem(key); ok {
+			t.Fatalf("expected cache key %s to be purged", key)
+		}
+		if !slices.Contains(resp.CacheKeys, key) {
+			t.Fatalf("expected cache key %s in the purge report, got %v", key, resp.CacheKeys)
+		}
 	}
 }
 

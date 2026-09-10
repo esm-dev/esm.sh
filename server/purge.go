@@ -91,25 +91,39 @@ func purgePackageCache(npmrc *NpmRC, metaDB *BuildMetaDB, esmStorage storage.Sto
 	}
 
 	// 2. remove build outputs, source maps and type declarations from storage,
-	// along with the build metadata of each removed module so it gets rebuilt.
-	for _, dir := range []string{"modules/", "types/"} {
-		keys, err := esmStorage.DeleteAll(dir + pkgId + "/")
-		if err != nil {
-			logger.Errorf("storage.DeleteAll(%s%s/): %v", dir, pkgId, err)
-			return nil, err
+	// along with the build metadata (and its in-memory copy) of each removed
+	// module so it gets rebuilt. The `*` "external all" variant is normalized
+	// into a `.../ea/` segment, which for scoped/gh/pr ids no longer nests under
+	// the plain id, so purge that namespace too.
+	externalAllId := normalizeSavePath("*" + pkgId)
+	buildPathOf := func(key string) string {
+		pathname := strings.TrimPrefix(key, "modules/")
+		if after, ok := strings.CutPrefix(pathname, externalAllId+"/"); ok {
+			return "/*" + pkgId + "/" + after
 		}
-		for _, key := range keys {
-			resp.Purged = append(resp.Purged, key)
-			if strings.HasPrefix(key, "modules/") {
-				// drop the build metadata (and its in-memory copy) so the module
-				// is rebuilt on the next request. Files like source maps and
-				// tree-shaken variants have no metadata of their own, so a
-				// "not found" here is expected and safe to ignore — the router
-				// also self-heals a stale meta by rebuilding on a missing file.
-				buildPath := "/" + strings.TrimPrefix(key, "modules/")
-				metaDB.Delete(buildPath)
-				cacheLRU.Remove(buildPath)
-				resp.Purged = append(resp.Purged, "meta:"+buildPath)
+		return "/" + pathname
+	}
+	for _, dir := range []string{"modules/", "types/"} {
+		for _, id := range []string{pkgId, externalAllId} {
+			keys, err := esmStorage.DeleteAll(dir + id + "/")
+			if err != nil {
+				logger.Errorf("storage.DeleteAll(%s%s/): %v", dir, id, err)
+				return nil, err
+			}
+			for _, key := range keys {
+				resp.Purged = append(resp.Purged, key)
+				if strings.HasPrefix(key, "modules/") {
+					// The build metadata key is the original (un-normalized)
+					// URL path, so it has to be recovered from the storage key.
+					// Files like source maps and tree-shaken variants have no
+					// metadata of their own, so a "not found" here is expected
+					// and safe to ignore — the router also self-heals a stale
+					// meta by rebuilding on a missing file.
+					buildPath := buildPathOf(key)
+					metaDB.Delete(buildPath)
+					cacheLRU.Remove(buildPath)
+					resp.Purged = append(resp.Purged, "meta:"+buildPath)
+				}
 			}
 		}
 	}
