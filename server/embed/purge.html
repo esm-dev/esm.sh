@@ -6,9 +6,55 @@
   <meta name="viewport" content="width=device-width" />
   <title>esm.sh · Purge cache</title>
   <meta name="description" content="Purge the esm.sh build cache for a package URL, just like jsDelivr's purge tool." />
-  <link rel="stylesheet" href="/embed/shared.css" />
   <style>
+    :root {
+      color-scheme: light dark;
+      --text: #232323;
+      --muted: #757575;
+      --bg: #fff;
+      --card: #fff;
+      --border: #eaeaea;
+      --accent: #d63369;
+      --code-bg: #f5f6f6;
+      --ok: #2da44e;
+      --err: #d1242f;
+      --mono: "Geist Mono", "Dank Mono", "Source Code Pro", "Courier Prime Code", "Liberation Mono", Consolas, Menlo, monospace;
+      --sans: system-ui, -apple-system, BlinkMacSystemFont, Inter, "Geist", "Segoe UI", "Helvetica Neue", Helvetica, Roboto, Ubuntu, Tahoma, Arial, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", sans-serif;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --text: #e6e1d9;
+        --muted: #999;
+        --bg: #0e1011;
+        --card: #16191b;
+        --border: #323232;
+        --code-bg: #232323;
+        color-scheme: dark;
+      }
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      border: none;
+      outline: none;
+      font: inherit;
+      font-size: 100%;
+      vertical-align: baseline;
+      box-sizing: border-box;
+      background: transparent;
+    }
+
+    html {
+      font-size: 15px;
+    }
+
     body {
+      text-rendering: optimizeLegibility;
+      font-family: var(--sans);
+      color: var(--text);
+      background-color: var(--bg);
       min-height: 100vh;
       display: flex;
       flex-direction: column;
@@ -254,7 +300,24 @@
   </footer>
 
   <script type="module">
-    import { fetchPowChallenge, solvePow } from "/embed/shared.mjs";
+    async function fetchPowChallenge(scope) {
+      const response = await fetch("/pow/challenge?scope=" + encodeURIComponent(scope));
+      if (!response.ok) {
+        throw new Error("failed to fetch proof-of-work challenge (" + response.status + ")");
+      }
+      return response.json();
+    }
+
+    async function solvePow(salt, difficulty) {
+      const target = "0".repeat(difficulty);
+      const encoder = new TextEncoder();
+      for (let nonce = 0; ; nonce++) {
+        const bytes = new Uint8Array(await crypto.subtle.digest("SHA-256", encoder.encode(salt + nonce)));
+        let hex = "";
+        for (const byte of bytes) hex += byte.toString(16).padStart(2, "0");
+        if (hex.startsWith(target)) return String(nonce);
+      }
+    }
 
     const urlInput = document.getElementById("url");
     const purgeBtn = document.getElementById("purge-btn");

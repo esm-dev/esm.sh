@@ -8,7 +8,6 @@
   <meta name="description" content="A _no-build_ JavaScript CDN for modern web development." />
   <meta name="keywords"
     content="js,javascript,CDN,modern,web,dev,development,es,module,esm,deno,npm,github,jsr,no-build" />
-  <link rel="stylesheet" href="/embed/shared.css" />
   <style>
     :root {
       --hljs-default-color: #454545;
@@ -16,6 +15,27 @@
       --hljs-literal-color: teal;
       --hljs-comment-color: #999;
       --hljs-string-color: #d63369;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      border: none;
+      outline: none;
+      font: inherit;
+      font-size: 100%;
+      vertical-align: baseline;
+      background: transparent;
+    }
+
+    html {
+      font-size: 15px;
+    }
+
+    body {
+      text-rendering: optimizeLegibility;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, Inter, "Geist", "Segoe UI", "Helvetica Neue", Helvetica, Roboto, Ubuntu, Tahoma, Arial, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", sans-serif;
+      color: #232323;
     }
 
     ul,
@@ -222,6 +242,11 @@
         --hljs-comment-color: #757575;
         --hljs-string-color: #d63369;
         color-scheme: dark;
+      }
+
+      body {
+        color: #e6e1d9 !important;
+        background-color: #0e1011 !important;
       }
 
       .readme h1 {

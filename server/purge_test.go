@@ -613,14 +613,18 @@ func TestPowChallengeRoute(t *testing.T) {
 		}
 	})
 
-	t.Run("shared assets", func(t *testing.T) {
-		for _, test := range []struct{ path, contentType string }{
-			{"/embed/shared.css", "text/css"},
-			{"/embed/shared.mjs", "application/javascript"},
-		} {
-			res := request(test.path)
-			if res.Code != 200 || !strings.HasPrefix(res.Header().Get("Content-Type"), test.contentType) {
-				t.Fatalf("%s: HTTP %d content-type %q", test.path, res.Code, res.Header().Get("Content-Type"))
+	t.Run("purge page is self-contained", func(t *testing.T) {
+		res := request("/purge")
+		if res.Code != 200 || !strings.HasPrefix(res.Header().Get("Content-Type"), "text/html") {
+			t.Fatalf("/purge: HTTP %d content-type %q", res.Code, res.Header().Get("Content-Type"))
+		}
+		body := res.Body.String()
+		if strings.Contains(body, "shared.css") || strings.Contains(body, "shared.mjs") {
+			t.Fatal("expected the purge page to inline its assets")
+		}
+		for _, inline := range []string{"solvePow", "fetchPowChallenge"} {
+			if !strings.Contains(body, inline) {
+				t.Fatalf("expected the purge page to inline %s", inline)
 			}
 		}
 	})
