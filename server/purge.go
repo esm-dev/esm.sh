@@ -155,7 +155,7 @@ func parsePurgeInput(input string) (pathname string, err error) {
 //   - the local npm store copy (so the package is re-installed on the next build).
 //
 // The next request for the purged URL rebuilds the module from scratch.
-func purgePackageCache(npmrc *NpmRC, metaDB *BuildMetaDB, esmStorage storage.Storage, logger *log.Logger, esmPath EsmPath, origin string) (*purgeResponse, error) {
+func purgePackageCache(npmrc *NpmRC, metaDB *BuildMetaDB, esmStorage storage.Storage, logger *log.Logger, esmPath EsmPath, exactVersion bool, origin string) (*purgeResponse, error) {
 	pkgId := esmPath.PackageId()
 	resp := &purgeResponse{
 		Package:   esmPath.PkgName,
@@ -171,12 +171,16 @@ func purgePackageCache(npmrc *NpmRC, metaDB *BuildMetaDB, esmStorage storage.Sto
 	}
 
 	// 1. drop the npm resolution caches so a stale package.json / 404 never
-	// survives the purge. Always clear the dist-tag entry as well: a manual
-	// purge is an explicit "give me the current version" signal.
+	// survives the purge. For unpinned requests (bare names / dist-tags /
+	// semver ranges) the dist-tag entry is dropped as well: the target was
+	// resolved through it, and a manual purge is an explicit "give me the
+	// current version" signal.
 	versions := map[string]bool{
-		"latest": true,
+		npm.NormalizePackageVersion(esmPath.PkgVersion): true,
 	}
-	versions[npm.NormalizePackageVersion(esmPath.PkgVersion)] = true
+	if !exactVersion {
+		versions["latest"] = true
+	}
 	for version := range versions {
 		dropKey("npm:" + esmPath.PkgName + "@" + version)
 		dropKey("404:" + esmPath.PkgName + "@" + version)

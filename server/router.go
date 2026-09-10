@@ -215,12 +215,12 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 					writeJSONError(w, 400, err.Error())
 					return
 				}
-				esmPath, _, _, _, _, err := parseEsmPath(npmrc, pathname)
+				esmPath, _, exactVersion, _, _, err := parseEsmPath(npmrc, pathname)
 				if err != nil {
 					writeJSONError(w, 400, err.Error())
 					return
 				}
-				resp, err := purgePackageCache(npmrc, metaDB, esmStorage, logger, esmPath, getOrigin(r))
+				resp, err := purgePackageCache(npmrc, metaDB, esmStorage, logger, esmPath, exactVersion, getOrigin(r))
 				if err != nil {
 					writeJSONError(w, 500, "failed to purge cache: "+err.Error())
 					return

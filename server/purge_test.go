@@ -124,6 +124,7 @@ func TestPurgePackageCache(t *testing.T) {
 	setCacheItem("npm:example@latest", &npm.PackageJSON{Version: "1.0.0"}, time.Minute)
 	setCacheItem("404:example@latest", "boom", time.Minute)
 	setCacheItem("npm:example@1.0.0", &npm.PackageJSON{Version: "1.0.0"}, time.Minute)
+	setCacheItem("404:example@1.0.0", "boom", time.Minute)
 
 	oldWorkDir := config.WorkDir
 	config.WorkDir = filepath.Join(wd, "esmd")
@@ -136,7 +137,7 @@ func TestPurgePackageCache(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	resp, err := purgePackageCache(&NpmRC{}, metaDB, fs, logger, esm, "https://esm.sh")
+	resp, err := purgePackageCache(&NpmRC{}, metaDB, fs, logger, esm, true, "https://esm.sh")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -162,10 +163,16 @@ func TestPurgePackageCache(t *testing.T) {
 	if _, err := metaDB.Get(buildPath); err == nil {
 		t.Fatal("expected build metadata to be purged")
 	}
-	// the resolution caches must be invalidated
-	for _, key := range []string{"npm:example@latest", "404:example@latest", "npm:example@1.0.0"} {
+	// the resolution caches of the pinned version must be invalidated while
+	// the dist-tag entry of a fixed-version purge is left alone
+	for _, key := range []string{"npm:example@1.0.0", "404:example@1.0.0"} {
 		if _, ok := getCacheItem(key); ok {
 			t.Fatalf("expected cache key %s to be purged", key)
+		}
+	}
+	for _, key := range []string{"npm:example@latest", "404:example@latest"} {
+		if _, ok := getCacheItem(key); !ok {
+			t.Fatalf("expected cache key %s to survive a fixed-version purge", key)
 		}
 	}
 	// the local npm store copy must be removed
@@ -187,10 +194,11 @@ func TestPurgePackageCacheScoped(t *testing.T) {
 	logger.SetOutput(io.Discard)
 
 	esm := EsmPath{PkgName: "@scope/pkg", PkgVersion: "1.0.0"}
+	setCacheItem("npm:@scope/pkg@latest", &npm.PackageJSON{Version: "1.0.0"}, time.Minute)
 	if err := fs.Put("modules/@scope/pkg@1.0.0/es2022/pkg.mjs", io.NopCloser(strings.NewReader("x"))); err != nil {
 		t.Fatal(err)
 	}
-	resp, err := purgePackageCache(&NpmRC{}, NewBuildMetaDB(fs), fs, logger, esm, "")
+	resp, err := purgePackageCache(&NpmRC{}, NewBuildMetaDB(fs), fs, logger, esm, false, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -199,6 +207,9 @@ func TestPurgePackageCacheScoped(t *testing.T) {
 	}
 	if !slices.Contains(resp.Purged, "meta:/@scope/pkg@1.0.0/es2022/pkg.mjs") {
 		t.Fatalf("expected the build metadata in purged list, got: %v", resp.Purged)
+	}
+	if !slices.Contains(resp.CacheKeys, "npm:@scope/pkg@latest") {
+		t.Fatalf("expected the dist-tag resolution in cache keys, got: %v", resp.CacheKeys)
 	}
 	if _, _, err := fs.Get("modules/@scope/pkg@1.0.0/es2022/pkg.mjs"); !errors.Is(err, storage.ErrNotFound) {
 		t.Fatalf("expected the scoped package build to be purged, got err=%v", err)
