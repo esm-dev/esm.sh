@@ -514,7 +514,7 @@ func (im *ImportMap) FormatJSON(indent int) string {
 	buf.WriteString("\"imports\": {")
 	if im.Imports.Len() > 0 {
 		buf.WriteByte('\n')
-		formatImports(&buf, im.Imports, indent+2)
+		formatMap(&buf, im.Imports, indent+2)
 		buf.Write(indentStr)
 		buf.WriteByte('}')
 	} else {
@@ -543,7 +543,7 @@ func (im *ImportMap) FormatJSON(indent int) string {
 			buf.WriteString("  \"")
 			buf.WriteString(scope)
 			buf.WriteString("\": {\n")
-			formatImports(&buf, imports, indent+3)
+			formatMap(&buf, imports, indent+3)
 			buf.Write(indentStr)
 			buf.WriteString("  }")
 			if len(scopes) > 1 && i < len(scopes)-1 {
@@ -567,29 +567,6 @@ func (im *ImportMap) FormatJSON(indent int) string {
 	buf.Write(indentStr[0 : 2*indent])
 	buf.WriteByte('}')
 	return buf.String()
-}
-
-func formatImports(buf *strings.Builder, imports *Imports, indent int) {
-	keys := imports.Keys()
-	sort.Strings(keys)
-	indentStr := bytes.Repeat([]byte{' ', ' '}, indent)
-	for i, key := range keys {
-		url, ok := imports.Get(key)
-		if !ok || url == "" {
-			// ignore empty values
-			continue
-		}
-		buf.Write(indentStr)
-		buf.WriteByte('"')
-		buf.WriteString(key)
-		buf.WriteString("\": \"")
-		buf.WriteString(url)
-		buf.WriteByte('"')
-		if i < len(keys)-1 {
-			buf.WriteByte(',')
-		}
-		buf.WriteByte('\n')
-	}
 }
 
 func formatMap(buf *strings.Builder, m *Imports, indent int) {

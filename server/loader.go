@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/esm-dev/esm.sh/internal/deno"
 	esbuild "github.com/ije/esbuild-internal/api"
 )
 
@@ -19,9 +18,9 @@ type LoaderOutput struct {
 }
 
 func runLoaderContext(ctx context.Context, loaderJsPath string, filename string, code string) (out *LoaderOutput, err error) {
-	denoPath := deno.ResolveDenoPath(config.WorkDir)
+	denoPath := resolveDenoPath(config.WorkDir)
 	err = doOnce("check-deno", func() (err error) {
-		return deno.CheckDenoPath(denoPath)
+		return checkDenoPath(denoPath)
 	})
 	if err != nil {
 		return

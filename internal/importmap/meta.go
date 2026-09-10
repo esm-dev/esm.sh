@@ -10,9 +10,9 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
-	"github.com/esm-dev/esm.sh/internal/app_dir"
 	"github.com/esm-dev/esm.sh/internal/npm"
 	"github.com/ije/gox/sync"
 	"github.com/ije/gox/utils"
@@ -138,10 +138,14 @@ func fetchImportMeta(cdnOrigin string, imp Import, target string) (meta ImportMe
 		return
 	}
 
-	appDir, err := app_dir.GetAppDir()
+	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		err = fmt.Errorf("could not get app directory: %s", err.Error())
 		return
+	}
+	appDir := filepath.Join(homeDir, ".esm.sh")
+	if runtime.GOOS == "windows" {
+		appDir = filepath.Join(homeDir, "AppData", "Local", "esm.sh")
 	}
 
 	sha := sha256.Sum256([]byte(url))

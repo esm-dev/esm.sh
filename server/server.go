@@ -13,7 +13,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/esm-dev/esm.sh/internal/fetch"
 	"github.com/esm-dev/esm.sh/internal/storage"
 	"github.com/ije/gox/log"
 	"github.com/ije/gox/set"
@@ -186,7 +185,7 @@ func customLandingPage(options *LandingPageOptions, next http.Handler) http.Hand
 			writeJSONError(w, http.StatusBadRequest, "Invalid url")
 			return
 		}
-		fetchClient := fetch.NewClient(r.UserAgent(), 15, false)
+		fetchClient := newFetchClient(r.UserAgent(), 15)
 		res, err := fetchClient.Fetch(url, nil)
 		if err != nil {
 			writeJSONError(w, http.StatusBadGateway, "Failed to fetch custom landing page")

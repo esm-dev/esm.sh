@@ -21,8 +21,6 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
-	"github.com/esm-dev/esm.sh/internal/fetch"
-	"github.com/esm-dev/esm.sh/internal/jsonc"
 	"github.com/esm-dev/esm.sh/internal/npm"
 	"github.com/ije/gox/set"
 	syncx "github.com/ije/gox/sync"
@@ -132,7 +130,7 @@ func (npmrc *NpmRC) fetchPackageMetadataContext(ctx context.Context, pkgName str
 		fmt.Println(term.Dim(fmt.Sprintf("Fetching %s...", regUrl.String())))
 	}
 
-	fetchClient := fetch.NewClient("esmd/"+VERSION, 15, false)
+	fetchClient := newFetchClient("esmd/"+VERSION, 15)
 
 	retryTimes := 0
 RETRY:
@@ -374,7 +372,7 @@ func (npmrc *NpmRC) installPackageContext(ctx context.Context, pkg npm.Package) 
 				data, err := os.ReadFile(deonJsoncPath)
 				if err == nil {
 					var raw npm.PackageJSONRaw
-					if json.Unmarshal(jsonc.StripJSONC(data), &raw) == nil {
+					if json.Unmarshal(stripJSONC(data), &raw) == nil {
 						denoJson = raw.ToNpmPackage()
 					}
 				}
@@ -583,7 +581,7 @@ func (reg *NpmRegistry) isSupportVersionRoute(urlStr string) bool {
 		return true
 	}
 
-	fetchClient := fetch.NewClient("esmd/"+VERSION, 15, false)
+	fetchClient := newFetchClient("esmd/"+VERSION, 15)
 
 	u.Path = "/react/19.0.0"
 	res, err := fetchClient.Fetch(u, nil)
@@ -657,7 +655,7 @@ func fetchPackageTarballContext(ctx context.Context, reg *NpmRegistry, installDi
 		}
 	}
 
-	fetchClient := fetch.NewClient("esmd/"+VERSION, 30, false)
+	fetchClient := newFetchClient("esmd/"+VERSION, 30)
 	checkRedirect := fetchClient.CheckRedirect
 	fetchClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		if !isTrustedOrigin(req.URL) {

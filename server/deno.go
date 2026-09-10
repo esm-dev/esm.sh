@@ -1,4 +1,4 @@
-package deno
+package server
 
 import (
 	"archive/zip"
@@ -15,9 +15,9 @@ import (
 	"github.com/ije/gox/utils"
 )
 
-const version = "2.7.13"
+const denoVersion = "2.7.13"
 
-func ResolveDenoPath(workDir string) string {
+func resolveDenoPath(workDir string) string {
 	denoPath := filepath.Join(workDir, "bin/deno")
 	if runtime.GOOS == "windows" {
 		denoPath += ".exe"
@@ -25,16 +25,16 @@ func ResolveDenoPath(workDir string) string {
 	return denoPath
 }
 
-func CheckDenoPath(denoPath string) (err error) {
+func checkDenoPath(denoPath string) (err error) {
 	fi, err := os.Lstat(denoPath)
 	if err == nil {
-		if !fi.IsDir() && validateDenoVersion(denoPath, version) == nil {
+		if !fi.IsDir() && validateDenoVersion(denoPath, denoVersion) == nil {
 			return nil
 		}
 		// remove the invalid deno path and install a new one
 		os.RemoveAll(denoPath)
 	}
-	return installDeno(denoPath, version)
+	return installDeno(denoPath, denoVersion)
 }
 
 func installDeno(installPath string, version string) (err error) {

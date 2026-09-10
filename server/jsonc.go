@@ -1,6 +1,6 @@
-package jsonc
+package server
 
-// StripJSONC strips out comments and trailing commas and convert the input to a
+// stripJSONC strips out comments and trailing commas and converts the input to a
 // valid JSON per the official spec: https://tools.ietf.org/html/rfc8259
 //
 // The resulting JSON will always be the same length as the input and it will
@@ -10,7 +10,7 @@ package jsonc
 //
 // The MIT License (MIT)
 // Copyright (c) 2021 Josh Baker
-func StripJSONC(src []byte) []byte {
+func stripJSONC(src []byte) []byte {
 	var dst []byte
 	for i := 0; i < len(src); i++ {
 		if src[i] == '/' {
