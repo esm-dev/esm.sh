@@ -3,8 +3,11 @@ package server
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"slices"
@@ -213,5 +216,217 @@ func TestPurgePackageCacheScoped(t *testing.T) {
 	}
 	if _, _, err := fs.Get("modules/@scope/pkg@1.0.0/es2022/pkg.mjs"); !errors.Is(err, storage.ErrNotFound) {
 		t.Fatalf("expected the scoped package build to be purged, got err=%v", err)
+	}
+}
+
+func TestPurgeSession(t *testing.T) {
+	oldSecret := config.GithubClientSecret
+	config.GithubClientSecret = "test-secret"
+	defer func() { config.GithubClientSecret = oldSecret }()
+
+	session := &purgeSession{Login: "octocat", ExpiresAt: time.Now().Add(time.Hour).Unix()}
+	value := signPurgeSession(session)
+	if got := parsePurgeSession(value); got == nil || got.Login != "octocat" {
+		t.Fatalf("expected a valid session, got %+v", got)
+	}
+
+	// a tampered payload must be rejected
+	if parsePurgeSession(value[:len(value)-1]+"0") != nil {
+		t.Fatal("expected a tampered session to be rejected")
+	}
+	// an expired session must be rejected
+	expired := signPurgeSession(&purgeSession{Login: "octocat", ExpiresAt: time.Now().Add(-time.Minute).Unix()})
+	if parsePurgeSession(expired) != nil {
+		t.Fatal("expected an expired session to be rejected")
+	}
+	// a session signed with another secret must be rejected
+	config.GithubClientSecret = "other-secret"
+	if parsePurgeSession(value) != nil {
+		t.Fatal("expected a session signed with another secret to be rejected")
+	}
+}
+
+func TestPurgeOAuthLoginRedirect(t *testing.T) {
+	oldID, oldSecret, oldOAuthOrigin := config.GithubClientID, config.GithubClientSecret, config.CdnOrigin
+	config.PurgeCache = true
+	config.GithubClientID = "client-id"
+	config.GithubClientSecret = "client-secret"
+	config.CdnOrigin = "https://esm.sh"
+	defer func() {
+		config.GithubClientID, config.GithubClientSecret, config.CdnOrigin = oldID, oldSecret, oldOAuthOrigin
+	}()
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "https://esm.sh/purge/login", nil)
+	purgeOAuthLogin(w, r)
+	res := w.Result()
+	if res.StatusCode != http.StatusFound {
+		t.Fatalf("expected a redirect, got %d", res.StatusCode)
+	}
+	location := res.Header.Get("Location")
+	if !strings.HasPrefix(location, githubOAuthAuthorizeURL) ||
+		!strings.Contains(location, "client_id=client-id") ||
+		!strings.Contains(location, "scope=read%3Auser") {
+		t.Fatalf("unexpected authorize redirect: %s", location)
+	}
+	var state string
+	for _, cookie := range res.Cookies() {
+		if cookie.Name == purgeOAuthStateCookie {
+			state = cookie.Value
+		}
+	}
+	if state == "" {
+		t.Fatal("expected an oauth state cookie")
+	}
+}
+
+func TestPurgeOAuthCallback(t *testing.T) {
+	oldID, oldSecret, oldOrigin := config.GithubClientID, config.GithubClientSecret, config.CdnOrigin
+	oldTokenURL, oldUserURL := githubOAuthTokenURL, githubUserAPIURL
+	defer func() {
+		config.GithubClientID, config.GithubClientSecret, config.CdnOrigin = oldID, oldSecret, oldOrigin
+		githubOAuthTokenURL, githubUserAPIURL = oldTokenURL, oldUserURL
+	}()
+	config.PurgeCache = true
+	config.GithubClientID = "client-id"
+	config.GithubClientSecret = "client-secret"
+	config.CdnOrigin = "https://esm.sh"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/token":
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"access_token":"token"}`))
+		case "/user":
+			if r.Header.Get("Authorization") != "Bearer token" {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"login":"octocat"}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+	githubOAuthTokenURL = server.URL + "/token"
+	githubUserAPIURL = server.URL + "/user"
+
+	logger, err := log.New("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	logger.SetOutput(io.Discard)
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "https://esm.sh/purge/callback?code=abc&state=state", nil)
+	r.AddCookie(&http.Cookie{Name: purgeOAuthStateCookie, Value: "state"})
+	purgeOAuthCallback(w, r, logger)
+	res := w.Result()
+	if res.StatusCode != http.StatusFound || res.Header.Get("Location") != "/purge" {
+		t.Fatalf("expected a redirect to /purge, got %d %q", res.StatusCode, res.Header.Get("Location"))
+	}
+	var sessionCookie *http.Cookie
+	for _, cookie := range res.Cookies() {
+		if cookie.Name == purgeSessionCookie {
+			sessionCookie = cookie
+		}
+	}
+	if sessionCookie == nil || parsePurgeSession(sessionCookie.Value) == nil || parsePurgeSession(sessionCookie.Value).Login != "octocat" {
+		t.Fatalf("expected a signed session for octocat, got %+v", sessionCookie)
+	}
+}
+
+func TestPurgeOAuthCallbackRejectsBadState(t *testing.T) {
+	oldID, oldSecret := config.GithubClientID, config.GithubClientSecret
+	config.PurgeCache = true
+	config.GithubClientID = "client-id"
+	config.GithubClientSecret = "client-secret"
+	defer func() { config.GithubClientID, config.GithubClientSecret = oldID, oldSecret }()
+
+	logger, err := log.New("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	logger.SetOutput(io.Discard)
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "https://esm.sh/purge/callback?code=abc&state=forged", nil)
+	r.AddCookie(&http.Cookie{Name: purgeOAuthStateCookie, Value: "state"})
+	purgeOAuthCallback(w, r, logger)
+	if location := w.Result().Header.Get("Location"); !strings.Contains(location, "error=") {
+		t.Fatalf("expected an error redirect, got %q", location)
+	}
+}
+
+func TestCdnPurgeURLs(t *testing.T) {
+	urls := cdnPurgeURLs("https://esm.sh", "example@1.0.0", []string{
+		"modules/example@1.0.0/es2022/example.mjs",
+		"modules/example@1.0.0/es2022/example.mjs",
+		"modules/example@1.0.0/X-abc/es2022/example.mjs",
+		"modules/x-0123456789abcdef0123456789abcdef01234567/es2022/example.mjs",
+		"modules/*example@1.0.0/ea/example.mjs",
+		"modules/transform/deadbeef.mjs",
+		"types/example@1.0.0/index.d.ts",
+		"install:/tmp/example@1.0.0",
+		"meta:/example@1.0.0/es2022/example.mjs",
+	})
+	want := []string{
+		"https://esm.sh/example@1.0.0",
+		"https://esm.sh/example@1.0.0/es2022/example.mjs",
+		"https://esm.sh/example@1.0.0/index.d.ts",
+	}
+	if !slices.Equal(urls, want) {
+		t.Fatalf("cdnPurgeURLs = %v, want %v", urls, want)
+	}
+}
+
+func TestCloudflarePurge(t *testing.T) {
+	oldZone, oldToken, oldBase := config.CloudflareZoneID, config.CloudflareAPIToken, cloudflareAPIBaseURL
+	defer func() {
+		config.CloudflareZoneID, config.CloudflareAPIToken, cloudflareAPIBaseURL = oldZone, oldToken, oldBase
+	}()
+	config.CloudflareZoneID = "zone"
+	config.CloudflareAPIToken = "token"
+
+	var batches [][]string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/client/v4/zones/zone/purge_cache" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		if r.Header.Get("Authorization") != "Bearer token" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		var body struct {
+			Files []string `json:"files"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		batches = append(batches, body.Files)
+		w.Write([]byte(`{"success":true}`))
+	}))
+	defer server.Close()
+	cloudflareAPIBaseURL = server.URL
+
+	logger, err := log.New("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	logger.SetOutput(io.Discard)
+
+	var urls []string
+	for i := 0; i < 31; i++ {
+		urls = append(urls, "https://esm.sh/pkg@"+strconv.Itoa(i))
+	}
+	purgeCloudflareCache(logger, urls)
+	if len(batches) != 2 || len(batches[0]) != cloudflarePurgeBatchSize || len(batches[1]) != 1 {
+		t.Fatalf("unexpected cloudflare batches: %v", batches)
+	}
+	if batches[0][0] != "https://esm.sh/pkg@0" || batches[1][0] != "https://esm.sh/pkg@30" {
+		t.Fatalf("unexpected cloudflare urls: %v", batches)
 	}
 }

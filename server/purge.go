@@ -19,7 +19,8 @@ import (
 
 // proof-of-work parameters for `POST /purge`. Every purge must first solve a
 // hashcash-style SHA-256 challenge, so bots cannot drive the expensive
-// purge-then-rebuild cycle for free.
+// purge-then-rebuild cycle for free. When GitHub OAuth is configured the
+// challenge is stacked on top of the login requirement.
 const (
 	powDifficulty       = 4 // leading zero hex chars required
 	powChallengeTTL     = 2 * time.Minute
@@ -229,6 +230,9 @@ func purgePackageCache(npmrc *NpmRC, metaDB *BuildMetaDB, esmStorage storage.Sto
 
 	if origin != "" {
 		resp.Rebuild = origin + "/" + pkgId
+		// also evict the matching entries from the CDN edge cache, so clients
+		// do not keep serving the stale build until its TTLs expire
+		purgeCloudflareCache(logger, cdnPurgeURLs(origin, pkgId, resp.Purged))
 	}
 	return resp, nil
 }

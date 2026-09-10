@@ -48,6 +48,10 @@ type Config struct {
 	NpmScopedRegistries map[string]NpmRegistryConfig `json:"npmScopedRegistries"`
 	NpmQueryCacheTTL    uint32                       `json:"npmQueryCacheTTL"`
 	PurgeCacheRaw       json.RawMessage              `json:"purgeCache"`
+	GithubClientID      string                       `json:"githubClientId"`
+	GithubClientSecret  string                       `json:"githubClientSecret"`
+	CloudflareZoneID    string                       `json:"cloudflareZoneId"`
+	CloudflareAPIToken  string                       `json:"cloudflareApiToken"`
 	MinifyRaw           json.RawMessage              `json:"minify"`
 	SourceMapRaw        json.RawMessage              `json:"sourceMap"`
 	CompressRaw         json.RawMessage              `json:"compress"`
@@ -265,9 +269,20 @@ func normalizeConfig(config *Config) {
 			}
 		}
 	}
+	if config.GithubClientID == "" {
+		config.GithubClientID = os.Getenv("GITHUB_CLIENT_ID")
+	}
+	if config.GithubClientSecret == "" {
+		config.GithubClientSecret = os.Getenv("GITHUB_CLIENT_SECRET")
+	}
+	if config.CloudflareZoneID == "" {
+		config.CloudflareZoneID = os.Getenv("CLOUDFLARE_ZONE_ID")
+	}
+	if config.CloudflareAPIToken == "" {
+		config.CloudflareAPIToken = os.Getenv("CLOUDFLARE_API_TOKEN")
+	}
 	config.Compress = !(bytes.Equal(config.CompressRaw, []byte("false")) || os.Getenv("COMPRESS") == "false")
 	config.PurgeCache = !(bytes.Equal(config.PurgeCacheRaw, []byte("false")) || os.Getenv("PURGE_CACHE") == "false")
-	config.Compress = !(bytes.Equal(config.CompressRaw, []byte("false")) || os.Getenv("COMPRESS") == "false")
 	config.SourceMap = !(bytes.Equal(config.SourceMapRaw, []byte("false")) || (os.Getenv("SOURCEMAP") == "false" || os.Getenv("SOURCE_MAP") == "false"))
 	config.Minify = !(bytes.Equal(config.MinifyRaw, []byte("false")) || os.Getenv("MINIFY") == "false")
 }

@@ -194,6 +194,21 @@
       opacity: 1;
     }
 
+    .auth {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 14px;
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+
+    .auth a {
+      font-weight: 600;
+      box-shadow: none;
+    }
+
     pre#result {
       margin-top: 16px;
       padding: 14px;
@@ -258,8 +273,9 @@
         from scratch. Useful after publishing a new version, the same way the
         <a href="https://www.jsdelivr.com/tools/purge">jsDelivr purge tool</a> works.
       </p>
+      <div class="auth" id="auth" hidden></div>
       <form id="purge-form">
-        <input id="url" name="url" placeholder="https://esm.sh/react@19.0.0 或 react@19.0.0" spellcheck="false" autocomplete="off" />
+        <input id="url" name="url" placeholder="https://esm.sh/react@19.0.0 or react@19.0.0" spellcheck="false" autocomplete="off" />
         <button type="submit" id="purge-btn">Purge</button>
       </form>
       <div class="examples">
@@ -282,10 +298,32 @@
     const urlInput = document.getElementById("url");
     const purgeBtn = document.getElementById("purge-btn");
     const result = document.getElementById("result");
+    const authBar = document.getElementById("auth");
+
+    let auth = { github: false, login: "" };
 
     function showError(text) {
+      result.hidden = false;
       result.className = "err";
       result.textContent = text;
+    }
+
+    function renderAuth() {
+      authBar.hidden = !auth.github;
+      authBar.textContent = "";
+      if (!auth.github) return;
+      const status = document.createElement("span");
+      const link = document.createElement("a");
+      if (auth.login) {
+        status.textContent = `Signed in as ${auth.login}.`;
+        link.href = "/purge/logout";
+        link.textContent = "Sign out";
+      } else {
+        status.textContent = "A GitHub sign-in is required to purge.";
+        link.href = "/purge/login";
+        link.textContent = "Sign in with GitHub";
+      }
+      authBar.append(status, link);
     }
 
     async function solvePow(salt, difficulty) {
@@ -298,6 +336,10 @@
     }
 
     async function purge(url) {
+      if (auth.github && !auth.login) {
+        showError("Please sign in with GitHub before purging.");
+        return;
+      }
       purgeBtn.disabled = true;
       result.hidden = false;
       result.className = "";
@@ -305,14 +347,20 @@
       try {
         const challenge = await (await fetch("/purge/challenge")).json();
         const nonce = await solvePow(challenge.salt, challenge.difficulty);
-        result.textContent = "Purging…";
+        result.textContent = auth.github ? "Purging (GitHub + proof-of-work)…" : "Purging…";
         const response = await fetch("/purge", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ url, challenge: challenge.id, nonce }),
         });
         const report = await response.json();
-        if (!response.ok) return showError("Error " + response.status + ": " + report.message);
+        if (!response.ok) {
+          if (response.status === 401 && report.login) {
+            auth.login = "";
+            renderAuth();
+          }
+          return showError("Error " + response.status + ": " + report.message);
+        }
         result.className = "ok";
         result.textContent = `Purged ${report.package}@${report.version} (${report.purged.length} files, ${report.cacheKeys.length} cache keys):\n` +
           report.purged.map((path) => "  " + path).join("\n") +
@@ -341,6 +389,17 @@
         purge(button.dataset.url);
       });
     });
+
+    const oauthError = new URLSearchParams(location.search).get("error");
+    if (oauthError) showError("GitHub sign-in failed: " + oauthError);
+
+    fetch("/purge/auth.json")
+      .then((response) => response.json())
+      .then((data) => {
+        auth = data;
+        renderAuth();
+      })
+      .catch(() => {});
   </script>
 </body>
 

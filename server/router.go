@@ -195,7 +195,17 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 					writeStatus(w, 403, "cache purge is disabled")
 					return
 				}
-				if !purgeLimiter.allow(remoteIP(r)) {
+				// optional GitHub OAuth gate, stacked on top of the proof-of-work
+				limiterKey := "ip:" + remoteIP(r)
+				if purgeOAuthEnabled() {
+					session := purgeSessionFromRequest(r)
+					if session == nil {
+						writeJSON(w, 401, map[string]any{"code": 401, "message": "GitHub login required", "login": "/purge/login"})
+						return
+					}
+					limiterKey = "user:" + session.Login
+				}
+				if !purgeLimiter.allow(limiterKey) {
 					writeJSONError(w, 429, "too many purge requests, please try again later")
 					return
 				}
@@ -495,6 +505,27 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 			}
 			header.Set("Cache-Control", "no-store")
 			writeJSON(w, 200, challenge)
+			return
+
+		case "/purge/auth.json":
+			login := ""
+			if session := purgeSessionFromRequest(r); session != nil {
+				login = session.Login
+			}
+			header.Set("Cache-Control", "no-store")
+			writeJSON(w, 200, map[string]any{"github": purgeOAuthEnabled(), "login": login})
+			return
+
+		case "/purge/login":
+			purgeOAuthLogin(w, r)
+			return
+
+		case "/purge/callback":
+			purgeOAuthCallback(w, r, logger)
+			return
+
+		case "/purge/logout":
+			purgeOAuthLogout(w, r)
 			return
 		}
 
