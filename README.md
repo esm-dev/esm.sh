@@ -10,6 +10,39 @@
 
 A _no-build_ JavaScript CDN for modern web development.
 
+## Purge Cache
+
+esm.sh builds and caches every module so it can be served instantly and immutably. After you publish a new
+version (or republish an existing one), the [**Cache Purge** page](https://esm.sh/purge) lets you drop the
+cached artifacts — built modules, type declarations, the local npm store and the resolution cache — so the
+next request rebuilds the package from scratch. Use it like [jsDelivr's purge tool](https://www.jsdelivr.com/tools/purge):
+
+```bash
+# 1. fetch a proof-of-work challenge
+challenge=$(curl -s https://esm.sh/purge/challenge)
+id=$(echo "$challenge" | jq -r .id)
+salt=$(echo "$challenge" | jq -r .salt)
+difficulty=$(echo "$challenge" | jq -r .difficulty)
+
+# 2. solve it (SHA-256 prefix proof-of-work, takes a moment)
+nonce=0
+prefix=$(printf '0%.0s' $(seq 1 "$difficulty"))
+while ! [[ "$(printf '%s%s' "$salt" "$nonce" | sha256sum)" == "$prefix"* ]]; do
+  nonce=$((nonce + 1))
+done
+
+# 3. purge
+curl -X POST https://esm.sh/purge \
+  -H "content-type: application/json" \
+  -d "{\"url\": \"https://esm.sh/@scope/pkg@1.0.1\", \"challenge\": \"$id\", \"nonce\": \"$nonce\"}"
+```
+
+You can pass a full URL or a bare specifier (`pkg`, `pkg@version`, `@scope/pkg`, `gh/user/repo@ref`), and the
+JSON response lists everything that was purged plus a URL to trigger the rebuild. The default (bare-name) URL
+follows the new version immediately after a purge, no need to wait out the npm query cache TTL. Every purge
+requires solving a proof-of-work challenge (the page solves it automatically in the browser), so mass
+purge-and-rebuild attacks are not free.
+
 ## How to Use
 
 esm.sh allows you to import [JavaScript modules](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Modules) from http URLs, **no installation/build steps needed.**

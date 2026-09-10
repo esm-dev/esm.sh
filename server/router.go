@@ -190,6 +190,51 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 				writeJSON(w, 200, output)
 				return
 
+			case "/purge":
+				if !config.PurgeCache {
+					writeStatus(w, 403, "cache purge is disabled")
+					return
+				}
+				if !purgeLimiter.allow(remoteIP(r)) {
+					writeJSONError(w, 429, "too many purge requests, please try again later")
+					return
+				}
+				var req purgeRequest
+				err := json.NewDecoder(io.LimitReader(r.Body, MB)).Decode(&req)
+				r.Body.Close()
+				if err != nil {
+					writeJSONError(w, 400, "require valid json body")
+					return
+				}
+				if !powVerify(req.Challenge, req.Nonce) {
+					writeJSONError(w, 400, "invalid or expired proof-of-work challenge")
+					return
+				}
+				pathname, err := parsePurgeInput(req.URL)
+				if err != nil {
+					writeJSONError(w, 400, err.Error())
+					return
+				}
+				// refresh the cached resolution first when the request did not pin
+				// an exact version, so a stale "latest" cannot survive the purge
+				if pkgName, refresh := purgeRefreshDistTag(pathname); refresh {
+					deleteCacheItem("npm:" + pkgName + "@latest")
+					deleteCacheItem("404:" + pkgName + "@latest")
+				}
+				esmPath, _, _, _, _, err := parseEsmPath(npmrc, pathname)
+				if err != nil {
+					writeJSONError(w, 400, err.Error())
+					return
+				}
+				resp, err := purgePackageCache(npmrc, metaDB, esmStorage, logger, esmPath, getOrigin(r))
+				if err != nil {
+					writeJSONError(w, 500, "failed to purge cache: "+err.Error())
+					return
+				}
+				header.Set("Cache-Control", ccMustRevalidate)
+				writeJSON(w, 200, resp)
+				return
+
 			default:
 				writeStatus(w, 404, "not found")
 				return
@@ -434,6 +479,28 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 			header.Set("Content-Type", "text/plain; charset=utf-8")
 			header.Set("Cache-Control", ccMustRevalidate)
 			writeBody(w, data)
+			return
+
+		case "/purge":
+			data, err := embedFS.ReadFile("embed/purge.html")
+			if err != nil {
+				header.Set("Cache-Control", ccImmutable)
+				writeStatus(w, 404, "not found")
+				return
+			}
+			header.Set("Content-Type", ctHTML)
+			header.Set("Cache-Control", ccMustRevalidate)
+			writeBody(w, data)
+			return
+
+		case "/purge/challenge":
+			challenge, err := newPowChallenge()
+			if err != nil {
+				writeStatus(w, 500, err.Error())
+				return
+			}
+			header.Set("Cache-Control", "no-store")
+			writeJSON(w, 200, challenge)
 			return
 		}
 

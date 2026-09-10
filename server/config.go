@@ -47,6 +47,7 @@ type Config struct {
 	NpmPassword         string                       `json:"npmPassword"`
 	NpmScopedRegistries map[string]NpmRegistryConfig `json:"npmScopedRegistries"`
 	NpmQueryCacheTTL    uint32                       `json:"npmQueryCacheTTL"`
+	PurgeCache          bool                         `json:"purgeCache"`
 	MinifyRaw           json.RawMessage              `json:"minify"`
 	SourceMapRaw        json.RawMessage              `json:"sourceMap"`
 	CompressRaw         json.RawMessage              `json:"compress"`
@@ -262,6 +263,9 @@ func normalizeConfig(config *Config) {
 				config.NpmQueryCacheTTL = uint32(i)
 			}
 		}
+	}
+	if !config.PurgeCache {
+		config.PurgeCache = os.Getenv("PURGE_CACHE") != "false"
 	}
 	config.Compress = !(bytes.Equal(config.CompressRaw, []byte("false")) || os.Getenv("COMPRESS") == "false")
 	config.SourceMap = !(bytes.Equal(config.SourceMapRaw, []byte("false")) || (os.Getenv("SOURCEMAP") == "false" || os.Getenv("SOURCE_MAP") == "false"))
