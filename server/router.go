@@ -188,6 +188,55 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 				writeJSON(w, 200, output)
 				return
 
+			case "/purge":
+				if !config.PurgeCache {
+					writeStatus(w, 403, "cache purge is disabled")
+					return
+				}
+				// optional GitHub OAuth gate, stacked on top of the proof-of-work
+				limiterKey := "ip:" + remoteIP(r)
+				if purgeOAuthEnabled() {
+					session := purgeSessionFromRequest(r)
+					if session == nil {
+						writeJSON(w, 401, map[string]any{"code": 401, "message": "GitHub login required", "login": "/purge/login"})
+						return
+					}
+					limiterKey = "user:" + session.Login
+				}
+				if !purgeRateAllowed(limiterKey) {
+					writeJSONError(w, 429, "too many purge requests, please try again later")
+					return
+				}
+				var req purgeRequest
+				err := json.NewDecoder(io.LimitReader(r.Body, MB)).Decode(&req)
+				r.Body.Close()
+				if err != nil {
+					writeJSONError(w, 400, "require valid json body")
+					return
+				}
+				if !powVerify("purge", req.Challenge, req.Nonce) {
+					writeJSONError(w, 400, "invalid or expired proof-of-work challenge")
+					return
+				}
+				pathname, err := parsePurgeInput(req.URL)
+				if err != nil {
+					writeJSONError(w, 400, err.Error())
+					return
+				}
+				esmPath, _, exactVersion, _, _, err := parseEsmPath(npmrc, pathname)
+				if err != nil {
+					writeJSONError(w, 400, err.Error())
+					return
+				}
+				resp, err := purgePackageCache(npmrc, metaDB, esmStorage, logger, esmPath, exactVersion, getOrigin(r), pathname)
+				if err != nil {
+					writeJSONError(w, 500, "failed to purge cache: "+err.Error())
+					return
+				}
+				header.Set("Cache-Control", ccMustRevalidate)
+				writeJSON(w, 200, resp)
+				return
+
 			default:
 				writeStatus(w, 404, "not found")
 				return
@@ -432,6 +481,53 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 			header.Set("Content-Type", "text/plain; charset=utf-8")
 			header.Set("Cache-Control", ccMustRevalidate)
 			writeBody(w, data)
+			return
+
+		case "/purge":
+			data, err := embedFS.ReadFile("embed/purge.html")
+			if err != nil {
+				header.Set("Cache-Control", ccImmutable)
+				writeStatus(w, 404, "not found")
+				return
+			}
+			header.Set("Content-Type", ctHTML)
+			header.Set("Cache-Control", ccMustRevalidate)
+			writeBody(w, data)
+			return
+
+		case "/pow/challenge":
+			challenge, err := newPowChallenge(r.URL.Query().Get("scope"))
+			if err != nil {
+				if errors.Is(err, errUnknownPowScope) {
+					writeStatus(w, 400, err.Error())
+				} else {
+					writeStatus(w, 500, err.Error())
+				}
+				return
+			}
+			header.Set("Cache-Control", "no-store")
+			writeJSON(w, 200, challenge)
+			return
+
+		case "/purge/auth.json":
+			login := ""
+			if session := purgeSessionFromRequest(r); session != nil {
+				login = session.Login
+			}
+			header.Set("Cache-Control", "no-store")
+			writeJSON(w, 200, map[string]any{"github": purgeOAuthEnabled(), "login": login})
+			return
+
+		case "/purge/login":
+			purgeOAuthLogin(w, r)
+			return
+
+		case "/purge/callback":
+			purgeOAuthCallback(w, r, logger)
+			return
+
+		case "/purge/logout":
+			purgeOAuthLogout(w, r)
 			return
 		}
 
