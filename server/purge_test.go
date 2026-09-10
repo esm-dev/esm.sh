@@ -117,9 +117,9 @@ func newTestNpmRC() *NpmRC {
 	return &NpmRC{globalRegistry: &NpmRegistry{NpmRegistryConfig: NpmRegistryConfig{Registry: testNpmRegistry}}}
 }
 
-func TestPurgePackageCache(t *testing.T) {
-	wd := t.TempDir()
-	fs, err := storage.NewFSStorage(filepath.Join(wd, "storage"))
+func newPurgeTestEnv(t *testing.T) (storage.Storage, *BuildMetaDB, *log.Logger) {
+	t.Helper()
+	fs, err := storage.NewFSStorage(filepath.Join(t.TempDir(), "storage"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,8 +128,11 @@ func TestPurgePackageCache(t *testing.T) {
 		t.Fatal(err)
 	}
 	logger.SetOutput(io.Discard)
+	return fs, NewBuildMetaDB(fs), logger
+}
 
-	metaDB := NewBuildMetaDB(fs)
+func TestPurgePackageCache(t *testing.T) {
+	fs, metaDB, logger := newPurgeTestEnv(t)
 	esm := EsmPath{PkgName: "example", PkgVersion: "1.0.0"}
 
 	// seed build outputs, types, metadata, resolution caches and the local store
@@ -165,7 +168,7 @@ func TestPurgePackageCache(t *testing.T) {
 	setCacheItem("npm:example-extra@1.0.0", &npm.PackageJSON{Version: "1.0.0"}, time.Minute)
 
 	oldWorkDir := config.WorkDir
-	config.WorkDir = filepath.Join(wd, "esmd")
+	config.WorkDir = filepath.Join(t.TempDir(), "esmd")
 	defer func() { config.WorkDir = oldWorkDir }()
 	installDir := filepath.Join(config.WorkDir, "npm", esm.PackageId())
 	if err := os.MkdirAll(filepath.Join(installDir, "node_modules", esm.PkgName), 0755); err != nil {
@@ -237,18 +240,7 @@ func TestPurgePackageCache(t *testing.T) {
 }
 
 func TestPurgePackageCacheScoped(t *testing.T) {
-	wd := t.TempDir()
-	fs, err := storage.NewFSStorage(filepath.Join(wd, "storage"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	logger, err := log.New("")
-	if err != nil {
-		t.Fatal(err)
-	}
-	logger.SetOutput(io.Discard)
-
-	metaDB := NewBuildMetaDB(fs)
+	fs, metaDB, logger := newPurgeTestEnv(t)
 	esm := EsmPath{PkgName: "@scope/pkg", PkgVersion: "1.0.0"}
 	setCacheItem("npm:@scope/pkg@latest", &npm.PackageJSON{Version: "1.0.0"}, time.Minute)
 	// the external-all build of a scoped package is stored under `@scope/ea/...`,
@@ -302,18 +294,7 @@ func TestPurgePackageCacheScoped(t *testing.T) {
 }
 
 func TestPurgeFloatingSpecifier(t *testing.T) {
-	wd := t.TempDir()
-	fs, err := storage.NewFSStorage(filepath.Join(wd, "storage"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	logger, err := log.New("")
-	if err != nil {
-		t.Fatal(err)
-	}
-	logger.SetOutput(io.Discard)
-
-	metaDB := NewBuildMetaDB(fs)
+	fs, metaDB, logger := newPurgeTestEnv(t)
 	// `@main` is resolved to its commit before the purge runs, but a floating
 	// specifier only refreshes the resolution and keeps the existing build.
 	esm := EsmPath{PkgName: "user/repo", PkgVersion: "abc1234", GhPrefix: true}
@@ -360,6 +341,19 @@ func TestPurgeFloatingSpecifier(t *testing.T) {
 	}
 }
 
+func enablePurgeOAuth(t *testing.T) {
+	t.Helper()
+	oldEnabled := config.PurgeCache
+	oldID, oldSecret := config.GithubClientID, config.GithubClientSecret
+	config.PurgeCache = true
+	config.GithubClientID = "client-id"
+	config.GithubClientSecret = "client-secret"
+	t.Cleanup(func() {
+		config.PurgeCache = oldEnabled
+		config.GithubClientID, config.GithubClientSecret = oldID, oldSecret
+	})
+}
+
 func TestPurgeSession(t *testing.T) {
 	oldSecret := config.GithubClientSecret
 	config.GithubClientSecret = "test-secret"
@@ -371,8 +365,10 @@ func TestPurgeSession(t *testing.T) {
 		t.Fatalf("expected a valid session, got %+v", got)
 	}
 
-	// a tampered payload must be rejected
-	if parsePurgeSession(value[:len(value)-1]+"0") != nil {
+	// a tampered signature must be rejected
+	tampered := []byte(value)
+	tampered[len(tampered)-1] ^= 1
+	if parsePurgeSession(string(tampered)) != nil {
 		t.Fatal("expected a tampered session to be rejected")
 	}
 	// an expired session must be rejected
@@ -388,14 +384,10 @@ func TestPurgeSession(t *testing.T) {
 }
 
 func TestPurgeOAuthLoginRedirect(t *testing.T) {
-	oldID, oldSecret, oldOAuthOrigin := config.GithubClientID, config.GithubClientSecret, config.CdnOrigin
-	config.PurgeCache = true
-	config.GithubClientID = "client-id"
-	config.GithubClientSecret = "client-secret"
+	enablePurgeOAuth(t)
+	oldOrigin := config.CdnOrigin
 	config.CdnOrigin = "https://esm.sh"
-	defer func() {
-		config.GithubClientID, config.GithubClientSecret, config.CdnOrigin = oldID, oldSecret, oldOAuthOrigin
-	}()
+	defer func() { config.CdnOrigin = oldOrigin }()
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "https://esm.sh/purge/login", nil)
@@ -422,15 +414,13 @@ func TestPurgeOAuthLoginRedirect(t *testing.T) {
 }
 
 func TestPurgeOAuthCallback(t *testing.T) {
-	oldID, oldSecret, oldOrigin := config.GithubClientID, config.GithubClientSecret, config.CdnOrigin
+	enablePurgeOAuth(t)
+	oldOrigin := config.CdnOrigin
 	oldTokenURL, oldUserURL := githubOAuthTokenURL, githubUserAPIURL
 	defer func() {
-		config.GithubClientID, config.GithubClientSecret, config.CdnOrigin = oldID, oldSecret, oldOrigin
+		config.CdnOrigin = oldOrigin
 		githubOAuthTokenURL, githubUserAPIURL = oldTokenURL, oldUserURL
 	}()
-	config.PurgeCache = true
-	config.GithubClientID = "client-id"
-	config.GithubClientSecret = "client-secret"
 	config.CdnOrigin = "https://esm.sh"
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -479,11 +469,7 @@ func TestPurgeOAuthCallback(t *testing.T) {
 }
 
 func TestPurgeOAuthCallbackRejectsBadState(t *testing.T) {
-	oldID, oldSecret := config.GithubClientID, config.GithubClientSecret
-	config.PurgeCache = true
-	config.GithubClientID = "client-id"
-	config.GithubClientSecret = "client-secret"
-	defer func() { config.GithubClientID, config.GithubClientSecret = oldID, oldSecret }()
+	enablePurgeOAuth(t)
 
 	logger, err := log.New("")
 	if err != nil {

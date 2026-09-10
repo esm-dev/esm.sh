@@ -113,11 +113,11 @@ func purgePackageCache(npmrc *NpmRC, metaDB *BuildMetaDB, esmStorage storage.Sto
 	// the plain id, so purge that namespace too.
 	externalAllId := normalizeSavePath("*" + pkgId)
 	buildPathOf := func(key string) string {
-		pathname := strings.TrimPrefix(key, "modules/")
-		if after, ok := strings.CutPrefix(pathname, externalAllId+"/"); ok {
+		savePath := strings.TrimPrefix(key, "modules/")
+		if after, ok := strings.CutPrefix(savePath, externalAllId+"/"); ok {
 			return "/*" + pkgId + "/" + after
 		}
-		return "/" + pathname
+		return "/" + savePath
 	}
 	for _, dir := range []string{"modules/", "types/"} {
 		for _, id := range []string{pkgId, externalAllId} {
@@ -168,8 +168,8 @@ func purgePackageCache(npmrc *NpmRC, metaDB *BuildMetaDB, esmStorage storage.Sto
 // window lives in the shared TTL cache, so idle clients are garbage collected.
 func purgeRateAllowed(key string) bool {
 	const (
-		window = time.Minute
-		max    = 5
+		window    = time.Minute
+		rateLimit = 5
 	)
 	key = "purge-rate:" + key
 	unlock := cacheMutex.Lock(key)
@@ -180,7 +180,7 @@ func purgeRateAllowed(key string) bool {
 		times = v.([]int64)
 	}
 	times = slices.DeleteFunc(times, func(when int64) bool { return now-when > window.Milliseconds() })
-	if len(times) >= max {
+	if len(times) >= rateLimit {
 		setCacheItem(key, times, window)
 		return false
 	}
