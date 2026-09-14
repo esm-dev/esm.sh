@@ -6,6 +6,9 @@ import (
 	"encoding/hex"
 	"errors"
 	"io"
+	"os"
+	"path"
+	"strings"
 
 	"github.com/esm-dev/esm.sh/internal/storage"
 	lru "github.com/hashicorp/golang-lru/v2"
@@ -115,40 +118,85 @@ func NewBuildMetaDB(backStorage storage.Storage) *BuildMetaDB {
 }
 
 func (db *BuildMetaDB) Get(key string) (value []byte, err error) {
+	storeKey := normalizeMetaStoreKey(key)
+	unlock := cacheMutex.Lock(metaStoreLockKey(storeKey))
+	defer unlock()
 	var cached bool
 	value, cached = db.cache.Get(key)
 	if cached {
 		return
 	}
-	r, _, err := db.storage.Get(normalizeMetaStoreKey(key))
+	r, _, err := db.storage.Get(storeKey)
+	legacy := false
+	legacyKey := "meta/" + path.Base(storeKey)
+	if err == storage.ErrNotFound && storeKey != legacyKey {
+		r, _, err = db.storage.Get(legacyKey)
+		if err == nil {
+			// Reuse old metadata until this package has been purged.
+			_, markerErr := db.storage.Stat("meta-purged/" + strings.TrimPrefix(path.Dir(storeKey), "meta/"))
+			if markerErr != storage.ErrNotFound {
+				r.Close()
+				if markerErr != nil {
+					return nil, markerErr
+				}
+				return nil, storage.ErrNotFound
+			}
+			legacy = true
+		}
+	}
 	if err != nil {
 		return
 	}
 	defer r.Close()
 	value, err = io.ReadAll(r)
+	if err == nil && legacy {
+		err = db.storage.Put(storeKey, bytes.NewReader(value))
+	}
 	if err == nil {
 		db.cache.Add(key, value)
 	}
 	return
 }
 
-func (storage *BuildMetaDB) Put(key string, value []byte) (err error) {
-	err = storage.storage.Put(normalizeMetaStoreKey(key), bytes.NewReader(value))
+func (db *BuildMetaDB) Put(key string, value []byte) (err error) {
+	storeKey := normalizeMetaStoreKey(key)
+	unlock := cacheMutex.Lock(metaStoreLockKey(storeKey))
+	defer unlock()
+	err = db.storage.Put(storeKey, bytes.NewReader(value))
 	if err == nil {
-		storage.cache.Add(key, value)
+		db.cache.Add(key, value)
 	}
 	return
 }
 
-func (storage *BuildMetaDB) Delete(key string) (err error) {
-	err = storage.storage.Delete(normalizeMetaStoreKey(key))
-	if err == nil {
-		storage.cache.Remove(key)
+func (db *BuildMetaDB) Delete(key string) (err error) {
+	storeKey := normalizeMetaStoreKey(key)
+	unlock := cacheMutex.Lock(metaStoreLockKey(storeKey))
+	defer unlock()
+	for _, name := range []string{storeKey, "meta/" + path.Base(storeKey)} {
+		if deleteErr := db.storage.Delete(name); deleteErr != nil && deleteErr != storage.ErrNotFound && !errors.Is(deleteErr, os.ErrNotExist) {
+			err = errors.Join(err, deleteErr)
+		}
 	}
+	db.cache.Remove(key)
 	return
 }
 
 func normalizeMetaStoreKey(key string) string {
 	data := sha256.Sum256([]byte(key))
+	prefix := "meta/"
+	for segment := range strings.SplitSeq(strings.TrimPrefix(strings.TrimPrefix(key, "/"), "*"), "/") {
+		prefix += segment + "/"
+		if strings.Contains(strings.TrimPrefix(segment, "@"), "@") {
+			return prefix + hex.EncodeToString(data[:])
+		}
+	}
 	return "meta/" + hex.EncodeToString(data[:])
+}
+
+func metaStoreLockKey(key string) string {
+	if prefix := path.Dir(key); prefix != "meta" {
+		return prefix
+	}
+	return key
 }

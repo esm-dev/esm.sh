@@ -84,7 +84,15 @@ func TestPowChallenge(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected a challenge to be minted: %v", err)
 	}
-	if powVerify("purge", unsolved.ID, "0") {
+	nonce = "0"
+	for {
+		sum := sha256.Sum256([]byte(unsolved.Salt + nonce))
+		if !strings.HasPrefix(hex.EncodeToString(sum[:]), strings.Repeat("0", unsolved.Difficulty)) {
+			break
+		}
+		nonce += "0"
+	}
+	if powVerify("purge", unsolved.ID, nonce) {
 		t.Fatal("expected an invalid nonce to be rejected")
 	}
 
@@ -268,8 +276,8 @@ func TestPurgePackageCacheScoped(t *testing.T) {
 	for _, key := range []string{
 		"modules/@scope/pkg@1.0.0/es2022/pkg.mjs",
 		"modules/@scope/ea/pkg@1.0.0/es2022/pkg.mjs",
-		"meta:" + buildPath,
-		"meta:" + externalAllBuildPath,
+		normalizeMetaStoreKey(buildPath),
+		normalizeMetaStoreKey(externalAllBuildPath),
 	} {
 		if !slices.Contains(resp.Purged, key) {
 			t.Fatalf("expected %s in purged list, got: %v", key, resp.Purged)
@@ -343,21 +351,15 @@ func TestPurgeFloatingSpecifier(t *testing.T) {
 
 func enablePurgeOAuth(t *testing.T) {
 	t.Helper()
-	oldEnabled := config.PurgeCache
-	oldID, oldSecret := config.GithubClientID, config.GithubClientSecret
-	config.PurgeCache = true
-	config.GithubClientID = "client-id"
-	config.GithubClientSecret = "client-secret"
-	t.Cleanup(func() {
-		config.PurgeCache = oldEnabled
-		config.GithubClientID, config.GithubClientSecret = oldID, oldSecret
-	})
+	previous := config.PurgeAPI
+	config.PurgeAPI = PurgeAPIConfig{Enable: true, GithubClientID: "client-id", GithubClientSecret: "client-secret"}
+	t.Cleanup(func() { config.PurgeAPI = previous })
 }
 
 func TestPurgeSession(t *testing.T) {
-	oldSecret := config.GithubClientSecret
-	config.GithubClientSecret = "test-secret"
-	defer func() { config.GithubClientSecret = oldSecret }()
+	oldSecret := config.PurgeAPI.GithubClientSecret
+	config.PurgeAPI.GithubClientSecret = "test-secret"
+	defer func() { config.PurgeAPI.GithubClientSecret = oldSecret }()
 
 	session := &purgeSession{Login: "octocat", ExpiresAt: time.Now().Add(time.Hour).Unix()}
 	value := signPurgeSession(session)
@@ -377,7 +379,7 @@ func TestPurgeSession(t *testing.T) {
 		t.Fatal("expected an expired session to be rejected")
 	}
 	// a session signed with another secret must be rejected
-	config.GithubClientSecret = "other-secret"
+	config.PurgeAPI.GithubClientSecret = "other-secret"
 	if parsePurgeSession(value) != nil {
 		t.Fatal("expected a session signed with another secret to be rejected")
 	}
@@ -486,75 +488,131 @@ func TestPurgeOAuthCallbackRejectsBadState(t *testing.T) {
 	}
 }
 
-func TestCdnPurgeURLs(t *testing.T) {
-	urls := cdnPurgeURLs("https://esm.sh", "example@1.0.0", []string{
-		"modules/example@1.0.0/es2022/example.mjs",
-		"modules/example@1.0.0/es2022/example.mjs",
-		"modules/example@1.0.0/X-abc/es2022/example.mjs",
-		"modules/x-0123456789abcdef0123456789abcdef01234567/es2022/example.mjs",
-		"modules/*example@1.0.0/ea/example.mjs",
-		"modules/transform/deadbeef.mjs",
-		"types/example@1.0.0/index.d.ts",
-		"install:/tmp/example@1.0.0",
-		"meta:/example@1.0.0/es2022/example.mjs",
-	})
-	want := []string{
-		"https://esm.sh/example@1.0.0",
-		"https://esm.sh/example@1.0.0/es2022/example.mjs",
-		"https://esm.sh/example@1.0.0/index.d.ts",
-	}
-	if !slices.Equal(urls, want) {
-		t.Fatalf("cdnPurgeURLs = %v, want %v", urls, want)
-	}
-}
-
 func TestCloudflarePurge(t *testing.T) {
-	oldZone, oldToken, oldBase := config.CloudflareZoneID, config.CloudflareAPIToken, cloudflareAPIBaseURL
+	oldZone, oldToken, oldBase := config.PurgeAPI.CloudflareZoneID, config.PurgeAPI.CloudflareAPIToken, cloudflareAPIBaseURL
+	oldWorkDir := config.WorkDir
 	defer func() {
-		config.CloudflareZoneID, config.CloudflareAPIToken, cloudflareAPIBaseURL = oldZone, oldToken, oldBase
+		config.PurgeAPI.CloudflareZoneID, config.PurgeAPI.CloudflareAPIToken, cloudflareAPIBaseURL = oldZone, oldToken, oldBase
+		config.WorkDir = oldWorkDir
 	}()
-	config.CloudflareZoneID = "zone"
-	config.CloudflareAPIToken = "token"
+	config.PurgeAPI.CloudflareZoneID = "zone"
+	config.PurgeAPI.CloudflareAPIToken = "token"
+	config.WorkDir = t.TempDir()
 
-	var batches [][]string
+	var requests []map[string][]string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/client/v4/zones/zone/purge_cache" {
-			w.WriteHeader(http.StatusNotFound)
-			return
+		if r.Method != http.MethodPost || r.URL.Path != "/client/v4/zones/zone/purge_cache" {
+			t.Errorf("unexpected cloudflare request: %s %s", r.Method, r.URL.Path)
 		}
-		if r.Header.Get("Authorization") != "Bearer token" {
-			w.WriteHeader(http.StatusUnauthorized)
-			return
+		if r.Header.Get("Authorization") != "Bearer token" || r.Header.Get("Content-Type") != "application/json" {
+			t.Error("unexpected cloudflare request headers")
 		}
-		var body struct {
-			Files []string `json:"files"`
-		}
+		var body map[string][]string
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Error(err)
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		batches = append(batches, body.Files)
+		requests = append(requests, body)
+		if len(requests)%2 == 1 {
+			w.WriteHeader(http.StatusTooManyRequests)
+			w.Write([]byte(`{"success":false}`))
+			return
+		}
 		w.Write([]byte(`{"success":true}`))
 	}))
 	defer server.Close()
 	cloudflareAPIBaseURL = server.URL
 
-	logger, err := log.New("")
-	if err != nil {
-		t.Fatal(err)
+	for _, test := range []struct {
+		esm    EsmPath
+		origin string
+		want   []string
+	}{
+		{EsmPath{PkgName: "example", PkgVersion: "1.0.0"}, "https://esm.sh", []string{"esm.sh/example@1.0.0", "esm.sh/*example@1.0.0"}},
+		{EsmPath{PkgName: "x-example", PkgVersion: "1.0.0"}, "http://cdn.example.com", []string{"cdn.example.com/x-example@1.0.0", "cdn.example.com/*x-example@1.0.0"}},
+		{EsmPath{PkgName: "@scope/pkg", PkgVersion: "1.0.0"}, "https://esm.sh", []string{"esm.sh/@scope/pkg@1.0.0", "esm.sh/*@scope/pkg@1.0.0"}},
+		{EsmPath{PkgName: "user/repo", PkgVersion: "abc1234", GhPrefix: true}, "https://esm.sh", []string{"esm.sh/gh/user/repo@abc1234", "esm.sh/*gh/user/repo@abc1234"}},
+		{EsmPath{PkgName: "@scope/pkg", PkgVersion: "abc1234", PrPrefix: true}, "https://esm.sh", []string{"esm.sh/pr/@scope/pkg@abc1234", "esm.sh/*pr/@scope/pkg@abc1234"}},
+	} {
+		t.Run(test.esm.PackageId(), func(t *testing.T) {
+			requests = nil
+			fs, metaDB, logger := newPurgeTestEnv(t)
+			pkgId := test.esm.PackageId()
+			for _, key := range []string{
+				"modules/" + pkgId + "/es2022/pkg.mjs",
+				"modules/" + pkgId + "/X-abc/es2022/pkg.mjs",
+				"modules/" + pkgId + "/X-" + strings.Repeat("a", 50) + "/es2022/pkg.mjs",
+				"modules/*" + pkgId + "/es2022/pkg.mjs",
+				"types/" + pkgId + "/index.d.ts",
+			} {
+				if err := fs.Put(normalizeSavePath(key), strings.NewReader("x")); err != nil {
+					t.Fatal(err)
+				}
+			}
+			for attempt := 0; attempt < 2; attempt++ {
+				resp, err := purgePackageCache(newTestNpmRC(), metaDB, fs, logger, test.esm, true, test.origin, "/"+pkgId)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if (len(resp.Purged) == 0) != (attempt == 1) {
+					t.Fatalf("unexpected artifacts on purge attempt %d: %v", attempt, resp.Purged)
+				}
+			}
+			if len(requests) != 2 {
+				t.Fatalf("expected both the initial purge and retry, got %d requests", len(requests))
+			}
+			for _, body := range requests {
+				if len(body) != 1 || !slices.Equal(body["prefixes"], test.want) {
+					t.Errorf("cloudflare purge body = %v, want prefixes %v", body, test.want)
+				}
+			}
+		})
 	}
-	logger.SetOutput(io.Discard)
+}
 
-	var urls []string
-	for i := 0; i < 31; i++ {
-		urls = append(urls, "https://esm.sh/pkg@"+strconv.Itoa(i))
-	}
-	purgeCloudflareCache(logger, urls)
-	if len(batches) != 2 || len(batches[0]) != cloudflarePurgeBatchSize || len(batches[1]) != 1 {
-		t.Fatalf("unexpected cloudflare batches: %v", batches)
-	}
-	if batches[0][0] != "https://esm.sh/pkg@0" || batches[1][0] != "https://esm.sh/pkg@30" {
-		t.Fatalf("unexpected cloudflare urls: %v", batches)
+func TestCloudflarePurgeResponse(t *testing.T) {
+	oldZone, oldToken, oldBase := config.PurgeAPI.CloudflareZoneID, config.PurgeAPI.CloudflareAPIToken, cloudflareAPIBaseURL
+	defer func() {
+		config.PurgeAPI.CloudflareZoneID, config.PurgeAPI.CloudflareAPIToken, cloudflareAPIBaseURL = oldZone, oldToken, oldBase
+	}()
+	config.PurgeAPI.CloudflareZoneID = "zone"
+	config.PurgeAPI.CloudflareAPIToken = "token"
+
+	for _, test := range []struct {
+		name    string
+		status  int
+		body    string
+		success bool
+	}{
+		{"success", 200, `{"success":true}`, true},
+		{"api error", 200, `{"success":false,"errors":[{"message":"purge failed"}]}`, false},
+		{"rate limited", 429, `{"success":false}`, false},
+		{"http error", 500, `{"success":true}`, false},
+		{"invalid json", 200, `<html>upstream error</html>`, false},
+		{"missing success", 200, `{}`, false},
+		{"empty body", 204, "", false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(test.status)
+				w.Write([]byte(test.body))
+			}))
+			defer server.Close()
+			cloudflareAPIBaseURL = server.URL
+
+			logger, err := log.New("")
+			if err != nil {
+				t.Fatal(err)
+			}
+			var output strings.Builder
+			logger.SetOutput(&output)
+			logger.SetLevelByName("debug")
+			purgeCloudflareCache(logger, "https://esm.sh", "example@1.0.0")
+			if !strings.Contains(output.String(), "cloudflare purge:") || strings.Contains(output.String(), "evicted") != test.success {
+				t.Fatalf("unexpected cloudflare purge log: %s", output.String())
+			}
+		})
 	}
 }
 
