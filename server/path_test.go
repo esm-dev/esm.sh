@@ -7,11 +7,29 @@ import (
 )
 
 func TestParsePrPackagePath(t *testing.T) {
-	for _, name := range []string{"pkg", "@scope/pkg", "owner/repo/pkg", "owner/repo/@scope/pkg"} {
+	for _, name := range []string{"pkg", "@scope/pkg", "sveltejs/svelte", "owner/repo/pkg", "owner/repo/@scope/pkg"} {
+		key := "pr/" + name + "@main"
+		setCacheItem(key, "abc1234", time.Minute)
+		t.Cleanup(func() { deleteCacheItem(key) })
 		for _, prefix := range []string{"/pr/", "/pkg.pr.new/"} {
-			esm, _, exact, _, _, err := parseEsmPath(nil, prefix+name+"@abc1234/es2022/pkg.mjs")
-			if err != nil || !exact || !esm.PrPrefix || esm.PkgName != name || esm.PkgVersion != "abc1234" {
-				t.Fatalf("parse %s%s: %+v, exact=%v, err=%v", prefix, name, esm, exact, err)
+			for _, version := range []string{"abc1234", "main"} {
+				t.Run(prefix+name+"@"+version, func(t *testing.T) {
+					esm, _, exact, target, _, err := parseEsmPath(nil, prefix+name+"@"+version+"/es2022/pkg.mjs")
+					if err != nil || exact != (version == "abc1234") || !esm.PrPrefix || esm.PkgName != name || esm.PkgVersion != "abc1234" || esm.SubPath != "pkg" || target != "es2022" {
+						t.Fatalf("parse: %+v, exact=%v, target=%q, err=%v", esm, exact, target, err)
+					}
+				})
+			}
+		}
+	}
+}
+
+func TestParsePrPackagePathInvalid(t *testing.T) {
+	for _, name := range []string{"owner/", "owner/repo/", "owner//pkg", "owner/../pkg", "../repo", "owner/..", "owner/repo/../pkg", "owner/repo/@scope/..", "owner\\repo"} {
+		for _, prefix := range []string{"/pr/", "/pkg.pr.new/"} {
+			pathname := prefix + name + "@abc1234"
+			if _, _, _, _, _, err := parseEsmPath(nil, pathname); err == nil {
+				t.Errorf("accepted invalid path %q", pathname)
 			}
 		}
 	}

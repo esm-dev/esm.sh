@@ -241,14 +241,14 @@ func splitEsmPath(pathname string) (pkgName string, pkgVersion string, subPath s
 	return
 }
 
-// pkg.pr.new accepts a package name or owner/repo/package name.
+// pkg.pr.new accepts a package name, owner/repo, or owner/repo/package name.
 func validatePrPackageName(name string) bool {
 	if npm.ValidatePackageName(name) {
 		return true
 	}
 	owner, rest, _ := strings.Cut(name, "/")
-	repo, pkg, _ := strings.Cut(rest, "/")
-	return npm.ValidatePackageName("@"+owner+"/"+repo) && npm.ValidatePackageName(pkg)
+	repo, pkg, hasPkg := strings.Cut(rest, "/")
+	return npm.ValidatePackageName("@"+owner+"/"+repo) && (!hasPkg || npm.ValidatePackageName(pkg))
 }
 
 func toPackageName(specifier string) string {
