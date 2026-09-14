@@ -10,19 +10,6 @@
 
 A _no-build_ JavaScript CDN for modern web development.
 
-### Self-hosting options
-
-- **`GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET`** — when both are set, `POST /purge` additionally requires a
-  GitHub sign-in (the page then shows a **Sign in with GitHub** button). The proof-of-work challenge is still
-  required, so scripts cannot purge even after the login gate is enabled. Once signed in, the purge rate limit
-  is keyed by GitHub account instead of the client IP.
-- **`CLOUDFLARE_ZONE_ID` / `CLOUDFLARE_API_TOKEN`** — when both are set, an exact-version purge also evicts the
-  affected URLs from the Cloudflare edge cache via the [purge cache API](https://developers.cloudflare.com/cache/how-to/purge-cache/),
-  so clients don't keep serving the stale build until its TTLs expire. Cloudflare's standard plan only purges
-  exact URLs (max 30 per request); paths whose public URL cannot be reconstructed (hashed build-arg segments)
-  are skipped.
-- **`PURGE_CACHE=false`** — disables the whole feature.
-
 ## How to Use
 
 esm.sh allows you to import [JavaScript modules](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Modules) from http URLs, **no installation/build steps needed.**
@@ -369,6 +356,8 @@ out the npm query cache TTL.
 Every purge requires solving a proof-of-work challenge (the page solves it automatically in the browser), so
 mass purge-and-rebuild attacks are not free. The challenge endpoint is generic:
 `GET /pow/challenge?scope=<scope>`, currently the `purge` scope.
+
+For self-hosted servers, see [Cache Purge configuration](./HOSTING.md#cache-purge) for GitHub login, Cloudflare cache purging, and disabling the API.
 
 ## Using `esm.sh/tsx`
 
