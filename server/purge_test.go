@@ -343,21 +343,15 @@ func TestPurgeFloatingSpecifier(t *testing.T) {
 
 func enablePurgeOAuth(t *testing.T) {
 	t.Helper()
-	oldEnabled := config.PurgeCache
-	oldID, oldSecret := config.GithubClientID, config.GithubClientSecret
-	config.PurgeCache = true
-	config.GithubClientID = "client-id"
-	config.GithubClientSecret = "client-secret"
-	t.Cleanup(func() {
-		config.PurgeCache = oldEnabled
-		config.GithubClientID, config.GithubClientSecret = oldID, oldSecret
-	})
+	previous := config.PurgeAPI
+	config.PurgeAPI = PurgeAPIConfig{Enable: true, GithubClientID: "client-id", GithubClientSecret: "client-secret"}
+	t.Cleanup(func() { config.PurgeAPI = previous })
 }
 
 func TestPurgeSession(t *testing.T) {
-	oldSecret := config.GithubClientSecret
-	config.GithubClientSecret = "test-secret"
-	defer func() { config.GithubClientSecret = oldSecret }()
+	oldSecret := config.PurgeAPI.GithubClientSecret
+	config.PurgeAPI.GithubClientSecret = "test-secret"
+	defer func() { config.PurgeAPI.GithubClientSecret = oldSecret }()
 
 	session := &purgeSession{Login: "octocat", ExpiresAt: time.Now().Add(time.Hour).Unix()}
 	value := signPurgeSession(session)
@@ -377,7 +371,7 @@ func TestPurgeSession(t *testing.T) {
 		t.Fatal("expected an expired session to be rejected")
 	}
 	// a session signed with another secret must be rejected
-	config.GithubClientSecret = "other-secret"
+	config.PurgeAPI.GithubClientSecret = "other-secret"
 	if parsePurgeSession(value) != nil {
 		t.Fatal("expected a session signed with another secret to be rejected")
 	}
@@ -509,12 +503,12 @@ func TestCdnPurgeURLs(t *testing.T) {
 }
 
 func TestCloudflarePurge(t *testing.T) {
-	oldZone, oldToken, oldBase := config.CloudflareZoneID, config.CloudflareAPIToken, cloudflareAPIBaseURL
+	oldZone, oldToken, oldBase := config.PurgeAPI.CloudflareZoneID, config.PurgeAPI.CloudflareAPIToken, cloudflareAPIBaseURL
 	defer func() {
-		config.CloudflareZoneID, config.CloudflareAPIToken, cloudflareAPIBaseURL = oldZone, oldToken, oldBase
+		config.PurgeAPI.CloudflareZoneID, config.PurgeAPI.CloudflareAPIToken, cloudflareAPIBaseURL = oldZone, oldToken, oldBase
 	}()
-	config.CloudflareZoneID = "zone"
-	config.CloudflareAPIToken = "token"
+	config.PurgeAPI.CloudflareZoneID = "zone"
+	config.PurgeAPI.CloudflareAPIToken = "token"
 
 	var batches [][]string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

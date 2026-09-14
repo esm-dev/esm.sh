@@ -189,7 +189,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 				return
 
 			case "/purge":
-				if !config.PurgeCache {
+				if !config.PurgeAPI.Enable {
 					writeStatus(w, 403, "cache purge is disabled")
 					return
 				}

@@ -16,11 +16,8 @@ import (
 	"github.com/ije/gox/log"
 )
 
-// `POST /purge` can be gated behind GitHub OAuth instead of the proof-of-work
-// challenge. When `githubClientId`/`githubClientSecret` are configured the
-// caller must first sign in with GitHub; the signed session cookie identifies
-// the purging account (so abuse can be attributed and rate-limited per user).
-// Without those settings the proof-of-work flow stays in charge.
+// `POST /purge` requires GitHub login in addition to proof-of-work when
+// purgeAPI.githubClientId and purgeAPI.githubClientSecret are configured.
 const (
 	purgeSessionCookie    = "purge_session"
 	purgeOAuthStateCookie = "purge_oauth_state"
@@ -44,11 +41,11 @@ type purgeSession struct {
 
 // purgeOAuthEnabled reports whether `POST /purge` is gated by GitHub OAuth.
 func purgeOAuthEnabled() bool {
-	return config.PurgeCache && config.GithubClientID != "" && config.GithubClientSecret != ""
+	return config.PurgeAPI.Enable && config.PurgeAPI.GithubClientID != "" && config.PurgeAPI.GithubClientSecret != ""
 }
 
 func purgeSessionKey() []byte {
-	sum := sha256.Sum256([]byte("esm.sh/purge-session/" + config.GithubClientSecret))
+	sum := sha256.Sum256([]byte("esm.sh/purge-session/" + config.PurgeAPI.GithubClientSecret))
 	return sum[:]
 }
 
@@ -123,7 +120,7 @@ func purgeOAuthLogin(w http.ResponseWriter, r *http.Request) {
 	state := randomHex(16)
 	setPurgeCookie(w, r, purgeOAuthStateCookie, state, int(purgeOAuthStateTTL.Seconds()))
 	query := url.Values{
-		"client_id":    {config.GithubClientID},
+		"client_id":    {config.PurgeAPI.GithubClientID},
 		"redirect_uri": {getOrigin(r) + "/purge/callback"},
 		"scope":        {purgeOAuthScope},
 		"state":        {state},
@@ -190,8 +187,8 @@ func githubRequest(req *http.Request, out any) error {
 // authenticated user's login name.
 func githubUserLogin(code string, redirectURI string) (string, error) {
 	form := url.Values{
-		"client_id":     {config.GithubClientID},
-		"client_secret": {config.GithubClientSecret},
+		"client_id":     {config.PurgeAPI.GithubClientID},
+		"client_secret": {config.PurgeAPI.GithubClientSecret},
 		"code":          {code},
 		"redirect_uri":  {redirectURI},
 	}

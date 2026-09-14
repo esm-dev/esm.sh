@@ -11,7 +11,7 @@ import (
 	"github.com/ije/gox/log"
 )
 
-// When `cloudflareZoneId`/`cloudflareApiToken` are configured a purge also
+// When purgeAPI.cloudflareZoneId and purgeAPI.cloudflareApiToken are configured a purge also
 // drops the matching entries from the Cloudflare edge cache, so clients do not
 // keep serving the stale build until its TTLs expire. Cloudflare purges by
 // exact URL (max 30 per request) on non-Enterprise plans, so the public URLs
@@ -72,16 +72,16 @@ func cdnPathIsPurgeable(pathname string) bool {
 // purgeCloudflareCache asks Cloudflare to evict the given URLs from its edge
 // cache. Failures are logged but never fail the purge itself.
 func purgeCloudflareCache(logger *log.Logger, urls []string) {
-	if config.CloudflareZoneID == "" || config.CloudflareAPIToken == "" || len(urls) == 0 {
+	if config.PurgeAPI.CloudflareZoneID == "" || config.PurgeAPI.CloudflareAPIToken == "" || len(urls) == 0 {
 		return
 	}
-	endpoint := cloudflareAPIBaseURL + "/client/v4/zones/" + config.CloudflareZoneID + "/purge_cache"
+	endpoint := cloudflareAPIBaseURL + "/client/v4/zones/" + config.PurgeAPI.CloudflareZoneID + "/purge_cache"
 	for start := 0; start < len(urls); start += cloudflarePurgeBatchSize {
 		end := min(start+cloudflarePurgeBatchSize, len(urls))
 		body, _ := json.Marshal(map[string][]string{"files": urls[start:end]})
 		req, _ := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Authorization", "Bearer "+config.CloudflareAPIToken)
+		req.Header.Set("Authorization", "Bearer "+config.PurgeAPI.CloudflareAPIToken)
 		res, err := purgeHTTPClient.Do(req)
 		if err != nil {
 			logger.Errorf("cloudflare purge: %v", err)

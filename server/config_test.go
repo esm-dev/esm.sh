@@ -1,8 +1,66 @@
 package server
 
 import (
+	"encoding/json"
 	"testing"
 )
+
+func TestPurgeAPIEnable(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		input   string
+		env     string
+		enabled bool
+	}{
+		{"default", `{}`, "", true},
+		{"empty", `{"purgeAPI":{}}`, "", true},
+		{"enabled", `{"purgeAPI":{"enable":true}}`, "", true},
+		{"disabled", `{"purgeAPI":{"enable":false}}`, "", false},
+		{"env disables default", `{}`, "false", false},
+		{"env disables explicit enable", `{"purgeAPI":{"enable":true}}`, "false", false},
+		{"config stays disabled", `{"purgeAPI":{"enable":false}}`, "true", false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Setenv("PURGE_CACHE", test.env)
+			var c Config
+			if err := json.Unmarshal([]byte(test.input), &c); err != nil {
+				t.Fatal(err)
+			}
+			normalizeConfig(&c)
+			if c.PurgeAPI.Enable != test.enabled {
+				t.Fatalf("PurgeAPI.Enable = %v, want %v", c.PurgeAPI.Enable, test.enabled)
+			}
+		})
+	}
+}
+
+func TestPurgeAPICredentials(t *testing.T) {
+	t.Setenv("PURGE_GITHUB_CLIENT_ID", "env-client")
+	t.Setenv("PURGE_GITHUB_CLIENT_SECRET", "env-secret")
+	t.Setenv("PURGE_CLOUDFLARE_ZONE_ID", "env-zone")
+	t.Setenv("PURGE_CLOUDFLARE_API_TOKEN", "env-token")
+	for _, test := range []struct {
+		name  string
+		input string
+		want  [4]string
+	}{
+		{"env", `{}`, [4]string{"env-client", "env-secret", "env-zone", "env-token"}},
+		{"config", `{"purgeAPI":{"githubClientId":"client","githubClientSecret":"secret","cloudflareZoneId":"zone","cloudflareApiToken":"token"}}`, [4]string{"client", "secret", "zone", "token"}},
+		{"mixed", `{"purgeAPI":{"githubClientId":"client","githubClientSecret":"","cloudflareZoneId":"zone","cloudflareApiToken":""}}`, [4]string{"client", "env-secret", "zone", "env-token"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var c Config
+			if err := json.Unmarshal([]byte(test.input), &c); err != nil {
+				t.Fatal(err)
+			}
+			normalizeConfig(&c)
+			got := [4]string{c.PurgeAPI.GithubClientID, c.PurgeAPI.GithubClientSecret, c.PurgeAPI.CloudflareZoneID, c.PurgeAPI.CloudflareAPIToken}
+			if got != test.want {
+				t.Fatalf("purge credentials = %v, want %v", got, test.want)
+			}
+		})
+	}
+}
 
 func TestNpmQueryCacheTTL(t *testing.T) {
 	for _, test := range []struct {

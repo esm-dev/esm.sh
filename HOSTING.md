@@ -34,19 +34,33 @@ Cache purging is enabled by default. Open `/purge` on your server to refresh a p
 
 Every `POST /purge` requires a single-use proof-of-work challenge from `GET /pow/challenge?scope=purge`, valid for two minutes. The page solves it automatically; scripts can follow the [API example](./README.md#purge-cache) using your server's origin. Requests are limited to five per minute per client IP, or per GitHub account when login is enabled.
 
-Set `purgeCache` to `false` in `config.json` or `PURGE_CACHE=false` to disable purging (`POST /purge` returns 403).
+Configure purging under `purgeAPI` in `config.json`:
+
+```json
+{
+  "purgeAPI": {
+    "enable": true,
+    "githubClientId": "",
+    "githubClientSecret": "",
+    "cloudflareZoneId": "",
+    "cloudflareApiToken": ""
+  }
+}
+```
+
+Set `purgeAPI.enable` to `false` or `PURGE_CACHE=false` to disable purging (`POST /purge` returns 403). Non-empty credentials in `purgeAPI` take precedence over environment variables.
 
 #### GitHub Login
 
 To require login, [create a GitHub OAuth app](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/creating-an-oauth-app) with your server's public origin as its homepage and `https://cdn.example.com/purge/callback` as its authorization callback URL. Replace `cdn.example.com` with your hostname.
 
-Set both `githubClientId` and `githubClientSecret` in `config.json`, or `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET`. Set `cdnOrigin` or `CDN_ORIGIN` to your public origin, such as `https://cdn.example.com`, so OAuth redirects use the correct origin behind a proxy.
+Set both `purgeAPI.githubClientId` and `purgeAPI.githubClientSecret`, or `PURGE_GITHUB_CLIENT_ID` and `PURGE_GITHUB_CLIENT_SECRET`. Set `cdnOrigin` or `CDN_ORIGIN` to your public origin, such as `https://cdn.example.com`, so OAuth redirects use the correct origin behind a proxy.
 
 The purge page then requires GitHub sign-in. Any signed-in GitHub user can purge packages; package ownership is not checked. API clients need the signed session cookie as well as a solved proof-of-work challenge.
 
 #### Cloudflare Cache Purging
 
-Set both `cloudflareZoneId` and `cloudflareApiToken` in `config.json`, or `CLOUDFLARE_ZONE_ID` and `CLOUDFLARE_API_TOKEN`. Use an API token with [Cache Purge permission](https://developers.cloudflare.com/api/resources/cache/methods/purge/) for the target zone, and set `cdnOrigin` or `CDN_ORIGIN` to the public CDN origin.
+Set both `purgeAPI.cloudflareZoneId` and `purgeAPI.cloudflareApiToken`, or `PURGE_CLOUDFLARE_ZONE_ID` and `PURGE_CLOUDFLARE_API_TOKEN`. Use an API token with [Cache Purge permission](https://developers.cloudflare.com/api/resources/cache/methods/purge/) for the target zone, and set `cdnOrigin` or `CDN_ORIGIN` to the public CDN origin.
 
 Exact-version purges also submit the package entry URL and URLs reconstructed from removed artifacts to Cloudflare. Hashed build-argument paths and external-all variants are skipped; other cached URL variants may need separate purging. Floating specifiers only refresh resolution at the origin. Cloudflare request failures are logged without failing the origin purge.
 
@@ -114,10 +128,10 @@ Available environment variables:
 - `NPM_USER`: The access user for the global NPM registry.
 - `NPM_PASSWORD`: The access password for the global NPM registry.
 - `PURGE_CACHE`: Enable cache purging, default is `true`.
-- `GITHUB_CLIENT_ID`: The GitHub OAuth app client ID for [purge login](#github-login).
-- `GITHUB_CLIENT_SECRET`: The GitHub OAuth app client secret. Both GitHub settings are required to enable login.
-- `CLOUDFLARE_ZONE_ID`: The Cloudflare zone ID for [cache purging](#cloudflare-cache-purging).
-- `CLOUDFLARE_API_TOKEN`: The Cloudflare API token with Cache Purge permission. Both Cloudflare settings are required to enable edge purging.
+- `PURGE_GITHUB_CLIENT_ID`: The GitHub OAuth app client ID for [purge login](#github-login).
+- `PURGE_GITHUB_CLIENT_SECRET`: The GitHub OAuth app client secret. Both GitHub settings are required to enable login.
+- `PURGE_CLOUDFLARE_ZONE_ID`: The Cloudflare zone ID for [cache purging](#cloudflare-cache-purging).
+- `PURGE_CLOUDFLARE_API_TOKEN`: The Cloudflare API token with Cache Purge permission. Both Cloudflare settings are required to enable edge purging.
 - `SOURCEMAP`: Generate source map for built JS/CSS files, default is `true`.
 - `STORAGE_TYPE`: The storage type, available values are ["fs", "s3"], default is "fs".
 - `STORAGE_ENDPOINT`: The storage endpoint, default is "~/.esmd/storage".
