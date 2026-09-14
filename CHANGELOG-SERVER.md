@@ -1,5 +1,17 @@
 # Server Changelog
 
+## v138_1
+
+* Add a cache purge page and API with proof-of-work, optional GitHub login, and Cloudflare cache purging. (#1405)
+* Upgrade `esbuild` to `0.28.2`. (#1408)
+* Fix sub-module duplication for packages with a `sideEffects` field. (#1399)
+* Invalidate stale `latest` resolution when a newer explicit version is requested. (#1398)
+* Limit GitHub repository installs and fetch raw assets directly. (#1401)
+* Simplify build queue scheduling and shared results. (#1402)
+* Fix package resolution, module responses, and HTTP caching. (#1403)
+* Fix filesystem and S3 storage, import maps, and build handling. (#1404)
+* Remove the `web` package and consolidate internal helpers. (#1407)
+
 ## v138
 
 * Replace `rex` with the Go standard HTTP package. (#1387)
