@@ -91,6 +91,22 @@
   // The cache TTL for npm packages query, default is 600 seconds (10 minutes).
   "npmQueryCacheTTL": 600,
 
+  // Enable the cache purge page and API (`/purge`), default is true.
+  // Can also be disabled with the `PURGE_CACHE=false` environment variable.
+  "purgeCache": true,
+
+  // The GitHub OAuth app credentials used to require a GitHub sign-in for the purge API, default is disabled.
+  // When both are set, `POST /purge` also needs a signed-in GitHub user on top of the proof-of-work challenge.
+  // Can also be provided with the `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` environment variables.
+  "githubClientId": "",
+  "githubClientSecret": "",
+
+  // The Cloudflare credentials used to evict purged URLs from the edge cache, default is disabled.
+  // When both are set, a purge also calls the Cloudflare purging API so clients don't keep serving stale builds.
+  // Can also be provided with the `CLOUDFLARE_ZONE_ID` / `CLOUDFLARE_API_TOKEN` environment variables.
+  "cloudflareZoneId": "",
+  "cloudflareApiToken": "",
+
   // The global npm registry, default is "https://registry.npmjs.org/".
   "npmRegistry": "https://registry.npmjs.org/",
 

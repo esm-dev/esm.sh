@@ -10,6 +10,61 @@
 
 A _no-build_ JavaScript CDN for modern web development.
 
+## Purge Cache
+
+esm.sh builds and caches every module so it can be served instantly and immutably. The [**Cache Purge**
+page](https://esm.sh/purge) refreshes the cache after you publish (or republish) a version:
+
+- an **exact version** (`react@19.0.0`) drops its artifacts — built modules, type declarations, the local
+  npm store and the resolution cache — so the next request rebuilds it from scratch;
+- a **bare name, dist-tag, range or branch** (`react`, `react@next`, `react@^18`, `gh/user/repo@main`) only
+  refreshes the version resolution: the next request re-resolves and rebuilds only if the version or commit
+  actually moved, otherwise the existing build is reused.
+
+This works like [jsDelivr's purge tool](https://www.jsdelivr.com/tools/purge):
+
+```bash
+# 1. fetch a proof-of-work challenge
+challenge=$(curl -s "https://esm.sh/pow/challenge?scope=purge")
+id=$(echo "$challenge" | jq -r .id)
+salt=$(echo "$challenge" | jq -r .salt)
+difficulty=$(echo "$challenge" | jq -r .difficulty)
+
+# 2. solve it (SHA-256 prefix proof-of-work, takes a moment)
+nonce=0
+prefix=$(printf '0%.0s' $(seq 1 "$difficulty"))
+while ! [[ "$(printf '%s%s' "$salt" "$nonce" | sha256sum)" == "$prefix"* ]]; do
+  nonce=$((nonce + 1))
+done
+
+# 3. purge
+curl -X POST https://esm.sh/purge \
+  -H "content-type: application/json" \
+  -d "{\"url\": \"https://esm.sh/@scope/pkg@1.0.1\", \"challenge\": \"$id\", \"nonce\": \"$nonce\"}"
+```
+
+You can pass a full URL or a bare specifier (`pkg`, `pkg@version`, `@scope/pkg`, `gh/user/repo@ref`); the
+JSON response reports the resolved package/version, the removed artifacts and resolution keys, and a URL to
+trigger the next request. The bare-name URL follows the new version right after a refresh, no need to wait
+out the npm query cache TTL.
+
+Every purge requires solving a proof-of-work challenge (the page solves it automatically in the browser), so
+mass purge-and-rebuild attacks are not free. The challenge endpoint is generic:
+`GET /pow/challenge?scope=<scope>`, currently the `purge` scope.
+
+### Self-hosting options
+
+- **`GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET`** — when both are set, `POST /purge` additionally requires a
+  GitHub sign-in (the page then shows a **Sign in with GitHub** button). The proof-of-work challenge is still
+  required, so scripts cannot purge even after the login gate is enabled. Once signed in, the purge rate limit
+  is keyed by GitHub account instead of the client IP.
+- **`CLOUDFLARE_ZONE_ID` / `CLOUDFLARE_API_TOKEN`** — when both are set, an exact-version purge also evicts the
+  affected URLs from the Cloudflare edge cache via the [purge cache API](https://developers.cloudflare.com/cache/how-to/purge-cache/),
+  so clients don't keep serving the stale build until its TTLs expire. Cloudflare's standard plan only purges
+  exact URLs (max 30 per request); paths whose public URL cannot be reconstructed (hashed build-arg segments)
+  are skipped.
+- **`PURGE_CACHE=false`** — disables the whole feature.
+
 ## How to Use
 
 esm.sh allows you to import [JavaScript modules](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Modules) from http URLs, **no installation/build steps needed.**

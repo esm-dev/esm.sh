@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width" />
+  <title>esm.sh · Purge cache</title>
+  <meta name="description" content="Purge the esm.sh build cache for a package URL, just like jsDelivr's purge tool." />
+  <style>
+    :root {
+      color-scheme: light dark;
+      --text: #232323;
+      --muted: #757575;
+      --bg: #fff;
+      --card: #fff;
+      --border: #eaeaea;
+      --accent: #d63369;
+      --code-bg: #f5f6f6;
+      --ok: #2da44e;
+      --err: #d1242f;
+      --mono: "Geist Mono", "Dank Mono", "Source Code Pro", "Courier Prime Code", "Liberation Mono", Consolas, Menlo, monospace;
+      --sans: system-ui, -apple-system, BlinkMacSystemFont, Inter, "Geist", "Segoe UI", "Helvetica Neue", Helvetica, Roboto, Ubuntu, Tahoma, Arial, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", sans-serif;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --text: #e6e1d9;
+        --muted: #999;
+        --bg: #0e1011;
+        --card: #16191b;
+        --border: #323232;
+        --code-bg: #232323;
+        color-scheme: dark;
+      }
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      border: none;
+      outline: none;
+      font: inherit;
+      font-size: 100%;
+      vertical-align: baseline;
+      box-sizing: border-box;
+      background: transparent;
+    }
+
+    html {
+      font-size: 15px;
+    }
+
+    body {
+      text-rendering: optimizeLegibility;
+      font-family: var(--sans);
+      color: var(--text);
+      background-color: var(--bg);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    a {
+      color: var(--accent);
+      text-decoration: none;
+      box-shadow: 0 1px 0 0 currentColor;
+    }
+
+    a:hover {
+      box-shadow: none;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 18px 0;
+      width: 90%;
+      max-width: 860px;
+      margin: 0 auto;
+    }
+
+    .logo {
+      font-weight: 700;
+      font-size: 1.15rem;
+      color: var(--text);
+      box-shadow: none;
+    }
+
+    .logo span {
+      color: var(--accent);
+    }
+
+    nav a {
+      margin-left: 1.2rem;
+      color: var(--muted);
+      font-weight: 500;
+      box-shadow: none;
+    }
+
+    nav a.active,
+    nav a:hover {
+      color: var(--text);
+    }
+
+    main {
+      flex: 1;
+      width: 90%;
+      max-width: 860px;
+      margin: 0 auto;
+    }
+
+    .card {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--card);
+      padding: 28px 30px;
+      margin: 16px 0;
+    }
+
+    h1 {
+      font-size: 1.8rem;
+      font-weight: 700;
+      line-height: 1.25;
+    }
+
+    p {
+      margin-top: 10px;
+      line-height: 1.6;
+      color: var(--muted);
+    }
+
+    form {
+      display: flex;
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    input {
+      flex: 1;
+      min-width: 0;
+      padding: 11px 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-family: var(--mono);
+      background: var(--code-bg);
+    }
+
+    input:focus {
+      border-color: var(--accent);
+    }
+
+    button {
+      padding: 11px 20px;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      color: #fff;
+      background: var(--accent);
+      transition: opacity 0.15s ease;
+    }
+
+    button:hover {
+      opacity: 0.85;
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .examples {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 14px;
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+
+    .examples button {
+      padding: 5px 12px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      font-weight: 500;
+      font-size: 0.85rem;
+      font-family: var(--mono);
+      color: var(--accent);
+      background: transparent;
+    }
+
+    .examples button:hover {
+      border-color: var(--accent);
+      opacity: 1;
+    }
+
+    .auth {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 14px;
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+
+    .auth a {
+      font-weight: 600;
+      box-shadow: none;
+    }
+
+    pre#result {
+      margin-top: 16px;
+      padding: 14px;
+      border-radius: 8px;
+      font-family: var(--mono);
+      font-size: 0.85rem;
+      line-height: 1.5;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+      background: var(--code-bg);
+    }
+
+    pre#result.ok {
+      border: 1px solid var(--ok);
+    }
+
+    pre#result.err {
+      border: 1px solid var(--err);
+      color: var(--err);
+    }
+
+    #result a {
+      display: inline-block;
+      margin-top: 10px;
+    }
+
+    footer {
+      width: 90%;
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 30px 0;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    footer a {
+      color: var(--muted);
+    }
+
+    footer a:hover {
+      color: var(--text);
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <a class="logo" href="/">esm<span>.sh</span></a>
+    <nav>
+      <a href="/">Docs</a>
+      <a class="active" href="/purge">Purge cache</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="card">
+      <h1>Purge the cache</h1>
+      <p>
+        Enter an esm.sh URL or package name. An exact version (<em>react@19.0.0</em>) drops its cached
+        artifacts — built modules, type declarations, the local npm store and the resolution cache — so
+        the next request rebuilds it from scratch. A bare name, dist-tag, range or branch (<em>react</em>,
+        <em>react@next</em>, <em>gh/user/repo@main</em>) only refreshes the version resolution, so the next
+        request picks up a newer version without rebuilding the current one. Useful after publishing a new
+        version, the same way the
+        <a href="https://www.jsdelivr.com/tools/purge">jsDelivr purge tool</a> works.
+      </p>
+      <div class="auth" id="auth" hidden></div>
+      <form id="purge-form">
+        <input id="url" name="url" placeholder="https://esm.sh/react@19.0.0 or react@19.0.0" spellcheck="false" autocomplete="off" />
+        <button type="submit" id="purge-btn">Purge</button>
+      </form>
+      <div class="examples">
+        <span>Try:</span>
+        <button type="button" data-url="https://esm.sh/@steve02081504/async-eval">@steve02081504/async-eval</button>
+        <button type="button" data-url="https://esm.sh/@steve02081504/virtual-console">@steve02081504/virtual-console</button>
+      </div>
+      <pre id="result" hidden></pre>
+    </section>
+  </main>
+
+  <footer>
+    <p>
+      <a href="/purge">Purge cache</a> · <a href="/">esm.sh</a>
+    </p>
+  </footer>
+
+  <script type="module">
+    async function fetchPowChallenge(scope) {
+      const response = await fetch("/pow/challenge?scope=" + encodeURIComponent(scope));
+      if (!response.ok) {
+        throw new Error("failed to fetch proof-of-work challenge (" + response.status + ")");
+      }
+      return response.json();
+    }
+
+    async function solvePow(salt, difficulty) {
+      const target = "0".repeat(difficulty);
+      const encoder = new TextEncoder();
+      for (let nonce = 0; ; nonce++) {
+        const bytes = new Uint8Array(await crypto.subtle.digest("SHA-256", encoder.encode(salt + nonce)));
+        let hex = "";
+        for (const byte of bytes) hex += byte.toString(16).padStart(2, "0");
+        if (hex.startsWith(target)) return String(nonce);
+      }
+    }
+
+    const urlInput = document.getElementById("url");
+    const purgeBtn = document.getElementById("purge-btn");
+    const result = document.getElementById("result");
+    const authBar = document.getElementById("auth");
+
+    let auth = { github: false, login: "" };
+
+    function showError(text) {
+      result.hidden = false;
+      result.className = "err";
+      result.textContent = text;
+    }
+
+    function renderAuth() {
+      authBar.hidden = !auth.github;
+      authBar.textContent = "";
+      if (!auth.github) return;
+      const status = document.createElement("span");
+      const link = document.createElement("a");
+      if (auth.login) {
+        status.textContent = `Signed in as ${auth.login}.`;
+        link.href = "/purge/logout";
+        link.textContent = "Sign out";
+      } else {
+        status.textContent = "A GitHub sign-in is required to purge.";
+        link.href = "/purge/login";
+        link.textContent = "Sign in with GitHub";
+      }
+      authBar.append(status, link);
+    }
+
+    async function purge(url) {
+      if (auth.github && !auth.login) {
+        showError("Please sign in with GitHub before purging.");
+        return;
+      }
+      purgeBtn.disabled = true;
+      result.hidden = false;
+      result.className = "";
+      result.textContent = "Solving the proof-of-work challenge…";
+      try {
+        const challenge = await fetchPowChallenge("purge");
+        const nonce = await solvePow(challenge.salt, challenge.difficulty);
+        result.textContent = auth.github ? "Purging (GitHub + proof-of-work)…" : "Purging…";
+        const response = await fetch("/purge", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ url, challenge: challenge.id, nonce }),
+        });
+        const report = await response.json();
+        if (!response.ok) {
+          if (response.status === 401 && report.login) {
+            auth.login = "";
+            renderAuth();
+          }
+          return showError("Error " + response.status + ": " + report.message);
+        }
+        result.className = "ok";
+        const headline = report.resolutionOnly
+          ? `Refreshed the version resolution for ${report.package}@${report.version}`
+          : `Purged ${report.package}@${report.version}`;
+        const details = report.purged.length
+          ? ":\n" + report.purged.map((path) => "  " + path).join("\n")
+          : ".";
+        const next = report.resolutionOnly
+          ? `The next request for ${report.rebuild} will pick up the current version.`
+          : `The next request for ${report.rebuild} will rebuild from scratch.`;
+        result.textContent = `${headline} (${report.purged.length} files, ${report.cacheKeys.length} cache keys)${details}\n\n${next}`;
+        const link = document.createElement("a");
+        link.href = report.rebuild;
+        link.textContent = "Open " + report.rebuild;
+        link.target = "_blank";
+        result.appendChild(link);
+      } catch (err) {
+        showError("Request failed: " + err.message);
+      } finally {
+        purgeBtn.disabled = false;
+      }
+    }
+
+    document.getElementById("purge-form").addEventListener("submit", (event) => {
+      event.preventDefault();
+      const url = urlInput.value.trim();
+      if (url) purge(url);
+    });
+
+    document.querySelectorAll(".examples button").forEach((button) => {
+      button.addEventListener("click", () => {
+        urlInput.value = button.dataset.url;
+        purge(button.dataset.url);
+      });
+    });
+
+    const oauthError = new URLSearchParams(location.search).get("error");
+    if (oauthError) showError("GitHub sign-in failed: " + oauthError);
+
+    fetch("/purge/auth.json")
+      .then((response) => response.json())
+      .then((data) => {
+        auth = data;
+        renderAuth();
+      })
+      .catch(() => {});
+  </script>
+</body>
+
+</html>

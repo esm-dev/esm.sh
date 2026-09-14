@@ -1,6 +1,7 @@
 package server
 
 import (
+	"strings"
 	"time"
 
 	lru "github.com/hashicorp/golang-lru/v2"
@@ -43,6 +44,18 @@ func setCacheItem(key string, data any, cacheTtl time.Duration) {
 
 func deleteCacheItem(key string) {
 	cacheStore.Delete(key)
+}
+
+// deleteCacheItemsWithPrefix removes every cached item whose key starts with
+// the given prefix and returns the removed keys.
+func deleteCacheItemsWithPrefix(prefix string) (deletedKeys []string) {
+	cacheStore.Range(func(key, value any) bool {
+		if k := key.(string); strings.HasPrefix(k, prefix) && cacheStore.CompareAndDelete(k, value) {
+			deletedKeys = append(deletedKeys, k)
+		}
+		return true
+	})
+	return
 }
 
 func withCache[T any](key string, cacheTtl time.Duration, fetch func() (data T, aliasKey string, err error)) (data T, err error) {
