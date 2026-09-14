@@ -1,6 +1,6 @@
 # Server Changelog
 
-## v138_1
+## v139
 
 * Add a cache purge page and API with proof-of-work, optional GitHub login, and Cloudflare cache purging. (#1405)
 * Fix filesystem and S3 storage, import maps, and build handling. (#1404)
