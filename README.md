@@ -10,48 +10,6 @@
 
 A _no-build_ JavaScript CDN for modern web development.
 
-## Purge Cache
-
-esm.sh builds and caches every module so it can be served instantly and immutably. The [**Cache Purge**
-page](https://esm.sh/purge) refreshes the cache after you publish (or republish) a version:
-
-- an **exact version** (`react@19.0.0`) drops its artifacts — built modules, type declarations, the local
-  npm store and the resolution cache — so the next request rebuilds it from scratch;
-- a **bare name, dist-tag, range or branch** (`react`, `react@next`, `react@^18`, `gh/user/repo@main`) only
-  refreshes the version resolution: the next request re-resolves and rebuilds only if the version or commit
-  actually moved, otherwise the existing build is reused.
-
-This works like [jsDelivr's purge tool](https://www.jsdelivr.com/tools/purge):
-
-```bash
-# 1. fetch a proof-of-work challenge
-challenge=$(curl -s "https://esm.sh/pow/challenge?scope=purge")
-id=$(echo "$challenge" | jq -r .id)
-salt=$(echo "$challenge" | jq -r .salt)
-difficulty=$(echo "$challenge" | jq -r .difficulty)
-
-# 2. solve it (SHA-256 prefix proof-of-work, takes a moment)
-nonce=0
-prefix=$(printf '0%.0s' $(seq 1 "$difficulty"))
-while ! [[ "$(printf '%s%s' "$salt" "$nonce" | sha256sum)" == "$prefix"* ]]; do
-  nonce=$((nonce + 1))
-done
-
-# 3. purge
-curl -X POST https://esm.sh/purge \
-  -H "content-type: application/json" \
-  -d "{\"url\": \"https://esm.sh/@scope/pkg@1.0.1\", \"challenge\": \"$id\", \"nonce\": \"$nonce\"}"
-```
-
-You can pass a full URL or a bare specifier (`pkg`, `pkg@version`, `@scope/pkg`, `gh/user/repo@ref`); the
-JSON response reports the resolved package/version, the removed artifacts and resolution keys, and a URL to
-trigger the next request. The bare-name URL follows the new version right after a refresh, no need to wait
-out the npm query cache TTL.
-
-Every purge requires solving a proof-of-work challenge (the page solves it automatically in the browser), so
-mass purge-and-rebuild attacks are not free. The challenge endpoint is generic:
-`GET /pow/challenge?scope=<scope>`, currently the `purge` scope.
-
 ### Self-hosting options
 
 - **`GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET`** — when both are set, `POST /purge` additionally requires a
@@ -369,6 +327,48 @@ The `raw` mode works just like other CDN services, unpkg.com(https://unpkg.com/)
 > [!TIP]
 > You may alternatively use `https://raw.esm.sh/<PATH>`, which is equivalent to `https://esm.sh/<PATH>?raw`,
 > that transitive references in the raw assets will also be raw requests.
+
+## Purge Cache
+
+esm.sh builds and caches every module so it can be served instantly and immutably. The [**Cache Purge**
+page](https://esm.sh/purge) refreshes the cache after you publish (or republish) a version:
+
+- an **exact version** (`react@19.0.0`) drops its artifacts — built modules, type declarations, the local
+  npm store and the resolution cache — so the next request rebuilds it from scratch;
+- a **bare name, dist-tag, range or branch** (`react`, `react@next`, `react@^18`, `gh/user/repo@main`) only
+  refreshes the version resolution: the next request re-resolves and rebuilds only if the version or commit
+  actually moved, otherwise the existing build is reused.
+
+This works like [jsDelivr's purge tool](https://www.jsdelivr.com/tools/purge):
+
+```bash
+# 1. fetch a proof-of-work challenge
+challenge=$(curl -s "https://esm.sh/pow/challenge?scope=purge")
+id=$(echo "$challenge" | jq -r .id)
+salt=$(echo "$challenge" | jq -r .salt)
+difficulty=$(echo "$challenge" | jq -r .difficulty)
+
+# 2. solve it (SHA-256 prefix proof-of-work, takes a moment)
+nonce=0
+prefix=$(printf '0%.0s' $(seq 1 "$difficulty"))
+while ! [[ "$(printf '%s%s' "$salt" "$nonce" | sha256sum)" == "$prefix"* ]]; do
+  nonce=$((nonce + 1))
+done
+
+# 3. purge
+curl -X POST https://esm.sh/purge \
+  -H "content-type: application/json" \
+  -d "{\"url\": \"https://esm.sh/@scope/pkg@1.0.1\", \"challenge\": \"$id\", \"nonce\": \"$nonce\"}"
+```
+
+You can pass a full URL or a bare specifier (`pkg`, `pkg@version`, `@scope/pkg`, `gh/user/repo@ref`); the
+JSON response reports the resolved package/version, the removed artifacts and resolution keys, and a URL to
+trigger the next request. The bare-name URL follows the new version right after a refresh, no need to wait
+out the npm query cache TTL.
+
+Every purge requires solving a proof-of-work challenge (the page solves it automatically in the browser), so
+mass purge-and-rebuild attacks are not free. The challenge endpoint is generic:
+`GET /pow/challenge?scope=<scope>`, currently the `purge` scope.
 
 ## Using `esm.sh/tsx`
 
