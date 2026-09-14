@@ -54,6 +54,42 @@ func (p EsmPath) String() string {
 }
 
 func parseEsmPath(npmrc *NpmRC, pathname string) (esm EsmPath, extraQuery string, exactVersion bool, target string, xArgs *BuildArgs, err error) {
+	esm, extraQuery, exactVersion, target, xArgs, err = parseEsmPathSyntax(pathname)
+	if err != nil || exactVersion {
+		return
+	}
+	if esm.PrPrefix {
+		esm.PkgVersion, err = resolvePrPackageVersion(esm)
+		if err == nil && !isCommitish(esm.PkgVersion) {
+			err = errors.New("pkg.pr.new: tag or branch not found")
+		}
+	} else if esm.GhPrefix {
+		esm.PkgVersion, err = resolveGhPackageVersion(esm)
+		if err == nil && !isCommitish(esm.PkgVersion) {
+			err = errors.New("github: tag or branch not found")
+		}
+	} else {
+		var date time.Time
+		var isDateVersion bool
+		date, isDateVersion, err = npm.IsDateVersion(esm.PkgVersion)
+		if err != nil {
+			return
+		}
+		var p *npm.PackageJSON
+		if isDateVersion {
+			p, err = npmrc.getPackageInfoByDate(esm.PkgName, date)
+		} else {
+			p, err = npmrc.getPackageInfo(esm.PkgName, esm.PkgVersion)
+		}
+		if err == nil {
+			esm.PkgVersion = p.Version
+		}
+	}
+	return
+}
+
+// parseEsmPathSyntax parses a package URL without consulting resolution caches.
+func parseEsmPathSyntax(pathname string) (esm EsmPath, extraQuery string, exactVersion bool, target string, xArgs *BuildArgs, err error) {
 	// see https://pkg.pr.new
 	if strings.HasPrefix(pathname, "/pr/") || strings.HasPrefix(pathname, "/pkg.pr.new/") {
 		if strings.HasPrefix(pathname, "/pr/") {
@@ -62,7 +98,7 @@ func parseEsmPath(npmrc *NpmRC, pathname string) (esm EsmPath, extraQuery string
 			pathname = pathname[12:]
 		}
 		pkgName, rest := utils.SplitByLastByte(pathname, '@')
-		if rest == "" {
+		if rest == "" || !validatePrPackageName(pkgName) {
 			err = errors.New("invalid path")
 			return
 		}
@@ -80,17 +116,7 @@ func parseEsmPath(npmrc *NpmRC, pathname string) (esm EsmPath, extraQuery string
 			SubPath:    stripEntryModuleExt(subPath),
 			PrPrefix:   true,
 		}
-		if isCommitish(esm.PkgVersion) {
-			exactVersion = true
-			return
-		}
-		esm.PkgVersion, err = resolvePrPackageVersion(esm)
-		if err != nil {
-			return
-		}
-		if !isCommitish(esm.PkgVersion) {
-			err = errors.New("pkg.pr.new: tag or branch not found")
-		}
+		exactVersion = isCommitish(esm.PkgVersion)
 		return
 	}
 
@@ -165,44 +191,9 @@ func parseEsmPath(npmrc *NpmRC, pathname string) (esm EsmPath, extraQuery string
 	}
 
 	if ghPrefix {
-		if npm.IsExactVersion(strings.TrimPrefix(esm.PkgVersion, "v")) || isCommitish(esm.PkgVersion) {
-			exactVersion = true
-			return
-		}
-
-		esm.PkgVersion, err = resolveGhPackageVersion(esm)
-		if err != nil {
-			return
-		}
-
-		if !isCommitish(esm.PkgVersion) {
-			err = errors.New("github: tag or branch not found")
-		}
-		return
-	}
-
-	originalExactVersion := len(esm.PkgVersion) > 0 && npm.IsExactVersion(esm.PkgVersion)
-	exactVersion = originalExactVersion
-
-	// Check if version is a date format (yyyy-mm-dd)
-	date, isDateVersion, err := npm.IsDateVersion(esm.PkgVersion)
-	if err != nil {
-		return
-	}
-
-	if !originalExactVersion {
-		var p *npm.PackageJSON
-		if isDateVersion {
-			// For date versions, resolve directly to exact version using date-based resolution
-			p, err = npmrc.getPackageInfoByDate(pkgName, date)
-		} else {
-			// Normal semver resolution
-			p, err = npmrc.getPackageInfo(pkgName, esm.PkgVersion)
-		}
-		if err == nil {
-			esm.PkgVersion = p.Version
-			// Keep exactVersion as false for redirect logic even after resolution
-		}
+		exactVersion = npm.IsExactVersion(strings.TrimPrefix(esm.PkgVersion, "v")) || isCommitish(esm.PkgVersion)
+	} else {
+		exactVersion = len(esm.PkgVersion) > 0 && npm.IsExactVersion(esm.PkgVersion)
 	}
 	return
 }
@@ -248,6 +239,16 @@ func splitEsmPath(pathname string) (pkgName string, pkgVersion string, subPath s
 		pkgVersion = strings.TrimSpace(pkgVersion)
 	}
 	return
+}
+
+// pkg.pr.new accepts a package name or owner/repo/package name.
+func validatePrPackageName(name string) bool {
+	if npm.ValidatePackageName(name) {
+		return true
+	}
+	owner, rest, _ := strings.Cut(name, "/")
+	repo, pkg, _ := strings.Cut(rest, "/")
+	return npm.ValidatePackageName("@"+owner+"/"+repo) && npm.ValidatePackageName(pkg)
 }
 
 func toPackageName(specifier string) string {

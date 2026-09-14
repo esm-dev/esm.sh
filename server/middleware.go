@@ -6,6 +6,7 @@ import (
 	"mime"
 	"net"
 	"net/http"
+	"net/netip"
 	"runtime/debug"
 	"strconv"
 	"strings"
@@ -208,20 +209,38 @@ func isCompressibleContentType(contentType string) bool {
 		strings.HasPrefix(contentType, "application/wasm"))
 }
 
-// remoteIP returns the remote client IP.
+// remoteIP follows forwarded addresses only through configured trusted proxies.
 func remoteIP(r *http.Request) string {
-	ip := r.Header.Get("X-Real-IP")
-	if ip == "" {
-		ip = r.Header.Get("X-Forwarded-For")
-		if ip != "" {
-			ip, _, _ = strings.Cut(ip, ",")
-		} else {
-			ip = r.RemoteAddr
-		}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		host = r.RemoteAddr
 	}
-	ip = strings.TrimSpace(ip)
-	if host, _, err := net.SplitHostPort(ip); err == nil {
+	ip, err := netip.ParseAddr(host)
+	if err != nil {
 		return host
 	}
-	return ip
+	ip = ip.Unmap()
+	forwarded := r.Header.Get("X-Forwarded-For")
+	if forwarded == "" {
+		forwarded = r.Header.Get("X-Real-IP")
+	}
+	addresses := strings.Split(forwarded, ",")
+	for i := len(addresses) - 1; i >= 0; i-- {
+		trusted := false
+		for _, proxy := range config.TrustedProxies {
+			if proxy.Contains(ip) {
+				trusted = true
+				break
+			}
+		}
+		if !trusted {
+			break
+		}
+		next, err := netip.ParseAddr(strings.TrimSpace(addresses[i]))
+		if err != nil {
+			break
+		}
+		ip = next.Unmap()
+	}
+	return ip.String()
 }

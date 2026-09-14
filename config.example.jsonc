@@ -15,6 +15,10 @@
   // Note: A valid origin must be a valid URL, including the protocol, domain, and port. e.g. "https://example.com".
   "corsAllowOrigins": [],
 
+  // Proxy CIDRs allowed to supply X-Forwarded-For or X-Real-IP for client IPs.
+  // Empty by default. For a local reverse proxy, use ["127.0.0.1/32", "::1/128"].
+  "trustedProxies": [],
+
   // Maximum number of concurrent build process, default equals to the number of CPU cores.
   "buildConcurrency": 0,
 
@@ -102,7 +106,7 @@
     "githubClientId": "",
     "githubClientSecret": "",
 
-    // Purge Cloudflare edge URLs for exact versions when both credentials are set.
+    // Purge Cloudflare package prefixes for exact versions when both credentials are set.
     // Can also be provided with `PURGE_CLOUDFLARE_ZONE_ID` / `PURGE_CLOUDFLARE_API_TOKEN`.
     "cloudflareZoneId": "",
     "cloudflareApiToken": ""

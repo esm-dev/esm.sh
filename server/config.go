@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"net/netip"
 	"net/url"
 	"os"
 	"path"
@@ -31,6 +32,7 @@ type Config struct {
 	CustomLandingPage   LandingPageOptions           `json:"customLandingPage"`
 	WorkDir             string                       `json:"workDir"`
 	CorsAllowOrigins    []string                     `json:"corsAllowOrigins"`
+	TrustedProxies      []netip.Prefix               `json:"trustedProxies"`
 	AllowList           AllowList                    `json:"allowList"`
 	BanList             BanList                      `json:"banList"`
 	BuildConcurrency    uint16                       `json:"buildConcurrency"`

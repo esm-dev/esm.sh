@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/esm-dev/esm.sh/internal/npm"
 	"github.com/esm-dev/esm.sh/internal/storage"
 	"github.com/ije/gox/log"
 )
@@ -29,7 +30,7 @@ type purgeResponse struct {
 	Package   string   `json:"package"`
 	Version   string   `json:"version"`
 	Purged    []string `json:"purged"`
-	CacheKeys []string `json:"cacheKeys,omitempty"`
+	CacheKeys []string `json:"cacheKeys"`
 	Rebuild   string   `json:"rebuild,omitempty"`
 	// ResolutionOnly is set when the request only refreshed the version
 	// resolution (a floating specifier), keeping the build in place.
@@ -69,6 +70,20 @@ func parsePurgeInput(input string) (string, error) {
 // refresh: the build is kept and is only rebuilt if the resolved version moves.
 func purgePackageCache(npmrc *NpmRC, metaDB *BuildMetaDB, esmStorage storage.Storage, logger *log.Logger, esmPath EsmPath, exactVersion bool, origin string, pathname string) (*purgeResponse, error) {
 	pkgId := esmPath.PackageId()
+	validName := npm.ValidatePackageName(esmPath.PkgName)
+	if esmPath.GhPrefix {
+		validName = npm.ValidatePackageName("@" + esmPath.PkgName)
+	} else if esmPath.PrPrefix {
+		validName = validatePrPackageName(esmPath.PkgName)
+	}
+	if !validName || !filepath.IsLocal(pkgId) || strings.ContainsAny(pkgId, "\\\x00") {
+		return nil, errors.New("invalid package path")
+	}
+	for segment := range strings.SplitSeq(pkgId, "/") {
+		if segment == "." || segment == ".." {
+			return nil, errors.New("invalid package path")
+		}
+	}
 	resp := &purgeResponse{
 		Package:   esmPath.PkgName,
 		Version:   esmPath.PkgVersion,
@@ -87,6 +102,10 @@ func purgePackageCache(npmrc *NpmRC, metaDB *BuildMetaDB, esmStorage storage.Sto
 	}
 	if esmPath.GhPrefix {
 		prefixes = append(prefixes, "gh/"+esmPath.PkgName+"@")
+		key := "git ls-remote https://github.com/" + esmPath.PkgName
+		if _, ok := cacheStore.LoadAndDelete(key); ok {
+			resp.CacheKeys = append(resp.CacheKeys, key)
+		}
 	} else if esmPath.PrPrefix {
 		prefixes = append(prefixes, "pr/"+esmPath.PkgName+"@")
 	}
@@ -106,19 +125,26 @@ func purgePackageCache(npmrc *NpmRC, metaDB *BuildMetaDB, esmStorage storage.Sto
 		return resp, nil
 	}
 
-	// 2. remove build outputs, source maps and type declarations from storage,
-	// along with the build metadata (and its in-memory copy) of each removed
-	// module so it gets rebuilt. The `*` "external all" variant is normalized
-	// into a `.../ea/` segment, which for scoped/gh/pr ids no longer nests under
-	// the plain id, so purge that namespace too.
-	externalAllId := normalizeSavePath("*" + pkgId)
-	buildPathOf := func(key string) string {
-		savePath := strings.TrimPrefix(key, "modules/")
-		if after, ok := strings.CutPrefix(savePath, externalAllId+"/"); ok {
-			return "/*" + pkgId + "/" + after
-		}
-		return "/" + savePath
+	// Block legacy metadata before deleting the package's metadata namespace.
+	unlock := cacheMutex.Lock("meta/" + pkgId)
+	defer unlock()
+	if err := esmStorage.Put("meta-purged/"+pkgId, strings.NewReader("")); err != nil {
+		return nil, err
 	}
+	keys, err := esmStorage.DeleteAll("meta/" + pkgId + "/")
+	if err != nil {
+		return nil, err
+	}
+	resp.Purged = append(resp.Purged, keys...)
+	for _, key := range append(metaDB.cache.Keys(), cacheLRU.Keys()...) {
+		if strings.HasPrefix(key, "/"+pkgId+"/") || strings.HasPrefix(key, "/*"+pkgId+"/") {
+			metaDB.cache.Remove(key)
+			cacheLRU.Remove(key)
+		}
+	}
+
+	// Remove normal and external-all builds, source maps and declarations.
+	externalAllId := normalizeSavePath("*" + pkgId)
 	for _, dir := range []string{"modules/", "types/"} {
 		for _, id := range []string{pkgId, externalAllId} {
 			keys, err := esmStorage.DeleteAll(dir + id + "/")
@@ -126,21 +152,7 @@ func purgePackageCache(npmrc *NpmRC, metaDB *BuildMetaDB, esmStorage storage.Sto
 				logger.Errorf("storage.DeleteAll(%s%s/): %v", dir, id, err)
 				return nil, err
 			}
-			for _, key := range keys {
-				resp.Purged = append(resp.Purged, key)
-				if strings.HasPrefix(key, "modules/") {
-					// The build metadata key is the original (un-normalized)
-					// URL path, so it has to be recovered from the storage key.
-					// Files like source maps and tree-shaken variants have no
-					// metadata of their own, so a "not found" here is expected
-					// and safe to ignore — the router also self-heals a stale
-					// meta by rebuilding on a missing file.
-					buildPath := buildPathOf(key)
-					metaDB.Delete(buildPath)
-					cacheLRU.Remove(buildPath)
-					resp.Purged = append(resp.Purged, "meta:"+buildPath)
-				}
-			}
+			resp.Purged = append(resp.Purged, keys...)
 		}
 	}
 
@@ -158,7 +170,7 @@ func purgePackageCache(npmrc *NpmRC, metaDB *BuildMetaDB, esmStorage storage.Sto
 		resp.Rebuild = origin + "/" + pkgId
 		// also evict the matching entries from the CDN edge cache, so clients
 		// do not keep serving the stale build until its TTLs expire
-		purgeCloudflareCache(logger, cdnPurgeURLs(origin, pkgId, resp.Purged))
+		purgeCloudflareCache(logger, origin, pkgId)
 	}
 	return resp, nil
 }

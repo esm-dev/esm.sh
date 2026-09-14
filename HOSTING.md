@@ -34,6 +34,8 @@ Cache purging is enabled by default. Open `/purge` on your server to refresh a p
 
 Every `POST /purge` requires a single-use proof-of-work challenge from `GET /pow/challenge?scope=purge`, valid for two minutes. The page solves it automatically; scripts can follow the [API example](./README.md#purge-cache) using your server's origin. Requests are limited to five per minute per client IP, or per GitHub account when login is enabled.
 
+Client IPs come from the connection by default. Behind a reverse proxy, set `trustedProxies` to its CIDRs, for example `["127.0.0.1/32", "::1/128"]` for a local proxy. Forwarded addresses are checked from right to left through those proxies. Configure the proxy to append the actual client address to `X-Forwarded-For`, or overwrite `X-Real-IP` when it does not send `X-Forwarded-For`. Only list networks you control or trust.
+
 Configure purging under `purgeAPI` in `config.json`:
 
 ```json
@@ -62,7 +64,7 @@ The purge page then requires GitHub sign-in. Any signed-in GitHub user can purge
 
 Set both `purgeAPI.cloudflareZoneId` and `purgeAPI.cloudflareApiToken`, or `PURGE_CLOUDFLARE_ZONE_ID` and `PURGE_CLOUDFLARE_API_TOKEN`. Use an API token with [Cache Purge permission](https://developers.cloudflare.com/api/resources/cache/methods/purge/) for the target zone, and set `cdnOrigin` or `CDN_ORIGIN` to the public CDN origin.
 
-Exact-version purges also submit the package entry URL and URLs reconstructed from removed artifacts to Cloudflare. Hashed build-argument paths and external-all variants are skipped; other cached URL variants may need separate purging. Floating specifiers only refresh resolution at the origin. Cloudflare request failures are logged without failing the origin purge.
+Exact-version purges also [purge Cloudflare by prefix](https://developers.cloudflare.com/cache/how-to/purge-cache/purge_by_prefix/) for the package's normal and external-all paths, including subpaths, build arguments and query-string variants. Prefix purging is available on all Cloudflare plans. Floating specifiers only refresh resolution at the origin. Cloudflare request failures are logged without failing the origin purge; repeating the purge retries the same prefixes even after origin artifacts have been removed.
 
 Add the [cache bypass rule](#5-bypass-cache-for-purge-endpoints) below to keep challenges and login responses out of the CDN cache.
 

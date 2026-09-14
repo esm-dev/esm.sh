@@ -5,12 +5,51 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/andybalholm/brotli"
 )
+
+func TestRemoteIPTrustedProxies(t *testing.T) {
+	previous := config.TrustedProxies
+	t.Cleanup(func() { config.TrustedProxies = previous })
+	for _, test := range []struct {
+		name  string
+		peer  string
+		proxy bool
+		xff   string
+		xreal string
+		want  string
+	}{
+		{"untrusted headers", "192.0.2.1:1234", false, "203.0.113.1", "203.0.113.2", "192.0.2.1"},
+		{"untrusted peer", "198.51.100.1:1234", true, "203.0.113.1", "203.0.113.2", "198.51.100.1"},
+		{"trusted proxy", "192.0.2.1:1234", true, "198.51.100.1", "", "198.51.100.1"},
+		{"spoofed first hop", "192.0.2.1:1234", true, "203.0.113.9, 198.51.100.1", "203.0.113.2", "198.51.100.1"},
+		{"proxy chain", "192.0.2.1:1234", true, "198.51.100.1, 192.0.2.2", "", "198.51.100.1"},
+		{"real ip fallback", "192.0.2.1:1234", true, "", "198.51.100.1", "198.51.100.1"},
+		{"invalid forwarded ip", "192.0.2.1:1234", true, "invalid", "198.51.100.1", "192.0.2.1"},
+		{"missing headers", "192.0.2.1:1234", true, "", "", "192.0.2.1"},
+		{"ipv6", "[2001:db8:1::1]:1234", true, "2001:db8:2::1", "", "2001:db8:2::1"},
+		{"mapped ipv4", "[::ffff:192.0.2.1]:1234", true, "::ffff:198.51.100.1", "", "198.51.100.1"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			config.TrustedProxies = nil
+			if test.proxy {
+				config.TrustedProxies = []netip.Prefix{netip.MustParsePrefix("192.0.2.0/24"), netip.MustParsePrefix("2001:db8:1::/48")}
+			}
+			req := httptest.NewRequest(http.MethodGet, "http://localhost/", nil)
+			req.RemoteAddr = test.peer
+			req.Header.Set("X-Forwarded-For", test.xff)
+			req.Header.Set("X-Real-IP", test.xreal)
+			if got := remoteIP(req); got != test.want {
+				t.Fatalf("remoteIP = %q, want %q", got, test.want)
+			}
+		})
+	}
+}
 
 func TestCompressNegotiation(t *testing.T) {
 	body := strings.Repeat("export const value = 1;\n", 100)

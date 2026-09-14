@@ -6,6 +6,17 @@ import (
 	"time"
 )
 
+func TestParsePrPackagePath(t *testing.T) {
+	for _, name := range []string{"pkg", "@scope/pkg", "owner/repo/pkg", "owner/repo/@scope/pkg"} {
+		for _, prefix := range []string{"/pr/", "/pkg.pr.new/"} {
+			esm, _, exact, _, _, err := parseEsmPath(nil, prefix+name+"@abc1234/es2022/pkg.mjs")
+			if err != nil || !exact || !esm.PrPrefix || esm.PkgName != name || esm.PkgVersion != "abc1234" {
+				t.Fatalf("parse %s%s: %+v, exact=%v, err=%v", prefix, name, esm, exact, err)
+			}
+		}
+	}
+}
+
 func TestParseEsmPathGithubVersion(t *testing.T) {
 	const repo = "path-test/semver-tags"
 	key := "git ls-remote https://github.com/" + repo

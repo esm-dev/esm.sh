@@ -5,6 +5,19 @@ import (
 	"testing"
 )
 
+func TestTrustedProxiesConfig(t *testing.T) {
+	var c Config
+	if err := json.Unmarshal([]byte(`{"trustedProxies":["127.0.0.1/32","::1/128"]}`), &c); err != nil {
+		t.Fatal(err)
+	}
+	if len(c.TrustedProxies) != 2 || c.TrustedProxies[0].String() != "127.0.0.1/32" || c.TrustedProxies[1].String() != "::1/128" {
+		t.Fatalf("unexpected trusted proxies: %v", c.TrustedProxies)
+	}
+	if err := json.Unmarshal([]byte(`{"trustedProxies":["invalid"]}`), &c); err == nil {
+		t.Fatal("expected invalid proxy CIDR to be rejected")
+	}
+}
+
 func TestPurgeAPIEnable(t *testing.T) {
 	for _, test := range []struct {
 		name    string
