@@ -67,6 +67,24 @@ func Start() {
 	}
 	logger.Debugf("storage initialized, type: %s, endpoint: %s", config.Storage.Type, config.Storage.Endpoint)
 
+	negativeCache, err = openNegativeCache(path.Join(config.WorkDir, "negative-cache.db"), logger)
+	if err != nil {
+		logger.Fatalf("failed to initialize negative cache: %v", err)
+	}
+	defer negativeCache.Close()
+	negativeCache.gc(time.Now())
+
+	// purge npm cache when disk is low or full
+	npmrc := DefaultNpmRC()
+	go func() {
+		purgeNPMCacheWhenDiskIsLowOrFull(npmrc, logger)
+		ticker := time.NewTicker(time.Hour)
+		defer ticker.Stop()
+		for range ticker.C {
+			purgeNPMCacheWhenDiskIsLowOrFull(npmrc, logger)
+		}
+	}()
+
 	// load node runtime in background
 	go getNodeRuntimeJS("fs")
 

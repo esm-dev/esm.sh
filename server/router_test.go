@@ -192,7 +192,71 @@ func TestCSSEntryRedirectURL(t *testing.T) {
 	}
 }
 
+func TestVersionedPathNotFoundCache(t *testing.T) {
+	useNegativeCache(t)
+	previousConfig, previousNpmRC, transport := config, defaultNpmRC, http.DefaultTransport
+	testConfig := *config
+	testConfig.WorkDir = t.TempDir()
+	config, defaultNpmRC = &testConfig, nil
+	t.Cleanup(func() {
+		config, defaultNpmRC, http.DefaultTransport = previousConfig, previousNpmRC, transport
+		deleteCacheItemsWithPrefix("npm:negative-path-test@")
+	})
+	fs, _, logger := newPurgeTestEnv(t)
+	handler := esmRouter(fs, logger)
+	const pkg = "negative-path-test"
+	for _, version := range []string{"1.0.0", "2.0.0"} {
+		dir := filepath.Join(config.WorkDir, "npm", pkg+"@"+version, "node_modules", pkg)
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		for filename, content := range map[string]string{
+			"package.json": `{"name":"` + pkg + `","version":"` + version + `","type":"module","types":"./index.d.ts","exports":{".":"./index.js","./conditional":{"development":"./index.js","default":"./absent.js"}}}`,
+			"index.js":     "export default 42;",
+			"index.d.ts":   "declare const value: number; export default value;",
+		} {
+			if err := os.WriteFile(filepath.Join(dir, filename), []byte(content), 0644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if version == "2.0.0" {
+			if err := os.WriteFile(filepath.Join(dir, "missing.json"), []byte("{}"), 0644); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	http.DefaultTransport = ghTestTransport(func(r *http.Request) (*http.Response, error) {
+		t.Errorf("unexpected request: %s", r.URL)
+		return &http.Response{StatusCode: 500, Body: http.NoBody}, nil
+	})
+	paths := []string{"/missing?target=es2022", "/missing.d.ts", "/missing.json", "/missing.css?module", "/conditional?target=es2022"}
+	for _, phase := range []string{"cold", "cached"} {
+		if phase == "cached" {
+			if err := os.RemoveAll(filepath.Join(config.WorkDir, "npm", pkg+"@1.0.0")); err != nil {
+				t.Fatal(err)
+			}
+		}
+		for _, subpath := range paths {
+			res := httptest.NewRecorder()
+			handler.ServeHTTP(res, httptest.NewRequest("GET", "http://localhost/"+pkg+"@1.0.0"+subpath, nil))
+			if res.Code != 404 {
+				t.Fatalf("%s %s: HTTP %d: %s", phase, subpath, res.Code, res.Body.String())
+			}
+		}
+		if phase == "cold" {
+			for _, suffix := range []string{"@1.0.0/conditional?target=es2022&conditions=development", "@2.0.0/missing.json"} {
+				res := httptest.NewRecorder()
+				handler.ServeHTTP(res, httptest.NewRequest("GET", "http://localhost/"+pkg+suffix, nil))
+				if res.Code != 200 {
+					t.Fatalf("404 blocked another variant/version %s: HTTP %d: %s", suffix, res.Code, res.Body.String())
+				}
+			}
+		}
+	}
+}
+
 func TestGhRawAssets(t *testing.T) {
+	useNegativeCache(t)
 	previousConfig, previousNpmRC, transport := config, defaultNpmRC, http.DefaultTransport
 	testConfig := *config
 	testConfig.WorkDir = t.TempDir()
@@ -200,13 +264,7 @@ func TestGhRawAssets(t *testing.T) {
 	t.Cleanup(func() {
 		config, defaultNpmRC, http.DefaultTransport = previousConfig, previousNpmRC, transport
 	})
-	markerDir := filepath.Join(config.WorkDir, "gh-too-large")
-	if err := os.MkdirAll(markerDir, 0755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(markerDir, "owner%2Frepo"), []byte("owner/repo\n"), 0644); err != nil {
-		t.Fatal(err)
-	}
+	negativeCache.put("gh-too-large:owner/repo@abcdef0", errRepoTooLarge.Error(), 0)
 	fs, err := storage.NewFSStorage(filepath.Join(config.WorkDir, "storage"))
 	if err != nil {
 		t.Fatal(err)

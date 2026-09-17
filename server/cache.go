@@ -123,6 +123,7 @@ func withLRUCache[T any](key string, fetch func() (T, error)) (data T, err error
 }
 
 func gc(now time.Time) {
+	negativeCache.gc(now)
 	expires := now.UnixMilli()
 	cacheStore.Range(func(key, value any) bool {
 		item := value.(*cacheItem)

@@ -3,7 +3,6 @@ package server
 import (
 	"bufio"
 	"bytes"
-	"compress/gzip"
 	"context"
 	"errors"
 	"fmt"
@@ -11,7 +10,6 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -78,8 +76,8 @@ func ghInstallContext(ctx context.Context, wd, name, tag string) (err error) {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	tooLargeFile := filepath.Join(config.WorkDir, "gh-too-large", url.PathEscape(strings.ToLower(name)))
-	if existsFile(tooLargeFile) {
+	tooLargeKey := "gh-too-large:" + strings.ToLower(name) + "@" + tag
+	if negativeCache.get(tooLargeKey) != "" {
 		return errRepoTooLarge
 	}
 
@@ -90,13 +88,7 @@ func ghInstallContext(ctx context.Context, wd, name, tag string) (err error) {
 			err = installCtx.Err()
 		}
 		if errors.Is(err, errRepoTooLarge) {
-			recordErr := ensureDir(filepath.Dir(tooLargeFile))
-			if recordErr == nil {
-				recordErr = os.WriteFile(tooLargeFile, []byte(name+"\n"), 0644)
-			}
-			if recordErr != nil {
-				err = errors.Join(err, fmt.Errorf("record oversized repo: %w", recordErr))
-			}
+			negativeCache.put(tooLargeKey, errRepoTooLarge.Error(), 0)
 		} else if ctx.Err() != nil {
 			err = ctx.Err()
 		} else if errors.Is(installCtx.Err(), context.DeadlineExceeded) {
@@ -130,19 +122,8 @@ func ghInstallContext(ctx context.Context, wd, name, tag string) (err error) {
 	if res.ContentLength > maxPackageTarballSize {
 		return errRepoTooLarge
 	}
-	download := &io.LimitedReader{R: res.Body, N: maxPackageTarballSize + 1}
-	unzip, err := gzip.NewReader(&contextReader{ctx: installCtx, reader: download})
-	if err != nil {
-		return err
-	}
-	defer unzip.Close()
-	unpacked := &io.LimitedReader{R: unzip, N: maxPackageTarballSize + 1}
-	err = extractPackageTarContext(installCtx, wd, name, unpacked)
-	if err == nil {
-		// Read through the gzip trailer and count any remaining archive data.
-		_, err = io.Copy(io.Discard, &contextReader{ctx: installCtx, reader: unpacked})
-	}
-	if download.N == 0 || unpacked.N == 0 {
+	err = extractPackageTarballContext(installCtx, wd, name, res.Body)
+	if errors.Is(err, errPackageTooLarge) {
 		err = errRepoTooLarge
 	}
 	return

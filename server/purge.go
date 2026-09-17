@@ -112,6 +112,18 @@ func purgePackageCache(npmrc *NpmRC, metaDB *BuildMetaDB, esmStorage storage.Sto
 	for _, prefix := range prefixes {
 		resp.CacheKeys = append(resp.CacheKeys, deleteCacheItemsWithPrefix(prefix)...)
 	}
+	keys, err := negativeCache.delete("404:"+npmrc.getRegistryByPackageName(esmPath.PkgName).Registry+esmPath.PkgName+"@", true)
+	if err != nil {
+		return nil, err
+	}
+	resp.CacheKeys = append(resp.CacheKeys, keys...)
+	if esmPath.GhPrefix || esmPath.PrPrefix {
+		keys, err = negativeCache.delete("404:"+strings.TrimSuffix(pkgId, "@"+esmPath.PkgVersion)+"@", true)
+		if err != nil {
+			return nil, err
+		}
+		resp.CacheKeys = append(resp.CacheKeys, keys...)
+	}
 
 	// A floating specifier only asks to re-check which version is current, so
 	// the resolution refresh above is enough: keep the build and let the next
@@ -124,6 +136,20 @@ func purgePackageCache(npmrc *NpmRC, metaDB *BuildMetaDB, esmStorage storage.Sto
 		}
 		return resp, nil
 	}
+	keys, err = negativeCache.delete("404-path:"+pkgId+"/", true)
+	if err != nil {
+		return nil, err
+	}
+	resp.CacheKeys = append(resp.CacheKeys, keys...)
+	tooLargeKey := "npm-too-large:" + npmrc.getRegistryByPackageName(esmPath.PkgName).Registry + pkgId
+	if esmPath.GhPrefix {
+		tooLargeKey = "gh-too-large:" + strings.ToLower(esmPath.PkgName) + "@" + esmPath.PkgVersion
+	}
+	keys, err = negativeCache.delete(tooLargeKey, false)
+	if err != nil {
+		return nil, err
+	}
+	resp.CacheKeys = append(resp.CacheKeys, keys...)
 
 	// Block legacy metadata before deleting the package's metadata namespace.
 	unlock := metaDB.lockPackage("meta/"+pkgId, true)
@@ -131,7 +157,7 @@ func purgePackageCache(npmrc *NpmRC, metaDB *BuildMetaDB, esmStorage storage.Sto
 	if err := esmStorage.Put("meta-purged/"+pkgId, strings.NewReader("")); err != nil {
 		return nil, err
 	}
-	keys, err := esmStorage.DeleteAll("meta/" + pkgId + "/")
+	keys, err = esmStorage.DeleteAll("meta/" + pkgId + "/")
 	if err != nil {
 		return nil, err
 	}

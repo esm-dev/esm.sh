@@ -79,6 +79,82 @@ func TestInstallLockCancellation(t *testing.T) {
 	})
 }
 
+func TestNpmTooLargeVersion(t *testing.T) {
+	useNegativeCache(t)
+	workDir, transport := config.WorkDir, http.DefaultTransport
+	config.WorkDir = t.TempDir()
+	t.Cleanup(func() { config.WorkDir, http.DefaultTransport = workDir, transport })
+	reg := &NpmRegistry{NpmRegistryConfig: NpmRegistryConfig{Registry: npmRegistry}}
+	npmrc := &NpmRC{globalRegistry: reg}
+	const name = "negative-size-test"
+	for _, version := range []string{"1.0.0", "2.0.0"} {
+		key := "npm:" + name + "@" + version
+		setCacheItem(key, &npm.PackageJSON{Name: name, Version: version, Dist: npm.NpmPackageDist{Tarball: "https://registry.npmjs.org/" + version + ".tgz"}}, time.Minute)
+		t.Cleanup(func() { deleteCacheItem(key) })
+	}
+	requests := 0
+	http.DefaultTransport = ghTestTransport(func(r *http.Request) (*http.Response, error) {
+		requests++
+		return &http.Response{StatusCode: 200, ContentLength: maxPackageTarballSize + 1, Body: http.NoBody}, nil
+	})
+	for _, version := range []string{"1.0.0", "1.0.0", "2.0.0"} {
+		_, err := npmrc.installPackage(npm.Package{Name: name, Version: version})
+		if !errors.Is(err, errPackageTooLarge) {
+			t.Fatalf("%s: expected size error, got %v", version, err)
+		}
+		if existsDir(filepath.Join(npmrc.StoreDir(), name+"@"+version)) {
+			t.Fatal("oversized package left an installation")
+		}
+	}
+	if requests != 2 {
+		t.Fatalf("expected one request per version, got %d", requests)
+	}
+	if negativeCache.get("npm-too-large:"+npmRegistry+name+"@latest") != "" {
+		t.Fatal("stored a floating version")
+	}
+}
+
+func TestPackageNotFoundCache(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		useNegativeCache(t)
+		transport := http.DefaultTransport
+		t.Cleanup(func() { http.DefaultTransport = transport })
+		for _, test := range []struct{ name, version string }{{"negative-package-test", "latest"}, {"negative-version-test", "1.0.0"}, {"negative-range-test", "^9"}} {
+			defer deleteCacheItemsWithPrefix("npm:" + test.name + "@")
+			reg := &NpmRegistry{NpmRegistryConfig: NpmRegistryConfig{Registry: npmRegistry}}
+			npmrc := &NpmRC{globalRegistry: reg}
+			requests := 0
+			http.DefaultTransport = ghTestTransport(func(r *http.Request) (*http.Response, error) {
+				requests++
+				if requests == 1 && test.version != "^9" {
+					return &http.Response{StatusCode: 404, Body: http.NoBody}, nil
+				}
+				body := `{"name":"` + test.name + `","version":"1.0.0"}`
+				if test.version == "^9" {
+					body = `{"versions":{"1.0.0":{"version":"1.0.0"}}}`
+					if requests > 1 {
+						body = `{"versions":{"9.0.0":{"version":"9.0.0"}}}`
+					}
+				}
+				return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body))}, nil
+			})
+			for range 2 {
+				if _, err := npmrc.getPackageInfo(test.name, test.version); err == nil {
+					t.Fatal("expected a missing package/version")
+				}
+			}
+			time.Sleep(packageNotFoundTTL - time.Second)
+			if _, err := npmrc.getPackageInfo(test.name, test.version); err == nil || requests != 1 {
+				t.Fatalf("negative cache missed: %v, requests=%d", err, requests)
+			}
+			time.Sleep(time.Second)
+			if _, err := npmrc.getPackageInfo(test.name, test.version); err != nil || requests != 2 {
+				t.Fatalf("expired miss did not recover: %v, requests=%d", err, requests)
+			}
+		}
+	})
+}
+
 func TestResolveSemverVersion(t *testing.T) {
 	for _, test := range []struct {
 		name    string

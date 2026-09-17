@@ -140,8 +140,14 @@ func newPurgeTestEnv(t *testing.T) (storage.Storage, *BuildMetaDB, *log.Logger) 
 }
 
 func TestPurgePackageCache(t *testing.T) {
+	useNegativeCache(t)
 	fs, metaDB, logger := newPurgeTestEnv(t)
 	esm := EsmPath{PkgName: "example", PkgVersion: "1.0.0"}
+	negativeKeys := []string{"404:" + testNpmRegistry + "example@latest", "404-path:example@1.0.0/raw:missing.json", "npm-too-large:" + testNpmRegistry + "example@1.0.0"}
+	for _, key := range negativeKeys {
+		negativeCache.put(key, "not found", 0)
+	}
+	negativeCache.put("npm-too-large:"+testNpmRegistry+"example@1.0.01", "too large", 0)
 
 	// seed build outputs, types, metadata, resolution caches and the local store
 	for _, key := range []string{
@@ -242,6 +248,14 @@ func TestPurgePackageCache(t *testing.T) {
 		t.Fatal("expected a sibling package cache to survive")
 	}
 	// the local npm store copy must be removed
+	for _, key := range negativeKeys {
+		if negativeCache.get(key) != "" || !slices.Contains(resp.CacheKeys, key) {
+			t.Fatalf("negative cache record was not purged: %s", key)
+		}
+	}
+	if negativeCache.get("npm-too-large:"+testNpmRegistry+"example@1.0.01") == "" {
+		t.Fatal("purge removed another version's size record")
+	}
 	if _, err := os.Lstat(installDir); !os.IsNotExist(err) {
 		t.Fatalf("expected install dir %s to be removed, got err=%v", installDir, err)
 	}
