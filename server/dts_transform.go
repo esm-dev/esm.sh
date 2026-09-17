@@ -2,16 +2,65 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"fmt"
+	"io"
 	"os"
 	"path"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/esm-dev/esm.sh/internal/npm"
 	"github.com/esm-dev/esm.sh/internal/storage"
 	"github.com/ije/gox/utils"
 )
+
+type dtsFile struct {
+	ready   chan struct{}
+	statErr error
+	visited bool
+	done    chan struct{}
+	err     error
+}
+
+type dtsTransform struct {
+	ctx     context.Context
+	storage storage.Storage
+	files   map[string]*dtsFile
+	slots   chan struct{}
+	pending sync.WaitGroup
+}
+
+// stat prefetches storage metadata while the caller walks the declaration graph.
+func (t *dtsTransform) stat(savePath string) *dtsFile {
+	if file, ok := t.files[savePath]; ok {
+		return file
+	}
+	file := &dtsFile{ready: make(chan struct{})}
+	t.files[savePath] = file
+	t.pending.Go(func() {
+		defer close(file.ready)
+		select {
+		case t.slots <- struct{}{}:
+			defer func() { <-t.slots }()
+		case <-t.ctx.Done():
+			file.statErr = t.ctx.Err()
+			return
+		}
+		if file.statErr = t.ctx.Err(); file.statErr != nil {
+			return
+		}
+		if s, ok := t.storage.(interface {
+			StatContext(context.Context, string) (storage.Stat, error)
+		}); ok {
+			_, file.statErr = s.StatContext(t.ctx, savePath)
+		} else {
+			_, file.statErr = t.storage.Stat(savePath)
+		}
+	})
+	return file
+}
 
 func (ctx *BuildContext) transformDTS(dts string) error {
 	start := time.Now()
@@ -26,22 +75,38 @@ func (ctx *BuildContext) transformDTS(dts string) error {
 }
 
 // transformDTS transforms a `.d.ts` file for deno/editor-lsp
-func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker map[string]struct{}) (n int, err error) {
-	entry := marker == nil
+func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, transform *dtsTransform) (n int, err error) {
+	entry := transform == nil
 	if entry {
-		marker = map[string]struct{}{}
+		buildCtx, cancel := context.WithCancel(ctx.Context())
+		defer cancel()
+		transform = &dtsTransform{ctx: buildCtx, storage: ctx.storage, files: map[string]*dtsFile{}, slots: make(chan struct{}, 16)}
+		defer func() {
+			if err != nil {
+				cancel()
+			}
+			transform.pending.Wait()
+		}()
 	}
-
-	dtsPath := path.Join("/"+ctx.esmPath.PackageId(), buildArgsPrefix, dts)
-	if _, ok := marker[dtsPath]; ok {
-		// already transformed
+	if err = transform.ctx.Err(); err != nil {
 		return
 	}
-	marker[dtsPath] = struct{}{}
 
-	savePath := normalizeSavePath(path.Join("types", dtsPath))
-	// check if the dts file has been transformed
-	_, err = ctx.storage.Stat(savePath)
+	savePath := normalizeSavePath(path.Join("types", "/"+ctx.esmPath.PackageId(), buildArgsPrefix, dts))
+	file := transform.stat(savePath)
+	if file.visited {
+		return
+	}
+	file.visited = true
+	select {
+	case <-file.ready:
+		err = file.statErr
+	case <-transform.ctx.Done():
+		err = transform.ctx.Err()
+	}
+	if canceled := transform.ctx.Err(); canceled != nil {
+		err = canceled
+	}
 	if err == nil || err != storage.ErrNotFound {
 		return
 	}
@@ -61,7 +126,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 	}
 	buffer := &bytes.Buffer{}
 
-	deps := map[string]struct{}{}
+	deps := map[string]*dtsFile{}
 	type resolutionKey struct {
 		specifier string
 		kind      TsImportKind
@@ -73,6 +138,9 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 	resolutions := map[resolutionKey]resolutionValue{}
 
 	err = parseDts(dtsContent, buffer, func(specifier string, kind TsImportKind, position int) (resolvedSpecifier string, resolveErr error) {
+		if err := transform.ctx.Err(); err != nil {
+			return "", err
+		}
 		key := resolutionKey{specifier, kind}
 		if cached, ok := resolutions[key]; ok {
 			return cached.specifier, cached.err
@@ -137,7 +205,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 			}
 
 			if endsWith(specifier, ".d.ts", ".d.mts", ".d.cts") {
-				deps[specifier] = struct{}{}
+				deps[specifier] = transform.stat(normalizeSavePath(path.Join("types", "/"+ctx.esmPath.PackageId(), buildArgsPrefix, path.Dir(dts), specifier)))
 			} else {
 				specifier += ".d.ts"
 			}
@@ -291,17 +359,65 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, marker 
 		return
 	}
 
-	for s := range deps {
+	var dependencies []*dtsFile
+	for s, dependency := range deps {
 		var j int
-		j, err = transformDTS(ctx, "./"+path.Join(path.Dir(dts), s), buildArgsPrefix, marker)
+		j, err = transformDTS(ctx, "./"+path.Join(path.Dir(dts), s), buildArgsPrefix, transform)
 		if err != nil {
 			return
 		}
 		n += j
+		// Ancestors in a cycle have no upload yet, matching the depth-first walk.
+		if dependency.done != nil {
+			dependencies = append(dependencies, dependency)
+		}
 	}
 
-	err = ctx.storage.Put(savePath, ctx.rewriteDTS(dts, buffer))
-	if err == nil && !entry {
+	file.done = make(chan struct{})
+	transform.pending.Go(func() {
+		defer close(file.done)
+		for _, dependency := range dependencies {
+			select {
+			case <-dependency.done:
+				if dependency.err != nil {
+					file.err = dependency.err
+					return
+				}
+			case <-transform.ctx.Done():
+				file.err = transform.ctx.Err()
+				return
+			}
+		}
+		select {
+		case transform.slots <- struct{}{}:
+			defer func() { <-transform.slots }()
+		case <-transform.ctx.Done():
+			file.err = transform.ctx.Err()
+			return
+		}
+		if file.err = transform.ctx.Err(); file.err != nil {
+			return
+		}
+		content := ctx.rewriteDTS(dts, buffer)
+		if s, ok := ctx.storage.(interface {
+			PutContext(context.Context, string, io.Reader) error
+		}); ok {
+			file.err = s.PutContext(transform.ctx, savePath, content)
+		} else {
+			file.err = ctx.storage.Put(savePath, content)
+		}
+		if file.err == nil {
+			file.err = transform.ctx.Err()
+		}
+	})
+	if entry {
+		select {
+		case <-file.done:
+			err = file.err
+		case <-transform.ctx.Done():
+			err = transform.ctx.Err()
+		}
+	} else {
 		n++
 	}
 	return

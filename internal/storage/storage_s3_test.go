@@ -53,13 +53,7 @@ func TestS3StorageBuildCancellation(t *testing.T) {
 	for _, method := range []string{"HEAD", "PUT"} {
 		t.Run(method, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
-				s, ok := any(&s3Storage{apiEndpoint: "https://storage.test"}).(interface {
-					StatContext(context.Context, string) (Stat, error)
-					PutContext(context.Context, string, io.Reader) error
-				})
-				if !ok {
-					t.Fatal("S3 declaration I/O does not support build cancellation")
-				}
+				s := &s3Storage{apiEndpoint: "https://storage.test"}
 				client := http.DefaultClient
 				defer func() { http.DefaultClient = client }()
 				started := make(chan struct{})
