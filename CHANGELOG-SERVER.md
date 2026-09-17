@@ -1,5 +1,9 @@
 # Server Changelog
 
+## v139_1
+
+* Fix build queue stalls caused by uncancellable install locks
+
 ## v139
 
 * Add a cache purge page and API with proof-of-work, optional GitHub login, and Cloudflare cache purging. (#1405)
