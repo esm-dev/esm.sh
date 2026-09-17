@@ -140,6 +140,9 @@ func (ctx *BuildContext) Build(buildCtx context.Context) (meta *BuildMeta, err e
 	if err = ctx.checkCanceled(); err != nil {
 		return
 	}
+	if message := ctx.npmrc.getCachedPackageNotFound(ctx.esmPath.Package()); message != "" {
+		return nil, errors.New(message)
+	}
 	if ctx.esmPath.PkgVersion != "" && (ctx.esmPath.GhPrefix || ctx.esmPath.PrPrefix || npm.IsExactVersion(ctx.esmPath.PkgVersion)) {
 		key := "404-path:" + ctx.esmPath.PackageId() + "/build:" + ctx.Path()
 		if message := negativeCache.get(key); message != "" {

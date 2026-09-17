@@ -97,6 +97,23 @@ func (npmrc *NpmRC) getRegistryByPackageName(packageName string) *NpmRegistry {
 	return npmrc.globalRegistry
 }
 
+func (npmrc *NpmRC) getCachedPackageNotFound(pkg npm.Package) string {
+	if npmrc == nil || negativeCache == nil {
+		return ""
+	}
+	key := "404:"
+	if !pkg.Github && !pkg.PkgPrNew {
+		key += npmrc.getRegistryByPackageName(pkg.Name).Registry
+		if message := negativeCache.get(key + pkg.Name + "@"); message != "" {
+			return message
+		}
+		if message := negativeCache.get(key + pkg.Name + "@" + npm.NormalizePackageVersion(pkg.Version)); message != "" {
+			return message
+		}
+	}
+	return negativeCache.get(key + pkg.String() + "/install")
+}
+
 func (npmrc *NpmRC) fetchPackageMetadataContext(ctx context.Context, pkgName string, version string, isWellknownVersion bool) (*npm.PackageMetadata, *npm.PackageJSONRaw, error) {
 	reg := npmrc.getRegistryByPackageName(pkgName)
 	missingKey := "404:" + reg.Registry + pkgName + "@"
@@ -368,6 +385,9 @@ func lockInstall(ctx context.Context, key string) (func(), error) {
 func (npmrc *NpmRC) installPackageContext(ctx context.Context, pkg npm.Package) (packageJson *npm.PackageJSON, err error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
+	}
+	if message := npmrc.getCachedPackageNotFound(pkg); message != "" {
+		return nil, errors.New(message)
 	}
 	installDir := filepath.Join(npmrc.StoreDir(), pkg.String())
 	packageJsonPath := filepath.Join(installDir, "node_modules", pkg.Name, "package.json")
