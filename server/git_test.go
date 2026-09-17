@@ -61,6 +61,7 @@ func TestGhInstall(t *testing.T) {
 }
 
 func TestGhInstallLimits(t *testing.T) {
+	useNegativeCache(t)
 	workDir, transport := config.WorkDir, http.DefaultTransport
 	config.WorkDir = t.TempDir()
 	t.Cleanup(func() {
@@ -80,8 +81,9 @@ func TestGhInstallLimits(t *testing.T) {
 			requests := 0
 			http.DefaultTransport = ghTestTransport(func(r *http.Request) (*http.Response, error) {
 				requests++
+				tooLarge := test.tooLarge && strings.HasSuffix(r.URL.Path, "/main")
 				res := &http.Response{StatusCode: 200, Header: http.Header{}, ContentLength: -1}
-				if test.name == "content-length" {
+				if test.name == "content-length" && tooLarge {
 					res.ContentLength = maxPackageTarballSize + 1
 					res.Body = io.NopCloser(strings.NewReader(""))
 				} else if test.name == "invalid" {
@@ -105,7 +107,7 @@ func TestGhInstallLimits(t *testing.T) {
 						if _, err := tw.Write([]byte("{}")); err != nil {
 							return
 						}
-						if test.tooLarge {
+						if tooLarge {
 							if err := tw.WriteHeader(&tar.Header{Name: "repo/large.bin", Mode: 0644, Size: maxPackageTarballSize + 1}); err != nil {
 								return
 							}
@@ -122,11 +124,17 @@ func TestGhInstallLimits(t *testing.T) {
 				if err != errRepoTooLarge || err.Error() != "repo is too large" {
 					t.Fatalf("expected repo size error, got %v", err)
 				}
-				if err := ghInstall(wd, strings.ToUpper(repo), "another-tag"); err != errRepoTooLarge {
+				if err := ghInstall(wd, strings.ToUpper(repo), "main"); err != errRepoTooLarge {
 					t.Fatalf("expected recorded repo size error, got %v", err)
 				}
 				if requests != 1 {
 					t.Fatalf("recorded repo was fetched again: %d requests", requests)
+				}
+				if err := ghInstall(filepath.Join(t.TempDir(), "other"), repo, "another-tag"); err != nil {
+					t.Fatalf("oversized ref blocked another ref: %v", err)
+				}
+				if requests != 2 {
+					t.Fatalf("another ref was not fetched: %d requests", requests)
 				}
 			} else if test.name == "valid" {
 				if err != nil {
@@ -145,13 +153,14 @@ func TestGhInstallLimits(t *testing.T) {
 			}
 		})
 	}
-	files, err := os.ReadDir(filepath.Join(config.WorkDir, "gh-too-large"))
-	if err != nil || len(files) != 3 {
-		t.Fatalf("expected three persistent repo records, got %d: %v", len(files), err)
+	keys, err := negativeCache.delete("gh-too-large:", true)
+	if err != nil || len(keys) != 3 {
+		t.Fatalf("expected three persistent ref records, got %d: %v", len(keys), err)
 	}
 }
 
 func TestGhInstallTimeout(t *testing.T) {
+	useNegativeCache(t)
 	workDir, transport := config.WorkDir, http.DefaultTransport
 	config.WorkDir = t.TempDir()
 	t.Cleanup(func() {
@@ -210,7 +219,7 @@ func TestGhInstallTimeout(t *testing.T) {
 			})
 		})
 	}
-	if existsDir(filepath.Join(config.WorkDir, "gh-too-large")) {
+	if negativeCache.get("gh-too-large:owner/timeout@main") != "" {
 		t.Fatal("timed out repo was recorded as too large")
 	}
 }

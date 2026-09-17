@@ -140,6 +140,24 @@ func (ctx *BuildContext) Build(buildCtx context.Context) (meta *BuildMeta, err e
 	if err = ctx.checkCanceled(); err != nil {
 		return
 	}
+	if ctx.esmPath.PkgVersion != "" && (ctx.esmPath.GhPrefix || ctx.esmPath.PrPrefix || npm.IsExactVersion(ctx.esmPath.PkgVersion)) {
+		key := "404-path:" + ctx.esmPath.PackageId() + "/build:" + ctx.Path()
+		if message := negativeCache.get(key); message != "" {
+			return nil, errors.New(message)
+		}
+		defer func() {
+			// Missing dependencies and transient install failures can recover.
+			if err == nil || ctx.pkgJson == nil {
+				return
+			}
+			entry := ctx.resolveEntry(ctx.esmPath)
+			missingEntry := err.Error() == "could not resolve build entry" && entry.isEmpty()
+			missingTypes := err.Error() == "types not found" && (ctx.target == "types" || entry.isTypesOnly())
+			if missingEntry || missingTypes {
+				negativeCache.put(key, err.Error(), 0)
+			}
+		}()
+	}
 	if ctx.target == "types" {
 		return ctx.buildTypes()
 	}

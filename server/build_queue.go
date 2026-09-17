@@ -50,6 +50,9 @@ func (q *BuildQueue) Build(ctx context.Context, build *BuildContext) (*BuildMeta
 		return nil, err
 	}
 	path := build.Path()
+	if message := negativeCache.get("404-path:" + build.esmPath.PackageId() + "/build:" + path); message != "" {
+		return nil, errors.New(message)
+	}
 	q.lock.Lock()
 	task := q.tasks[path]
 	if task == nil {

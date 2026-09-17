@@ -47,6 +47,7 @@ const (
 
 const (
 	ccMustRevalidate = "public, max-age=0, must-revalidate"
+	ccTenMinutes     = "public, max-age=600"
 	ccOneDay         = "public, max-age=86400"
 	ccImmutable      = "public, max-age=31536000, immutable"
 	ctHTML           = "text/html; charset=utf-8"
@@ -64,18 +65,6 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 		npmrc      = DefaultNpmRC()
 		metaDB     = NewBuildMetaDB(esmStorage)
 	)
-
-	// purge npm cache when disk is low or full
-	go func() {
-		// run an initial check before waiting for the first ticker event
-		purgeNPMCacheWhenDiskIsLowOrFull(npmrc, logger)
-
-		ticker := time.NewTicker(1 * time.Hour)
-		defer ticker.Stop()
-		for range ticker.C {
-			go purgeNPMCacheWhenDiskIsLowOrFull(npmrc, logger)
-		}
-	}()
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		pathname := r.URL.Path
@@ -229,6 +218,12 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 					return
 				}
 				cacheKeys := deleteCacheItemsWithPrefix("404:" + esmPath.PkgName + "@")
+				keys, err := negativeCache.delete("404:"+npmrc.getRegistryByPackageName(esmPath.PkgName).Registry+esmPath.PkgName+"@", true)
+				if err != nil {
+					writeJSONError(w, 500, "failed to purge cache: "+err.Error())
+					return
+				}
+				cacheKeys = append(cacheKeys, keys...)
 				esmPath, _, exactVersion, _, _, err := parseEsmPath(npmrc, pathname)
 				if err != nil {
 					writeJSONError(w, 400, err.Error())
@@ -653,7 +648,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 				header.Set("Cache-Control", ccImmutable)
 			} else if strings.HasSuffix(message, " not found") {
 				status = 404
-				header.Set("Cache-Control", fmt.Sprintf("public, max-age=%d", config.NpmQueryCacheTTL))
+				header.Set("Cache-Control", ccTenMinutes)
 			}
 			writeStatus(w, status, message)
 			return
@@ -790,6 +785,30 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 			}
 		}
 
+		rawNotFoundKey := ""
+		if isExactVersion && pathKind == RawFile {
+			mode := ""
+			if query.Has("module") {
+				mode = "module"
+			}
+			if hasTargetSegment && !rawFlag {
+				mode += ":relative:" + target
+			}
+			rawNotFoundKey = "404-path:" + esmPath.PackageId() + "/raw:" + esmPath.SubPath + "?" + mode
+			if message := negativeCache.get(rawNotFoundKey); message != "" {
+				header.Set("Cache-Control", ccImmutable)
+				writeStatus(w, 404, message)
+				return
+			}
+		}
+		writeRawNotFound := func(message string) {
+			if rawNotFoundKey != "" {
+				negativeCache.put(rawNotFoundKey, message, 0)
+			}
+			header.Set("Cache-Control", ccImmutable)
+			writeStatus(w, 404, message)
+		}
+
 		if pathKind == RawFile && !esmPath.GhPrefix && !rawFlag && esmPath.SubPath != "" && strings.HasSuffix(esmPath.SubPath, ".map") {
 			pkgJson, err := npmrc.installPackage(esmPath.Package())
 			if err != nil {
@@ -900,7 +919,8 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 			defer res.Body.Close()
 			if res.StatusCode != 200 && res.StatusCode != 304 {
 				if res.StatusCode == 404 {
-					header.Set("Cache-Control", ccImmutable)
+					writeRawNotFound(http.StatusText(res.StatusCode))
+					return
 				}
 				writeStatus(w, res.StatusCode, http.StatusText(res.StatusCode))
 				return
@@ -985,8 +1005,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 				}
 			}
 			if file == "" {
-				header.Set("Cache-Control", ccImmutable)
-				writeStatus(w, 404, "File not found")
+				writeRawNotFound("File not found")
 				return
 			}
 			url := fmt.Sprintf("%s%s/%s@%s/%s", origin, registryPrefix, esmPath.PkgName, esmPath.PkgVersion, file)
@@ -1022,6 +1041,10 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 					css, err = os.ReadFile(filename)
 				}
 				if err != nil {
+					if os.IsNotExist(err) {
+						writeRawNotFound("File Not Found")
+						return
+					}
 					writeStatus(w, 500, err.Error())
 					return
 				}
@@ -1056,8 +1079,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 					}
 					entry := b.resolveEntry(esmPath)
 					if entry.main == "" {
-						header.Set("Cache-Control", ccImmutable)
-						writeStatus(w, 404, "File Not Found")
+						writeRawNotFound("File Not Found")
 						return
 					}
 					query := ""
@@ -1102,16 +1124,14 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 							redirect(w, fmt.Sprintf("%s/%s%s%s", origin, esmPath.PackageId(), utils.NormalizePathname(entry.main), query), true)
 							return
 						}
-						header.Set("Cache-Control", ccImmutable)
-						writeStatus(w, 404, "File Not Found")
+						writeRawNotFound("File Not Found")
 						return
 					}
 					writeStatus(w, 500, err.Error())
 					return
 				}
 				if stat.IsDir() {
-					header.Set("Cache-Control", ccImmutable)
-					writeStatus(w, 404, "File Not Found")
+					writeRawNotFound("File Not Found")
 					return
 				}
 				// limit the file size up to 50MB
@@ -1563,7 +1583,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 			if err != nil {
 				msg := err.Error()
 				if msg == "could not resolve build entry" || strings.HasSuffix(msg, " not found") || strings.Contains(msg, "is not exported from package") || strings.Contains(msg, "no such file or directory") {
-					header.Set("Cache-Control", fmt.Sprintf("public, max-age=%d", config.NpmQueryCacheTTL))
+					header.Set("Cache-Control", ccTenMinutes)
 					writeStatus(w, 404, msg)
 					return
 				}

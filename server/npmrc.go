@@ -33,8 +33,9 @@ const (
 )
 
 var (
-	defaultNpmRC *NpmRC
-	installLocks sync.Map
+	defaultNpmRC       *NpmRC
+	installLocks       sync.Map
+	errPackageTooLarge = errors.New("package is too large")
 )
 
 type NpmRegistry struct {
@@ -98,6 +99,10 @@ func (npmrc *NpmRC) getRegistryByPackageName(packageName string) *NpmRegistry {
 
 func (npmrc *NpmRC) fetchPackageMetadataContext(ctx context.Context, pkgName string, version string, isWellknownVersion bool) (*npm.PackageMetadata, *npm.PackageJSONRaw, error) {
 	reg := npmrc.getRegistryByPackageName(pkgName)
+	missingKey := "404:" + reg.Registry + pkgName + "@"
+	if message := negativeCache.get(missingKey); message != "" {
+		return nil, nil, errors.New(message)
+	}
 	regUrlStr := reg.Registry
 	if reg.isRateLimited() && reg.BackupRegistry != "" {
 		// use backup registry if the global registry is rate limited
@@ -150,6 +155,9 @@ RETRY:
 	defer res.Body.Close()
 
 	if res.StatusCode == 404 || res.StatusCode == 401 {
+		if res.StatusCode == 404 && !useVersionRoute {
+			negativeCache.put(missingKey, fmt.Sprintf("package '%s' not found", pkgName), packageNotFoundTTL)
+		}
 		if isWellknownVersion && version != "latest" {
 			return nil, nil, fmt.Errorf("version %s of '%s' not found", version, pkgName)
 		} else {
@@ -234,12 +242,21 @@ func (npmrc *NpmRC) getPackageInfoContext(ctx context.Context, pkgName string, v
 
 	version = npm.NormalizePackageVersion(version)
 
-	if msg, ok := getCacheItem("404:" + pkgName + "@" + version); ok {
-		return nil, errors.New(msg.(string))
-	}
-
 	ttl := time.Duration(config.NpmQueryCacheTTL) * time.Second
-	return withCache("npm:"+pkgName+"@"+version, ttl, func() (*npm.PackageJSON, string, error) {
+	return withCache("npm:"+pkgName+"@"+version, ttl, func() (_ *npm.PackageJSON, _ string, err error) {
+		key := "404:" + npmrc.getRegistryByPackageName(pkgName).Registry + pkgName + "@"
+		if message := negativeCache.get(key); message != "" {
+			return nil, "", errors.New(message)
+		}
+		key += version
+		if message := negativeCache.get(key); message != "" {
+			return nil, "", errors.New(message)
+		}
+		defer func() {
+			if err != nil && strings.HasSuffix(err.Error(), " not found") {
+				negativeCache.put(key, err.Error(), packageNotFoundTTL)
+			}
+		}()
 		if npm.IsExactVersion(version) {
 			var raw npm.PackageJSONRaw
 			pkgJsonPath := filepath.Join(npmrc.StoreDir(), pkgName+"@"+version, "node_modules", pkgName, "package.json")
@@ -250,9 +267,6 @@ func (npmrc *NpmRC) getPackageInfoContext(ctx context.Context, pkgName string, v
 
 		metadata, raw, err := npmrc.fetchPackageMetadataContext(ctx, pkgName, version, npm.IsExactVersion(version) || npm.IsDistTag(version))
 		if err != nil {
-			if msg := err.Error(); strings.HasSuffix(msg, "not found") {
-				setCacheItem("404:"+pkgName+"@"+version, msg, ttl)
-			}
 			return nil, "", err
 		}
 
@@ -293,6 +307,7 @@ func invalidateDistTagCacheIfNewer(pkgName string, version string) {
 	}
 	deleteCacheItem(key)
 	deleteCacheItem("404:" + pkgName + "@latest")
+	negativeCache.delete("404:"+DefaultNpmRC().getRegistryByPackageName(pkgName).Registry+pkgName+"@latest", false)
 }
 
 func (npmrc *NpmRC) getPackageInfoByDate(pkgName string, targetDate time.Time) (packageJson *npm.PackageJSON, err error) {
@@ -379,6 +394,19 @@ func (npmrc *NpmRC) installPackageContext(ctx context.Context, pkg npm.Package) 
 		packageJson = raw.ToNpmPackage()
 		return
 	}
+	missingKey := "404:"
+	if !pkg.Github && !pkg.PkgPrNew {
+		missingKey += npmrc.getRegistryByPackageName(pkg.Name).Registry
+	}
+	missingKey += pkg.String() + "/install"
+	if message := negativeCache.get(missingKey); message != "" {
+		return nil, errors.New(message)
+	}
+	defer func() {
+		if err != nil && strings.HasSuffix(err.Error(), " not found") && (strings.HasPrefix(err.Error(), "tarball of package") || strings.HasPrefix(err.Error(), "github: repo")) {
+			negativeCache.put(missingKey, err.Error(), packageNotFoundTTL)
+		}
+	}()
 
 	if pkg.Github {
 		err = ghInstallContext(ctx, installDir, pkg.Name, pkg.Version)
@@ -425,6 +453,11 @@ func (npmrc *NpmRC) installPackageContext(ctx context.Context, pkg npm.Package) 
 	} else if pkg.PkgPrNew {
 		err = fetchPackageTarballContext(ctx, &NpmRegistry{}, installDir, pkg.Name, "https://pkg.pr.new/"+pkg.Name+"@"+pkg.Version)
 	} else {
+		reg := npmrc.getRegistryByPackageName(pkg.Name)
+		tooLargeKey := "npm-too-large:" + reg.Registry + pkg.Name + "@"
+		if npm.IsExactVersion(pkg.Version) && negativeCache.get(tooLargeKey+pkg.Version) != "" {
+			return nil, errPackageTooLarge
+		}
 		info, fetchErr := npmrc.getPackageInfoContext(ctx, pkg.Name, pkg.Version)
 		if fetchErr != nil {
 			return nil, fetchErr
@@ -432,7 +465,14 @@ func (npmrc *NpmRC) installPackageContext(ctx context.Context, pkg npm.Package) 
 		if info.Deprecated != "" {
 			os.WriteFile(filepath.Join(installDir, "deprecated.txt"), []byte(info.Deprecated), 0644)
 		}
-		err = fetchPackageTarballContext(ctx, npmrc.getRegistryByPackageName(pkg.Name), installDir, info.Name, info.Dist.Tarball)
+		tooLargeKey += info.Version
+		if npm.IsExactVersion(info.Version) && negativeCache.get(tooLargeKey) != "" {
+			return nil, errPackageTooLarge
+		}
+		err = fetchPackageTarballContext(ctx, reg, installDir, info.Name, info.Dist.Tarball)
+		if errors.Is(err, errPackageTooLarge) && npm.IsExactVersion(info.Version) {
+			negativeCache.put(tooLargeKey, errPackageTooLarge.Error(), 0)
+		}
 	}
 	if err != nil {
 		return
@@ -731,9 +771,13 @@ RETRY:
 		return
 	}
 
-	err = extractPackageTarballContext(ctx, installDir, pkgName, io.LimitReader(res.Body, maxPackageTarballSize))
+	if res.ContentLength > maxPackageTarballSize {
+		err = errPackageTooLarge
+	} else {
+		err = extractPackageTarballContext(ctx, installDir, pkgName, res.Body)
+	}
 	if err != nil {
-		err = fmt.Errorf("failed to extract tarball of package '%s': %v", pkgName, err)
+		err = fmt.Errorf("failed to extract tarball of package '%s': %w", pkgName, err)
 		// clear installDir if failed to extract tarball
 		os.RemoveAll(installDir)
 	}
@@ -745,12 +789,25 @@ func extractPackageTarball(installDir string, pkgName string, tarball io.Reader)
 }
 
 func extractPackageTarballContext(ctx context.Context, installDir string, pkgName string, tarball io.Reader) (err error) {
-	unziped, err := gzip.NewReader(&contextReader{ctx: ctx, reader: tarball})
+	download := &io.LimitedReader{R: tarball, N: maxPackageTarballSize + 1}
+	unziped, err := gzip.NewReader(&contextReader{ctx: ctx, reader: download})
 	if err != nil {
+		if download.N == 0 {
+			return errPackageTooLarge
+		}
 		return
 	}
 	defer unziped.Close()
-	return extractPackageTarContext(ctx, installDir, pkgName, unziped)
+	unpacked := &io.LimitedReader{R: unziped, N: maxPackageTarballSize + 1}
+	err = extractPackageTarContext(ctx, installDir, pkgName, unpacked)
+	if err == nil {
+		// Include the gzip trailer and any remaining archive data in the limit.
+		_, err = io.Copy(io.Discard, &contextReader{ctx: ctx, reader: unpacked})
+	}
+	if download.N == 0 || unpacked.N == 0 {
+		err = errPackageTooLarge
+	}
+	return
 }
 
 func extractPackageTarContext(ctx context.Context, installDir string, pkgName string, archive io.Reader) (err error) {

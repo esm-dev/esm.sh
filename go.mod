@@ -8,6 +8,7 @@ require (
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/ije/esbuild-internal v0.28.2
 	github.com/ije/gox v0.10.4
+	go.etcd.io/bbolt v1.5.0
 	golang.org/x/crypto v0.57.0
 	golang.org/x/net v0.59.0
 	golang.org/x/term v0.46.0
