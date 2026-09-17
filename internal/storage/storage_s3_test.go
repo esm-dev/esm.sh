@@ -2,9 +2,11 @@ package storage
 
 import (
 	"bytes"
+	"context"
 	"crypto/md5"
 	"encoding/base64"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,8 +14,84 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 )
+
+func TestS3StorageTimeout(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		client := http.DefaultClient
+		defer func() { http.DefaultClient = client }()
+		release := make(chan struct{})
+		http.DefaultClient = &http.Client{Transport: s3TestTransport(func(req *http.Request) (*http.Response, error) {
+			select {
+			case <-req.Context().Done():
+				return nil, req.Context().Err()
+			case <-release:
+				return nil, errors.New("request was still blocked")
+			}
+		})}
+		s3 := &s3Storage{apiEndpoint: "https://storage.test"}
+		done := make(chan error, 1)
+		go func() {
+			_, _, err := s3.Get("meta/viem@2.56.6/test")
+			done <- err
+		}()
+		time.Sleep(2 * time.Minute)
+		synctest.Wait()
+		if len(done) == 0 {
+			t.Error("S3 request has no deadline")
+		}
+		close(release)
+		if err := <-done; !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("expected request timeout, got %v", err)
+		}
+	})
+}
+
+func TestS3StorageBuildCancellation(t *testing.T) {
+	for _, method := range []string{"HEAD", "PUT"} {
+		t.Run(method, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				s, ok := any(&s3Storage{apiEndpoint: "https://storage.test"}).(interface {
+					StatContext(context.Context, string) (Stat, error)
+					PutContext(context.Context, string, io.Reader) error
+				})
+				if !ok {
+					t.Fatal("S3 declaration I/O does not support build cancellation")
+				}
+				client := http.DefaultClient
+				defer func() { http.DefaultClient = client }()
+				started := make(chan struct{})
+				http.DefaultClient = &http.Client{Transport: s3TestTransport(func(req *http.Request) (*http.Response, error) {
+					if req.Method != method {
+						t.Errorf("method = %s, want %s", req.Method, method)
+					}
+					close(started)
+					<-req.Context().Done()
+					return nil, req.Context().Err()
+				})}
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+				done := make(chan error, 1)
+				go func() {
+					var err error
+					if method == "HEAD" {
+						_, err = s.StatContext(ctx, "types/pkg@1/index.d.ts")
+					} else {
+						err = s.PutContext(ctx, "types/pkg@1/index.d.ts", bytes.NewBufferString("export {}"))
+					}
+					done <- err
+				}()
+				<-started
+				cancel()
+				if err := <-done; !errors.Is(err, context.Canceled) {
+					t.Fatalf("expected cancellation, got %v", err)
+				}
+			})
+		})
+	}
+}
 
 type s3TestTransport func(*http.Request) (*http.Response, error)
 

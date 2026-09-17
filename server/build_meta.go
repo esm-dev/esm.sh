@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"strings"
+	"sync"
 
 	"github.com/esm-dev/esm.sh/internal/storage"
 	lru "github.com/hashicorp/golang-lru/v2"
@@ -107,6 +108,13 @@ func decodeBuildMeta(data []byte) (*BuildMeta, error) {
 type BuildMetaDB struct {
 	cache   *lru.Cache[string, []byte]
 	storage storage.Storage
+	mu      sync.Mutex
+	locks   map[string]*buildMetaLock
+}
+
+type buildMetaLock struct {
+	sync.RWMutex
+	refs int
 }
 
 func NewBuildMetaDB(backStorage storage.Storage) *BuildMetaDB {
@@ -114,12 +122,44 @@ func NewBuildMetaDB(backStorage storage.Storage) *BuildMetaDB {
 	if err != nil {
 		panic(err)
 	}
-	return &BuildMetaDB{cache: cache, storage: backStorage}
+	return &BuildMetaDB{cache: cache, storage: backStorage, locks: map[string]*buildMetaLock{}}
+}
+
+// Metadata operations share the package lock; purges take it exclusively.
+func (db *BuildMetaDB) lockPackage(key string, exclusive bool) func() {
+	db.mu.Lock()
+	lock := db.locks[key]
+	if lock == nil {
+		lock = &buildMetaLock{}
+		db.locks[key] = lock
+	}
+	lock.refs++
+	db.mu.Unlock()
+	if exclusive {
+		lock.Lock()
+	} else {
+		lock.RLock()
+	}
+	return func() {
+		if exclusive {
+			lock.Unlock()
+		} else {
+			lock.RUnlock()
+		}
+		db.mu.Lock()
+		lock.refs--
+		if lock.refs == 0 {
+			delete(db.locks, key)
+		}
+		db.mu.Unlock()
+	}
 }
 
 func (db *BuildMetaDB) Get(key string) (value []byte, err error) {
 	storeKey := normalizeMetaStoreKey(key)
-	unlock := cacheMutex.Lock(metaStoreLockKey(storeKey))
+	unlockPackage := db.lockPackage(metaStoreLockKey(storeKey), false)
+	defer unlockPackage()
+	unlock := cacheMutex.Lock(storeKey)
 	defer unlock()
 	var cached bool
 	value, cached = db.cache.Get(key)
@@ -160,7 +200,9 @@ func (db *BuildMetaDB) Get(key string) (value []byte, err error) {
 
 func (db *BuildMetaDB) Put(key string, value []byte) (err error) {
 	storeKey := normalizeMetaStoreKey(key)
-	unlock := cacheMutex.Lock(metaStoreLockKey(storeKey))
+	unlockPackage := db.lockPackage(metaStoreLockKey(storeKey), false)
+	defer unlockPackage()
+	unlock := cacheMutex.Lock(storeKey)
 	defer unlock()
 	err = db.storage.Put(storeKey, bytes.NewReader(value))
 	if err == nil {
@@ -171,7 +213,9 @@ func (db *BuildMetaDB) Put(key string, value []byte) (err error) {
 
 func (db *BuildMetaDB) Delete(key string) (err error) {
 	storeKey := normalizeMetaStoreKey(key)
-	unlock := cacheMutex.Lock(metaStoreLockKey(storeKey))
+	unlockPackage := db.lockPackage(metaStoreLockKey(storeKey), false)
+	defer unlockPackage()
+	unlock := cacheMutex.Lock(storeKey)
 	defer unlock()
 	for _, name := range []string{storeKey, "meta/" + path.Base(storeKey)} {
 		if deleteErr := db.storage.Delete(name); deleteErr != nil && deleteErr != storage.ErrNotFound && !errors.Is(deleteErr, os.ErrNotExist) {

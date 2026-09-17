@@ -1245,6 +1245,11 @@ lookup:
 }
 
 func (ctx *BuildContext) lexer(entry *BuildEntry) (ret *BuildMeta, cjsExports []string, cjsReexport string, err error) {
+	if strings.HasSuffix(entry.main, ".node") {
+		err = fmt.Errorf("unsupported node native module %q", entry.main)
+		return
+	}
+
 	if entry.main != "" && entry.module {
 		if strings.HasSuffix(entry.main, ".vue") || strings.HasSuffix(entry.main, ".svelte") {
 			ret = &BuildMeta{

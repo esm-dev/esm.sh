@@ -126,7 +126,7 @@ func purgePackageCache(npmrc *NpmRC, metaDB *BuildMetaDB, esmStorage storage.Sto
 	}
 
 	// Block legacy metadata before deleting the package's metadata namespace.
-	unlock := cacheMutex.Lock("meta/" + pkgId)
+	unlock := metaDB.lockPackage("meta/"+pkgId, true)
 	defer unlock()
 	if err := esmStorage.Put("meta-purged/"+pkgId, strings.NewReader("")); err != nil {
 		return nil, err

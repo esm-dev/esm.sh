@@ -3,13 +3,61 @@ package server
 import (
 	"errors"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/esm-dev/esm.sh/internal/npm"
 	"github.com/esm-dev/esm.sh/internal/storage"
+	"github.com/ije/gox/log"
 )
+
+func TestBuildModuleNativeEntry(t *testing.T) {
+	oldConfig, oldClient := config, http.DefaultClient
+	config = &Config{WorkDir: t.TempDir()}
+	http.DefaultClient = &http.Client{Transport: ghTestTransport(func(r *http.Request) (*http.Response, error) {
+		return nil, errors.New("native entry must not install the CommonJS lexer")
+	})}
+	t.Cleanup(func() { config, http.DefaultClient = oldConfig, oldClient })
+
+	const name = "@oxfmt/binding-darwin-arm64"
+	const main = "./oxfmt.darwin-arm64.node"
+	for _, pkgType := range []string{"commonjs", "module"} {
+		for _, subPath := range []string{"", "binding"} {
+			t.Run(pkgType+"/"+subPath, func(t *testing.T) {
+				wd := t.TempDir()
+				pkgDir := filepath.Join(wd, "node_modules", name)
+				if err := os.MkdirAll(pkgDir, 0755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(pkgDir, main), []byte{0xcf, 0xfa, 0xed, 0xfe}, 0644); err != nil {
+					t.Fatal(err)
+				}
+				logger, err := log.New("")
+				if err != nil {
+					t.Fatal(err)
+				}
+				logger.SetOutput(io.Discard)
+				ctx := &BuildContext{
+					wd: wd, target: "es2022", logger: logger,
+					esmPath: EsmPath{PkgName: name, PkgVersion: "0.40.0", SubPath: subPath},
+					pkgJson: &npm.PackageJSON{
+						Name: name, Version: "0.40.0", Type: pkgType, Main: main,
+						Exports: npm.NewJSONObject([]string{"./binding"}, map[string]any{"./binding": main}),
+					},
+				}
+				meta, _, err := ctx.buildModule(false)
+				if err == nil || err.Error() != `unsupported node native module "./oxfmt.darwin-arm64.node"` {
+					t.Fatalf("expected native module error, got: %v", err)
+				}
+				if meta != nil {
+					t.Fatal("expected no build metadata")
+				}
+			})
+		}
+	}
+}
 
 func TestBuildModuleJSONPathTraversal(t *testing.T) {
 	root := t.TempDir()

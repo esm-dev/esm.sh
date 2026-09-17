@@ -2,6 +2,7 @@ package storage
 
 import (
 	"bytes"
+	"context"
 	"crypto/md5"
 	"encoding/base64"
 	"encoding/xml"
@@ -110,6 +111,13 @@ func (e s3Error) Error() string {
 }
 
 func (s3 *s3Storage) Stat(name string) (stat Stat, err error) {
+	return s3.StatContext(context.Background(), name)
+}
+
+func (s3 *s3Storage) StatContext(ctx context.Context, name string) (stat Stat, err error) {
+	if err = ctx.Err(); err != nil {
+		return
+	}
 	if name == "" {
 		return nil, errors.New("name is required")
 	}
@@ -120,9 +128,11 @@ func (s3 *s3Storage) Stat(name string) (stat Stat, err error) {
 		}
 		// ignore error
 	}
-	req, _ := http.NewRequest("HEAD", s3.apiEndpoint+"/"+name, nil)
-	s3.sign(req)
-	resp, err := http.DefaultClient.Do(req)
+	req, err := http.NewRequestWithContext(ctx, "HEAD", s3.apiEndpoint+"/"+name, nil)
+	if err != nil {
+		return
+	}
+	resp, err := s3.do(req)
 	if err != nil {
 		return
 	}
@@ -174,8 +184,7 @@ func (s3 *s3Storage) Get(name string) (content io.ReadCloser, stat Stat, err err
 		// ignore error
 	}
 	req, _ := http.NewRequest("GET", s3.apiEndpoint+"/"+name, nil)
-	s3.sign(req)
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := s3.do(req)
 	if err != nil {
 		return
 	}
@@ -239,6 +248,13 @@ func (s3 *s3Storage) Get(name string) (content io.ReadCloser, stat Stat, err err
 }
 
 func (s3 *s3Storage) Put(name string, content io.Reader) (err error) {
+	return s3.PutContext(context.Background(), name, content)
+}
+
+func (s3 *s3Storage) PutContext(ctx context.Context, name string, content io.Reader) (err error) {
+	if err = ctx.Err(); err != nil {
+		return
+	}
 	if name == "" {
 		return errors.New("name is required")
 	}
@@ -280,6 +296,7 @@ func (s3 *s3Storage) Put(name string, content io.Reader) (err error) {
 	if s3.shouldUseFSCache(name) {
 		cacheKey := s3.fsCacheKey(name)
 		pr, pw := io.Pipe()
+		defer pr.Close()
 		go func(content io.Reader) {
 			unlock := s3.fsCacheLock.Lock(name)
 			defer unlock()
@@ -288,10 +305,12 @@ func (s3 *s3Storage) Put(name string, content io.Reader) (err error) {
 		}(content)
 		content = pr
 	}
-	req, _ := http.NewRequest("PUT", s3.apiEndpoint+"/"+name, content)
-	s3.sign(req)
+	req, err := http.NewRequestWithContext(ctx, "PUT", s3.apiEndpoint+"/"+name, content)
+	if err != nil {
+		return
+	}
 	req.ContentLength = contentLength
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := s3.do(req)
 	if err != nil {
 		return
 	}
@@ -310,8 +329,7 @@ func (s3 *s3Storage) Delete(name string) (err error) {
 		go s3.fsCache.Delete(s3.fsCacheKey(name))
 	}
 	req, _ := http.NewRequest("DELETE", s3.apiEndpoint+"/"+name, nil)
-	s3.sign(req)
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := s3.do(req)
 	if err != nil {
 		return err
 	}
@@ -331,8 +349,7 @@ func (s3 *s3Storage) List(prefix string) (keys []string, err error) {
 	keys = []string{}
 	for {
 		req, _ := http.NewRequest("GET", s3.apiEndpoint+"?"+query.Encode(), nil)
-		s3.sign(req)
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := s3.do(req)
 		if err != nil {
 			return keys, err
 		}
@@ -385,8 +402,7 @@ func (s3 *s3Storage) DeleteAll(prefix string) (deletedKeys []string, err error) 
 		checksum := md5.Sum(buf.Bytes())
 		req, _ := http.NewRequest("POST", s3.apiEndpoint+"?delete", buf)
 		req.Header.Set("Content-MD5", base64.StdEncoding.EncodeToString(checksum[:]))
-		s3.sign(req)
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := s3.do(req)
 		if err != nil {
 			return deletedKeys, err
 		}
@@ -411,6 +427,15 @@ func (s3 *s3Storage) DeleteAll(prefix string) (deletedKeys []string, err error) 
 		}
 	}
 	return
+}
+
+func (s3 *s3Storage) do(req *http.Request) (*http.Response, error) {
+	s3.sign(req)
+	client := *http.DefaultClient
+	if client.Timeout <= 0 || client.Timeout > time.Minute {
+		client.Timeout = time.Minute
+	}
+	return client.Do(req)
 }
 
 // Authenticating Requests (AWS Signature Version 4)

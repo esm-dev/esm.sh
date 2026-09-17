@@ -136,6 +136,60 @@ func TestPurgeLegacyMetadata(t *testing.T) {
 	}
 }
 
+func TestPurgeWaitsForMetadataLookup(t *testing.T) {
+	oldWorkDir := config.WorkDir
+	config.WorkDir = t.TempDir()
+	t.Cleanup(func() { config.WorkDir = oldWorkDir })
+	fs, metaDB, logger := newPurgeTestEnv(t)
+	esm := EsmPath{PkgName: "purge-in-flight", PkgVersion: "1.0.0"}
+	key := "/" + esm.PackageId() + "/es2022/index.mjs"
+	if err := fs.Put(normalizeMetaStoreKey(key), strings.NewReader(string(encodeBuildMeta(&BuildMeta{})))); err != nil {
+		t.Fatal(err)
+	}
+	started, release := make(chan struct{}), make(chan struct{})
+	metaDB.storage = buildQueueTestStorage{Storage: fs, get: func() (*BuildMeta, error) {
+		close(started)
+		<-release
+		return &BuildMeta{}, nil
+	}}
+	lookup := make(chan error, 1)
+	go func() {
+		_, err := metaDB.Get(key)
+		lookup <- err
+	}()
+	<-started
+	purged := make(chan error, 1)
+	go func() {
+		_, err := purgePackageCache(newTestNpmRC(), metaDB, fs, logger, esm, true, "", "/"+esm.PackageId())
+		purged <- err
+	}()
+	completed := false
+	select {
+	case err := <-purged:
+		completed = true
+		t.Errorf("purge overtook the metadata lookup: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(release)
+	if err := <-lookup; err != nil {
+		t.Error(err)
+	}
+	if !completed {
+		if err := <-purged; err != nil {
+			t.Error(err)
+		}
+	}
+	if metaDB.cache.Contains(key) {
+		t.Error("lookup repopulated metadata after the purge")
+	}
+	if _, err := NewBuildMetaDB(fs).Get(key); !errors.Is(err, storage.ErrNotFound) {
+		t.Errorf("metadata survived purge: %v", err)
+	}
+	if len(metaDB.locks) != 0 {
+		t.Error("idle package locks were retained")
+	}
+}
+
 func TestPurgeEmptyCacheKeys(t *testing.T) {
 	body, err := json.Marshal(purgeResponse{Purged: []string{}, CacheKeys: []string{}})
 	if err != nil {
