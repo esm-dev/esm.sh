@@ -49,6 +49,9 @@ func (q *BuildQueue) Build(ctx context.Context, build *BuildContext) (*BuildMeta
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	if message := build.npmrc.getCachedPackageNotFound(build.esmPath.Package()); message != "" {
+		return nil, errors.New(message)
+	}
 	path := build.Path()
 	if message := negativeCache.get("404-path:" + build.esmPath.PackageId() + "/build:" + path); message != "" {
 		return nil, errors.New(message)

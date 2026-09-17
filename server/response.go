@@ -5,7 +5,17 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 )
+
+func writePackageError(w http.ResponseWriter, err error) {
+	status := http.StatusInternalServerError
+	if strings.HasSuffix(err.Error(), " not found") {
+		status = http.StatusNotFound
+		w.Header().Set("Cache-Control", ccTenMinutes)
+	}
+	writeStatus(w, status, err.Error())
+}
 
 // writeStatus replies to the request with the given status code and a plain-text message.
 func writeStatus(w http.ResponseWriter, code int, message string) {

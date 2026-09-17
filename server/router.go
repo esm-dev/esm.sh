@@ -665,6 +665,11 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 			writeStatus(w, 403, "forbidden")
 			return
 		}
+		if message := npmrc.getCachedPackageNotFound(esmPath.Package()); message != "" {
+			header.Set("Cache-Control", ccTenMinutes)
+			writeStatus(w, 404, message)
+			return
+		}
 
 		origin := getOrigin(r)
 
@@ -679,7 +684,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 		if strings.HasPrefix(esmPath.PkgName, "@types/") && esmPath.SubPath == "" {
 			info, err := npmrc.getPackageInfo(esmPath.PkgName, esmPath.PkgVersion)
 			if err != nil {
-				writeStatus(w, 500, err.Error())
+				writePackageError(w, err)
 				return
 			}
 			types := "index.d.ts"
@@ -812,7 +817,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 		if pathKind == RawFile && !esmPath.GhPrefix && !rawFlag && esmPath.SubPath != "" && strings.HasSuffix(esmPath.SubPath, ".map") {
 			pkgJson, err := npmrc.installPackage(esmPath.Package())
 			if err != nil {
-				writeStatus(w, 500, err.Error())
+				writePackageError(w, err)
 				return
 			}
 			filename := path.Join(npmrc.StoreDir(), esmPath.PackageId(), "node_modules", esmPath.PkgName, esmPath.SubPath)
@@ -973,7 +978,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 			if !existsDir(dir) {
 				_, err := npmrc.installPackage(esmPath.Package())
 				if err != nil {
-					writeStatus(w, 500, err.Error())
+					writePackageError(w, err)
 					return
 				}
 			}
@@ -1035,7 +1040,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 				css, err := os.ReadFile(filename)
 				if os.IsNotExist(err) {
 					if _, err = npmrc.installPackageContext(r.Context(), esmPath.Package()); err != nil {
-						writeStatus(w, 500, err.Error())
+						writePackageError(w, err)
 						return
 					}
 					css, err = os.ReadFile(filename)
@@ -1074,7 +1079,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 					}
 					err = b.install()
 					if err != nil {
-						writeStatus(w, 500, err.Error())
+						writePackageError(w, err)
 						return
 					}
 					entry := b.resolveEntry(esmPath)
@@ -1097,7 +1102,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 					// if the file does not exist, try to install the package
 					_, err = npmrc.installPackage(esmPath.Package())
 					if err != nil {
-						writeStatus(w, 500, err.Error())
+						writePackageError(w, err)
 						return
 					}
 					stat, err = os.Lstat(filename)
@@ -1111,7 +1116,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 						}
 						err = b.install()
 						if err != nil {
-							writeStatus(w, 500, err.Error())
+							writePackageError(w, err)
 							return
 						}
 						entry := b.resolveEntry(esmPath)
@@ -1474,7 +1479,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 						writeStatus(w, 404, "Types Not Found")
 						return
 					}
-					writeStatus(w, 500, "Failed to build types: "+err.Error())
+					writePackageError(w, fmt.Errorf("Failed to build types: %w", err))
 					return
 				}
 				content, _, err = readDts()
@@ -1645,7 +1650,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 			if esmPath.SubPath == "" {
 				packageJson, err := npmrc.getPackageInfo(esmPath.PkgName, esmPath.PkgVersion)
 				if err != nil {
-					writeStatus(w, 500, err.Error())
+					writePackageError(w, err)
 					return
 				}
 				var exports []string
@@ -1662,7 +1667,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 			if buildMeta.Imports != nil {
 				packageJson, err := npmrc.getPackageInfo(esmPath.PkgName, esmPath.PkgVersion)
 				if err != nil {
-					writeStatus(w, 500, err.Error())
+					writePackageError(w, err)
 					return
 				}
 				var imports []string
