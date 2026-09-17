@@ -83,7 +83,10 @@ func (ctx *BuildContext) analyzeSplitting() {
 		}
 
 		// only one analyze process is allowed at the same time for the same package
-		unlock := installMutex.Lock(splittingTxtPath)
+		unlock, err := lockInstall(ctx.Context(), splittingTxtPath)
+		if err != nil {
+			return
+		}
 		defer unlock()
 
 		// skip analyze if the package has been analyzed by another request

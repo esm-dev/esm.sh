@@ -10,6 +10,7 @@ import (
 	"testing/synctest"
 	"time"
 
+	"github.com/esm-dev/esm.sh/internal/npm"
 	"github.com/esm-dev/esm.sh/internal/storage"
 )
 
@@ -343,4 +344,60 @@ func TestBuildQueueSnapshotDuringBuild(t *testing.T) {
 		close(release)
 		synctest.Wait()
 	})
+}
+
+func TestBuildQueueInstallTimeout(t *testing.T) {
+	workDir := config.WorkDir
+	config.WorkDir = t.TempDir()
+	defer func() { config.WorkDir = workDir }()
+	pkg := npm.Package{Name: "queue-install-timeout", Version: "1.0.0"}
+	unlock, err := lockInstall(context.Background(), pkg.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	q := NewBuildQueue(1, 20*time.Millisecond)
+	started := make(chan struct{}, 1)
+	build := newBuildQueueTestContext("/"+t.Name(), func() (*BuildMeta, error) {
+		started <- struct{}{}
+		return nil, storage.ErrNotFound
+	})
+	build.npmrc = &NpmRC{}
+	build.esmPath = EsmPath{PkgName: pkg.Name, PkgVersion: pkg.Version}
+	done := make(chan error, 1)
+	go func() {
+		_, err := q.Build(context.Background(), build)
+		done <- err
+	}()
+	<-started
+	next := newBuildQueueTestContext("/"+t.Name()+"/next", func() (*BuildMeta, error) {
+		return &BuildMeta{}, nil
+	})
+	nextDone := make(chan error, 1)
+	go func() {
+		_, err := q.Build(context.Background(), next)
+		nextDone <- err
+	}()
+	timedOut := false
+	select {
+	case err := <-nextDone:
+		if err != nil {
+			t.Error(err)
+		}
+	case <-time.After(time.Second):
+		timedOut = true
+		t.Errorf("install lock kept the queue stuck past its deadline: %+v", q.Snapshot())
+	}
+	if err := build.Context().Err(); !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("build deadline was not delivered: %v", err)
+	}
+	unlock()
+	if err := <-done; err == nil || err.Error() != "build timeout after 0 seconds" {
+		t.Errorf("expected build timeout, got %v", err)
+	}
+	if timedOut {
+		err := <-nextDone
+		if err != nil {
+			t.Error(err)
+		}
+	}
 }

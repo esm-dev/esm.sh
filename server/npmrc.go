@@ -23,7 +23,6 @@ import (
 	"github.com/Masterminds/semver/v3"
 	"github.com/esm-dev/esm.sh/internal/npm"
 	"github.com/ije/gox/set"
-	syncx "github.com/ije/gox/sync"
 	"github.com/ije/gox/term"
 	"github.com/ije/gox/utils"
 )
@@ -35,7 +34,7 @@ const (
 
 var (
 	defaultNpmRC *NpmRC
-	installMutex syncx.KeyedMutex
+	installLocks sync.Map
 )
 
 type NpmRegistry struct {
@@ -330,6 +329,27 @@ func (npmrc *NpmRC) installPackage(pkg npm.Package) (packageJson *npm.PackageJSO
 	return npmrc.installPackageContext(context.Background(), pkg)
 }
 
+func lockInstall(ctx context.Context, key string) (func(), error) {
+	done := make(chan struct{})
+	for {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		active, loaded := installLocks.LoadOrStore(key, done)
+		if !loaded {
+			return func() {
+				installLocks.Delete(key)
+				close(done)
+			}, nil
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-active.(chan struct{}):
+		}
+	}
+}
+
 func (npmrc *NpmRC) installPackageContext(ctx context.Context, pkg npm.Package) (packageJson *npm.PackageJSON, err error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -345,7 +365,10 @@ func (npmrc *NpmRC) installPackageContext(ctx context.Context, pkg npm.Package) 
 	}
 
 	// only one installation process is allowed at the same time for the same package
-	unlock := installMutex.Lock(pkg.String())
+	unlock, err := lockInstall(ctx, pkg.String())
+	if err != nil {
+		return nil, err
+	}
 	defer unlock()
 	if err := ctx.Err(); err != nil {
 		return nil, err

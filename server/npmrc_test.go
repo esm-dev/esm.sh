@@ -8,6 +8,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -18,10 +19,65 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/esm-dev/esm.sh/internal/npm"
 )
+
+func TestInstallLockCancellation(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		key := t.Name()
+		unlock, err := lockInstall(context.Background(), key)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		canceled := make(chan error, 1)
+		go func() {
+			release, err := lockInstall(ctx, key)
+			if err == nil {
+				release()
+			}
+			canceled <- err
+		}()
+		synctest.Wait()
+		cancel()
+		if err := <-canceled; !errors.Is(err, context.Canceled) {
+			t.Fatalf("waiting lock did not cancel: %v", err)
+		}
+		acquired := make(chan func(), 2)
+		for range 2 {
+			go func() {
+				release, err := lockInstall(context.Background(), key)
+				if err != nil {
+					t.Error(err)
+					return
+				}
+				acquired <- release
+			}()
+		}
+		synctest.Wait()
+		if len(acquired) != 0 {
+			t.Fatal("canceled waiter released the owner's lock")
+		}
+		other, err := lockInstall(context.Background(), key+"/other")
+		if err != nil {
+			t.Fatal(err)
+		}
+		other()
+		unlock()
+		synctest.Wait()
+		if len(acquired) != 1 {
+			t.Fatalf("acquired %d locks, want one", len(acquired))
+		}
+		(<-acquired)()
+		(<-acquired)()
+		if _, ok := installLocks.Load(key); ok {
+			t.Fatal("released lock was retained")
+		}
+	})
+}
 
 func TestResolveSemverVersion(t *testing.T) {
 	for _, test := range []struct {
