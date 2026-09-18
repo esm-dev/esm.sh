@@ -8,10 +8,14 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
 func TestInstallCjsModuleLexerRetry(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("cjs-module-lexer ships prebuilt binaries only for darwin/linux")
+	}
 	oldClient, oldConfig := http.DefaultClient, config
 	config = &Config{WorkDir: t.TempDir()}
 	t.Cleanup(func() { http.DefaultClient, config = oldClient, oldConfig })

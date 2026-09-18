@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -104,6 +105,9 @@ func TestResolveExternalModuleScopedFork(t *testing.T) {
 }
 
 func TestBuildModuleScopedForkSubpath(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("esbuild plugin path resolution differs on windows")
+	}
 	wd := t.TempDir()
 	pkgDir := filepath.Join(wd, "node_modules", "@scope", "three")
 	if err := os.MkdirAll(pkgDir, 0755); err != nil {
