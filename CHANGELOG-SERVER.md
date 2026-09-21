@@ -1,5 +1,15 @@
 # Server Changelog
 
+## v139_2
+
+* Persist negative package and build records with bbolt. (#1411)
+* Reject cached package 404s before installation and builds. (#1412)
+* Improve TypeScript declaration transformation with concurrent storage requests and cancellation.
+* Fix build queue stalls caused by serialized metadata access and unbounded S3 requests.
+* Reject unsupported native Node.js modules before parsing.
+* Build Docker images from checked-out source and fix Deno's glibc setup.
+* Upgrade Go to 1.27.
+
 ## v139_1
 
 * Fix build queue stalls caused by uncancellable install locks
