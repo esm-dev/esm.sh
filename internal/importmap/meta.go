@@ -121,6 +121,9 @@ func fetchImportMeta(cdnOrigin string, imp Import, target string) (meta ImportMe
 	if target != "" && target != "es2022" {
 		url += "&target=" + target
 	}
+	if imp.Dev {
+		url += "&dev"
+	}
 
 	// check memory cache first
 	if v, ok := fetchCache.Load(url); ok {
@@ -218,8 +221,11 @@ func fetchImportMeta(cdnOrigin string, imp Import, target string) (meta ImportMe
 	if meta.Version != imp.Version {
 		// cache the exact version as well
 		cacheKey := fmt.Sprintf("%s/%s%s%s@%s%s?meta", cdnOrigin, asteriskPrefix, imp.RegistryPrefix(), imp.Name, meta.Version, subPath)
-		if target != "" {
+		if target != "" && target != "es2022" {
 			cacheKey += "&target=" + target
+		}
+		if imp.Dev {
+			cacheKey += "&dev"
 		}
 		fetchCache.Store(cacheKey, meta)
 	}

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/esm-dev/esm.sh/internal/importmap"
@@ -35,7 +35,8 @@ func Tidy() {
 
 	err := tidy(*noSRI)
 	if err != nil {
-		fmt.Println(term.Red("[error]"), "Failed to tidy up: "+err.Error())
+		fmt.Fprintln(os.Stderr, term.Red("[error]"), "Failed to tidy up: "+err.Error())
+		os.Exit(1)
 	}
 }
 
@@ -105,6 +106,7 @@ func tidy(noSRI bool) (err error) {
 						cdn = "https://esm.sh"
 					}
 					imports := make([]importmap.Import, 0, prevImportMap.Imports.Len())
+					unmanagedCDN := false
 					prevImportMap.Imports.Range(func(specifier string, url string) bool {
 						if strings.HasPrefix(url, cdn+"/") {
 							imp, err := importmap.ParseEsmPath(url)
@@ -112,13 +114,14 @@ func tidy(noSRI bool) (err error) {
 								imports = append(imports, imp)
 								return true // continue
 							}
+							unmanagedCDN = true
 						}
 						importMap.Imports.Set(specifier, url)
 						return true
 					})
 					prevImportMap.RangeScopes(func(scope string, imports *importmap.Imports) bool {
-						if strings.HasPrefix(scope, cdn+"/") && strings.HasSuffix(scope, "/") {
-							return true // continue
+						if !unmanagedCDN && strings.HasPrefix(scope, cdn+"/") && strings.HasSuffix(scope, "/") {
+							return true
 						}
 						importMap.SetScopeImports(scope, imports)
 						return true
@@ -127,12 +130,10 @@ func tidy(noSRI bool) (err error) {
 						fmt.Println(term.Dim("No imports found."))
 						return
 					}
-					specifiers := make([]string, 0, len(imports))
-					for _, imp := range imports {
-						specifiers = append(specifiers, imp.Specifier(true))
-					}
-					sort.Strings(specifiers)
-					if !addImports(importMap, specifiers, false, true, noSRI) {
+					slices.SortFunc(imports, func(a, b importmap.Import) int {
+						return strings.Compare(a.Specifier(true), b.Specifier(true))
+					})
+					if !addImports(importMap, imports, false, true, noSRI, "") {
 						return fmt.Errorf("could not resolve imports")
 					}
 					buf.WriteString(importMap.FormatJSON(2))
