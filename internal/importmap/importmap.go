@@ -167,7 +167,11 @@ func (im *ImportMap) GetScopeImports(scope string) (*Imports, bool) {
 // SetScopeImports sets the imports of the given scope.
 func (im *ImportMap) SetScopeImports(scope string, imports *Imports) {
 	im.lock.Lock()
-	im.scopes[scope] = imports
+	if imports == nil {
+		delete(im.scopes, scope)
+	} else {
+		im.scopes[scope] = imports
+	}
 	im.lock.Unlock()
 }
 
@@ -265,7 +269,14 @@ func (im *ImportMap) resolveWith(specifier string, imports *Imports) (string, bo
 // - jsr:scope/package[@semver][/subpath]
 // - github:owner/repo[@<branch|tag|commit>][/subpath]
 func (im *ImportMap) ParseImport(specifier string) (meta ImportMeta, err error) {
-	var imp Import
+	imp, err := ParseSpecifier(specifier)
+	if err != nil || imp.Name == "" {
+		return
+	}
+	return im.FetchImportMeta(imp)
+}
+
+func ParseSpecifier(specifier string) (imp Import, err error) {
 	var scopeName string
 	if strings.HasPrefix(specifier, "gh:") {
 		imp.Github = true
@@ -290,7 +301,7 @@ func (im *ImportMap) ParseImport(specifier string) (meta ImportMeta, err error) 
 	if scopeName != "" {
 		imp.Name = scopeName + "/" + imp.Name
 	}
-	return fetchImportMeta(im.cdnOrigin(), imp, im.config.Target)
+	return
 }
 
 func (im *ImportMap) FetchImportMeta(imp Import) (meta ImportMeta, err error) {
@@ -342,19 +353,19 @@ func (im *ImportMap) addImport(mark *sync.Map, imp ImportMeta, indirect bool, ta
 	moduleUrl := cdnOrigin + "/" + imp.EsmSpecifier() + "/"
 	moduleUrl += target + "/"
 	if imp.SubPath != "" {
-		if imp.Dev || imp.SubPath == "jsx-dev-runtime" {
-			moduleUrl += imp.SubPath + ".development.mjs"
-		} else {
-			moduleUrl += imp.SubPath + ".mjs"
-		}
+		moduleUrl += imp.SubPath
 	} else {
 		if strings.ContainsRune(imp.Name, '/') {
 			_, name := utils.SplitByFirstByte(imp.Name, '/')
-			moduleUrl += name + ".mjs"
+			moduleUrl += name
 		} else {
-			moduleUrl += imp.Name + ".mjs"
+			moduleUrl += imp.Name
 		}
 	}
+	if imp.Dev || imp.SubPath == "jsx-dev-runtime" {
+		moduleUrl += ".development"
+	}
+	moduleUrl += ".mjs"
 
 	imports.Set(specifier, moduleUrl)
 	if !indirect {

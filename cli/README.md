@@ -45,3 +45,14 @@ Options:
   --version, -v         Show the version
   --help, -h            Display this help message
 ```
+
+Download modules into `vendor/` beside `index.html` with `--download` or `-D`:
+
+```bash
+esm.sh add -D react@19
+```
+
+The import map then points to local files, such as `./vendor/react_19.3.0/es2022/react.mjs`.
+The CLI downloads CDN imports and their dependencies, rewrites static imports and literal dynamic
+imports to local paths, and generates integrity hashes for the downloaded files. Use `--no-sri`
+to omit the hashes. Without `--download`, imports continue to use CDN URLs.

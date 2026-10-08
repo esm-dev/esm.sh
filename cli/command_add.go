@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
@@ -28,12 +29,14 @@ Examples:
   esm.sh add react@19.0.0      ` + "\033[30m # use exact version \033[0m" + `
   esm.sh add react/jsx-runtime ` + "\033[30m # specifiy a sub-module \033[0m" + `
   esm.sh add --all react       ` + "\033[30m # include all sub-modules of the import\033[0m" + `
+  esm.sh add -D react          ` + "\033[30m # download modules into vendor/\033[0m" + `
 
 Arguments:
   ...imports     Imports to add
 
 Options:
 	--all, -a      Add all sub-modules of the import without prompt
+	--download, -D Download modules into vendor/
 	--no-sri       No "integrity" attribute added
 	--no-prompt    Add imports without prompt
   --help, -h     Show help message
@@ -67,6 +70,9 @@ var (
 func Add() {
 	all := flag.Bool("all", false, "add all modules of the import")
 	a := flag.Bool("a", false, "add all modules of the import")
+	var download bool
+	flag.BoolVar(&download, "download", false, "download modules into vendor/")
+	flag.BoolVar(&download, "D", false, "download modules into vendor/")
 	noPrompt := flag.Bool("no-prompt", false, "add imports without prompt")
 	noSRI := flag.Bool("no-sri", false, "do not generate SRI for the import")
 	specifiers, help := parseCommandFlags()
@@ -76,16 +82,28 @@ func Add() {
 		return
 	}
 
-	err := updateImportMap(set.New(specifiers...).Values(), *all || *a, *noPrompt, *noSRI)
+	err := updateImportMap(set.New(specifiers...).Values(), *all || *a, *noPrompt, *noSRI, download)
 	if err != nil {
-		fmt.Println(term.Red("✖︎"), "Failed to add imports: "+err.Error())
+		fmt.Fprintln(os.Stderr, term.Red("✖︎"), "Failed to add imports: "+err.Error())
+		os.Exit(1)
 	}
 }
 
-func updateImportMap(specifiers []string, all bool, noPrompt bool, noSRI bool) (err error) {
+func updateImportMap(specifiers []string, all bool, noPrompt bool, noSRI bool, download bool) (err error) {
+	imports := make([]importmap.Import, len(specifiers))
+	for i, specifier := range specifiers {
+		imports[i], err = importmap.ParseSpecifier(specifier)
+		if err != nil {
+			return
+		}
+	}
 	indexHtml, exists, err := lookupClosestFile("index.html")
 	if err != nil {
 		return
+	}
+	var downloadDir string
+	if download {
+		downloadDir = filepath.Dir(indexHtml)
 	}
 
 	if exists {
@@ -95,9 +113,13 @@ func updateImportMap(specifiers []string, all bool, noPrompt bool, noSRI bool) (
 			return
 		}
 		defer f.Close()
-		tokenizer := html.NewTokenizer(f)
-		buf := bytes.NewBuffer(nil)
-		updated := false
+		source, err := io.ReadAll(f)
+		if err != nil {
+			return err
+		}
+		tokenizer := html.NewTokenizer(bytes.NewReader(source))
+		importMap := importmap.Blank()
+		offset, insertAt, start, end := 0, -1, -1, -1
 		for {
 			token := tokenizer.Next()
 			if token == html.ErrorToken {
@@ -106,24 +128,20 @@ func updateImportMap(specifiers []string, all bool, noPrompt bool, noSRI bool) (
 				}
 				break
 			}
+			tokenStart := offset
+			offset += len(tokenizer.Raw())
 			if token == html.EndTagToken {
 				tagName, _ := tokenizer.TagName()
-				if string(tagName) == "head" && !updated {
-					buf.WriteString("  <script type=\"importmap\">\n")
-					importMap := importmap.Blank()
-					if !addImports(importMap, specifiers, all, noPrompt, noSRI) {
-						return fmt.Errorf("could not resolve imports")
-					}
-					buf.WriteString(importMap.FormatJSON(2))
-					buf.WriteString("\n  </script>\n")
-					buf.Write(tokenizer.Raw())
-					updated = true
-					continue
+				if string(tagName) == "head" && insertAt < 0 {
+					insertAt = tokenStart
 				}
 			}
 			if token == html.StartTagToken {
 				tagName, moreAttr := tokenizer.TagName()
-				if string(tagName) == "script" && moreAttr {
+				if string(tagName) == "script" {
+					if insertAt < 0 {
+						insertAt = tokenStart
+					}
 					var typeAttr string
 					for moreAttr {
 						var key, val []byte
@@ -133,61 +151,55 @@ func updateImportMap(specifiers []string, all bool, noPrompt bool, noSRI bool) (
 							break
 						}
 					}
-					if typeAttr != "importmap" && !updated {
-						buf.WriteString("<script type=\"importmap\">\n")
-						importMap := importmap.Blank()
-						if !addImports(importMap, specifiers, all, noPrompt, noSRI) {
-							return fmt.Errorf("could not resolve imports")
-						}
-						buf.WriteString(importMap.FormatJSON(2))
-						buf.WriteString("\n  </script>\n  ")
-						buf.Write(tokenizer.Raw())
-						updated = true
-						continue
-					}
-					if typeAttr == "importmap" && !updated {
-						buf.Write(tokenizer.Raw())
-						token := tokenizer.Next()
-						importMap := importmap.Blank()
-						tagContent := tokenizer.Raw()
-						if token == html.TextToken {
-							importMapRaw := bytes.TrimSpace(tagContent)
+					if typeAttr == "importmap" {
+						start, end = offset, offset
+						if tokenizer.Next() == html.TextToken {
+							end += len(tokenizer.Raw())
+							importMapRaw := bytes.TrimSpace(tokenizer.Raw())
 							if len(importMapRaw) > 0 {
 								importMap, err = importmap.Parse(nil, importMapRaw)
 								if err != nil {
-									err = fmt.Errorf("invalid importmap script: %w", err)
-									return
+									return fmt.Errorf("invalid importmap script: %w", err)
 								}
 							}
 						}
-						if !addImports(importMap, specifiers, all, noPrompt, noSRI) {
-							return fmt.Errorf("could not resolve imports")
-						}
-						buf.WriteString("\n")
-						buf.WriteString(importMap.FormatJSON(2))
-						buf.WriteString("\n  ")
-						if token == html.EndTagToken {
-							buf.Write(tokenizer.Raw())
-						}
-						updated = true
-						continue
+						break
 					}
 				}
 			}
-			buf.Write(tokenizer.Raw())
+		}
+		if !addImports(importMap, imports, all, noPrompt, noSRI, downloadDir) {
+			return fmt.Errorf("could not resolve imports")
+		}
+		buf := bytes.NewBuffer(nil)
+		if start >= 0 {
+			buf.Write(source[:start])
+			buf.WriteString("\n")
+			buf.WriteString(importMap.FormatJSON(2))
+			buf.WriteString("\n  ")
+			buf.Write(source[end:])
+		} else {
+			if insertAt < 0 {
+				insertAt = len(source)
+			}
+			buf.Write(source[:insertAt])
+			buf.WriteString("  <script type=\"importmap\">\n")
+			buf.WriteString(importMap.FormatJSON(2))
+			buf.WriteString("\n  </script>\n")
+			buf.Write(source[insertAt:])
 		}
 		fi, erro := f.Stat()
 		f.Close()
 		if erro != nil {
 			return erro
 		}
-		err = os.WriteFile(indexHtml, buf.Bytes(), fi.Mode())
+		return os.WriteFile(indexHtml, buf.Bytes(), fi.Mode())
 	} else {
 		importMap := importmap.Blank()
-		if !addImports(importMap, specifiers, all, noPrompt, noSRI) {
+		if !addImports(importMap, imports, all, noPrompt, noSRI, downloadDir) {
 			return fmt.Errorf("could not resolve imports")
 		}
-		err = os.WriteFile(indexHtml, fmt.Appendf(nil, htmlTemplate, importMap.FormatJSON(2), specifiers[0]), 0644)
+		err = os.WriteFile(indexHtml, fmt.Appendf(nil, htmlTemplate, importMap.FormatJSON(2), imports[0].Specifier(false)), 0644)
 		if err == nil {
 			fmt.Println(term.Dim("Created index.html with importmap script."))
 		}
@@ -195,7 +207,7 @@ func updateImportMap(specifiers []string, all bool, noPrompt bool, noSRI bool) (
 	return
 }
 
-func addImports(im *importmap.ImportMap, specifiers []string, all bool, noPrompt bool, noSRI bool) bool {
+func addImports(im *importmap.ImportMap, imports []importmap.Import, all bool, noPrompt bool, noSRI bool, downloadDir string) bool {
 	term.HideCursor()
 	defer term.ShowCursor()
 
@@ -217,9 +229,9 @@ func addImports(im *importmap.ImportMap, specifiers []string, all bool, noPrompt
 	var errors []error
 	var lock sync.Mutex
 	var wg sync.WaitGroup
-	for _, specifier := range specifiers {
+	for _, imp := range imports {
 		wg.Go(func() {
-			imp, err := im.ParseImport(specifier)
+			imp, err := im.FetchImportMeta(imp)
 			lock.Lock()
 			defer lock.Unlock()
 			if err != nil {
@@ -271,7 +283,7 @@ func addImports(im *importmap.ImportMap, specifiers []string, all bool, noPrompt
 	}
 
 	for _, imp := range resolvedImports {
-		warns, errors := im.AddImport(imp, noSRI)
+		warns, errors := im.AddImport(imp, noSRI || downloadDir != "")
 		if len(errors) > 0 {
 			onErrors(errors)
 			return false
@@ -294,7 +306,7 @@ func addImports(im *importmap.ImportMap, specifiers []string, all bool, noPrompt
 						}
 					}
 					if len(subModules) > 0 {
-						ui := &subModuleSelectUI{term: term, im: im, mainImport: &imp, noSRI: noSRI}
+						ui := &subModuleSelectUI{term: term, im: im, mainImport: &imp, noSRI: noSRI || downloadDir != ""}
 						ui.init(subModules)
 						if ui.termHeight >= 4 {
 							ui.show()
@@ -309,6 +321,15 @@ func addImports(im *importmap.ImportMap, specifiers []string, all bool, noPrompt
 				}
 			}
 		}
+	}
+
+	if downloadDir != "" {
+		spinner.Start()
+		if err := downloadImports(im, downloadDir, noSRI); err != nil {
+			onErrors([]error{err})
+			return false
+		}
+		spinner.Stop()
 	}
 
 	sort.Strings(addedSpecifiers)
