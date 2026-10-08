@@ -6,6 +6,7 @@
 
 const d = document;
 const l = localStorage;
+const enc = new TextEncoder();
 const dec = new TextDecoder();
 const stringify = JSON.stringify;
 const loaders = new Set(["jsx", "ts", "tsx", "babel"]);
@@ -43,7 +44,7 @@ function run() {
     const buffer = new Uint8Array(
       await crypto.subtle.digest(
         "SHA-1",
-        new TextEncoder().encode(lang + code + target + stringify(importMap) + "true"),
+        enc.encode([lang, code, target, stringify(importMap), "", "", "true", ""].map((v) => enc.encode(v).length + ":" + v).join("")),
       ),
     );
     const hash = [...buffer].map((b) => b.toString(16).padStart(2, "0")).join("");

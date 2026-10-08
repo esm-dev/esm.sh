@@ -4,7 +4,6 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
-	"crypto/sha1"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -140,10 +139,8 @@ func TestRouterModuleResponses(t *testing.T) {
 			wantSource := filename
 			if wantSource == "" {
 				wantSource = "source.ts"
-				// /tsx computes this hash before calling the transform API.
-				hash := sha1.Sum([]byte(options.Lang + options.Code + options.Target + string(options.ImportMapRaw) + options.SourceMap + "false"))
-				if !strings.Contains(output.Code, fmt.Sprintf("sourceMappingURL=+%x.mjs.map", hash)) {
-					t.Fatal("transform without a filename changed its cache URL")
+				if !strings.Contains(output.Code, "sourceMappingURL=+b3dffb61fc975863e5bfb870a5a734e150f7f17a.mjs.map") {
+					t.Fatal("transform cache URL does not match the client hash")
 				}
 			}
 			if len(sourceMap.Sources) != 1 || sourceMap.Sources[0] != wantSource {
@@ -157,6 +154,141 @@ func TestRouterModuleResponses(t *testing.T) {
 			handler.ServeHTTP(cached, httptest.NewRequest("GET", "http://localhost/"+mapURL, nil))
 			if cached.Code != 200 || cached.Body.String() != output.Map {
 				t.Fatalf("filename=%q: cached source map does not match the transform", filename)
+			}
+		}
+	})
+}
+
+func TestRouterCacheRegressions(t *testing.T) {
+	previousConfig, previousNpmRC, transport := config, defaultNpmRC, http.DefaultTransport
+	testConfig := *config
+	testConfig.WorkDir = t.TempDir()
+	config, defaultNpmRC = &testConfig, nil
+	t.Cleanup(func() {
+		config, defaultNpmRC, http.DefaultTransport = previousConfig, previousNpmRC, transport
+	})
+	fs, err := storage.NewFSStorage(filepath.Join(config.WorkDir, "storage"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	logger := new(log.Logger)
+	logger.SetOutput(io.Discard)
+	handler := esmRouter(fs, logger)
+	http.DefaultTransport = ghTestTransport(func(r *http.Request) (*http.Response, error) {
+		t.Errorf("unexpected request: %s", r.URL)
+		return &http.Response{StatusCode: 500, Body: http.NoBody}, nil
+	})
+
+	t.Run("transform field boundaries", func(t *testing.T) {
+		for _, options := range []TransformOptions{
+			{Lang: "js", Code: "x;console.log(1)"},
+			{Lang: "jsx", Code: ";console.log(1)"},
+			{Lang: "jsx", Code: ";console.log(1)"},
+			{Lang: "js", Code: "x;console.log(1)"},
+			{Lang: "jsx", Code: "console.log(<div />)", JSXImportSource: "preactexternal"},
+			{Lang: "jsx", Code: "console.log(<div />)", JSXImportSource: "preact", SourceMap: "external"},
+			{Lang: "jsx", Code: "console.log(<div />)", JSXImportSource: "preact", SourceMap: "external"},
+		} {
+			body, err := json.Marshal(options)
+			if err != nil {
+				t.Fatal(err)
+			}
+			res := httptest.NewRecorder()
+			handler.ServeHTTP(res, httptest.NewRequest("POST", "/transform", bytes.NewReader(body)))
+			if res.Code != 200 {
+				t.Fatalf("HTTP %d: %s", res.Code, res.Body.String())
+			}
+			var output TransformOutput
+			if err := json.Unmarshal(res.Body.Bytes(), &output); err != nil {
+				t.Fatal(err)
+			}
+			want, err := transform(&ResolvedTransformOptions{TransformOptions: options})
+			if err != nil {
+				t.Fatal(err)
+			}
+			output.Code, _, _ = strings.Cut(output.Code, "//# sourceMappingURL=")
+			if output != *want {
+				t.Fatalf("lang=%s: got %q, want %q", options.Lang, output.Code, want.Code)
+			}
+		}
+	})
+
+	t.Run("floating build redirects", func(t *testing.T) {
+		for _, test := range []struct{ name, prefix, resolved, key string }{
+			{"redirect-test", "/", "1.0.0", "npm:redirect-test@latest"},
+			{"@scope/redirect-test", "/", "1.0.0", "npm:@scope/redirect-test@latest"},
+			{"owner/repo", "/gh/", "abcdef0", "gh/owner/repo@latest"},
+			{"owner/repo", "/github.com/", "abcdef0", "gh/owner/repo@latest"},
+			{"owner/repo/@scope/pkg", "/pr/", "abcdef0", "pr/owner/repo/@scope/pkg@latest"},
+			{"owner/repo/@scope/pkg", "/pkg.pr.new/", "abcdef0", "pr/owner/repo/@scope/pkg@latest"},
+			{"@scope/redirect-test", "/jsr/", "1.0.0", "npm:@jsr/scope__redirect-test@latest"},
+		} {
+			if strings.HasPrefix(test.key, "npm:") {
+				setCacheItem(test.key, &npm.PackageJSON{Version: test.resolved}, time.Minute)
+			} else {
+				setCacheItem(test.key, test.resolved, time.Minute)
+			}
+			t.Cleanup(func() { deleteCacheItem(test.key) })
+			for _, suffix := range []string{
+				"/es2020/pkg.mjs",
+				"/es2020/pkg.development.bundle.mjs?dev&key=a%2Bb",
+				"/X-ZHJlYWN0QDE4LjMuMQ/es2020/pkg.nobundle.mjs",
+				"/X-ZHJlYWN0QDE4LjMuMQ/es2020/pkg.mjs.map",
+				"/es2020/pkg.css",
+				"/es2020/assets/space%20%231.svg?raw",
+			} {
+				prefix := strings.ReplaceAll(strings.ReplaceAll(test.prefix, "/github.com/", "/gh/"), "/pkg.pr.new/", "/pr/")
+				want := "http://localhost" + prefix + test.name + "@" + test.resolved + suffix
+				res := httptest.NewRecorder()
+				handler.ServeHTTP(res, httptest.NewRequest("GET", "http://localhost"+test.prefix+test.name+"@latest"+suffix, nil))
+				if res.Code != 302 || res.Header().Get("Location") != want {
+					t.Errorf("%s%s: HTTP %d, location=%q, want %q", test.prefix, test.name+suffix, res.Code, res.Header().Get("Location"), want)
+				}
+				if got := res.Header().Get("Cache-Control"); got != fmt.Sprintf("public, max-age=%d", config.NpmQueryCacheTTL) {
+					t.Errorf("unexpected cache policy: %s", got)
+				}
+			}
+		}
+		for _, test := range []struct{ path, location string }{
+			{"/redirect-test/es2020/pkg.mjs", "/redirect-test@1.0.0/es2020/pkg.mjs"},
+			{"/*redirect-test@latest&dev/X-ZHJlYWN0QDE4LjMuMQ/es2020/pkg.mjs?worker", "/*redirect-test@1.0.0&dev/X-ZHJlYWN0QDE4LjMuMQ/es2020/pkg.mjs?worker"},
+			{"/gh/*owner/repo@latest/es2020/pkg.mjs", "/gh/*owner/repo@abcdef0/es2020/pkg.mjs"},
+			{"/pr/*owner/repo/@scope/pkg@latest/es2020/pkg.mjs", "/pr/*owner/repo/@scope/pkg@abcdef0/es2020/pkg.mjs"},
+			{"/*jsr/@scope/redirect-test@latest/es2020/pkg.mjs", "/*jsr/@scope/redirect-test@1.0.0/es2020/pkg.mjs"},
+		} {
+			res := httptest.NewRecorder()
+			handler.ServeHTTP(res, httptest.NewRequest("GET", "http://localhost"+test.path, nil))
+			if res.Code != 302 || res.Header().Get("Location") != "http://localhost"+test.location {
+				t.Errorf("%s: HTTP %d, location=%q", test.path, res.Code, res.Header().Get("Location"))
+			}
+		}
+	})
+
+	t.Run("types only cache policy", func(t *testing.T) {
+		const name = "types-only-cache-test"
+		build := &BuildContext{esmPath: EsmPath{PkgName: name, PkgVersion: "1.0.0"}, target: "es2022"}
+		defer cacheLRU.Remove(build.Path())
+		dts := "/" + name + "@1.0.0/index.d.ts"
+		if err := NewBuildMetaDB(fs).Put(build.Path(), encodeBuildMeta(&BuildMeta{TypesOnly: true, Dts: dts})); err != nil {
+			t.Fatal(err)
+		}
+		for _, version := range []string{"", "@latest", "@^1", "@1.0.0"} {
+			key := "npm:" + name + "@" + npm.NormalizePackageVersion(strings.TrimPrefix(version, "@"))
+			setCacheItem(key, &npm.PackageJSON{Name: name, Version: "1.0.0"}, time.Minute)
+			t.Cleanup(func() { deleteCacheItem(key) })
+			for _, method := range []string{"GET", "HEAD"} {
+				res := httptest.NewRecorder()
+				handler.ServeHTTP(res, httptest.NewRequest(method, "http://localhost/"+name+version+"?target=es2022", nil))
+				if res.Code != 200 || res.Header().Get("X-TypeScript-Types") != "http://localhost"+dts {
+					t.Fatalf("%s %s: HTTP %d, headers=%v, body=%s", method, version, res.Code, res.Header(), res.Body.String())
+				}
+				want := fmt.Sprintf("public, max-age=%d", config.NpmQueryCacheTTL)
+				if version == "@1.0.0" {
+					want = ccImmutable
+				}
+				if got := res.Header().Get("Cache-Control"); got != want {
+					t.Errorf("%s %s: cache policy=%q, want %q", method, version, got, want)
+				}
 			}
 		}
 	})

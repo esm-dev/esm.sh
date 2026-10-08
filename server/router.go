@@ -17,6 +17,7 @@ import (
 	"path"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -107,14 +108,10 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 				}
 
 				h := sha1.New()
-				h.Write([]byte(options.Lang))
-				h.Write([]byte(options.Code))
-				h.Write([]byte(options.Target))
-				h.Write(options.ImportMapRaw)
-				h.Write([]byte(options.JSXImportSource))
-				h.Write([]byte(options.SourceMap))
-				fmt.Fprintf(h, "%v", options.Minify)
-				h.Write([]byte(options.Filename))
+				for _, field := range []string{options.Lang, options.Code, options.Target, string(options.ImportMapRaw), options.JSXImportSource, options.SourceMap, strconv.FormatBool(options.Minify), options.Filename} {
+					fmt.Fprintf(h, "%d:", len(field))
+					io.WriteString(h, field)
+				}
 				hash := hex.EncodeToString(h.Sum(nil))
 				savePath := normalizeSavePath(fmt.Sprintf("modules/transform/%s.mjs", hash))
 
@@ -709,7 +706,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 			return
 		}
 
-		// store the raw query
+		rawPathname := pathname
 		rawQuery := r.URL.RawQuery
 
 		// support `https://esm.sh/react?dev&target=es2020/jsx-runtime` pattern for jsx transformer
@@ -842,8 +839,14 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 		if !isExactVersion {
 			if hasTargetSegment {
 				pkgName := esmPath.PackageId()
-				subPath := ""
-				query := ""
+				pkgEnd := 1 + strings.Count(esmPath.PkgName, "/")
+				if esmPath.GhPrefix || esmPath.PrPrefix || strings.HasPrefix(rawPathname, "/jsr/") || strings.HasPrefix(rawPathname, "/jsr.io/") {
+					pkgEnd++
+				}
+				subPath := "/" + strings.SplitN(rawPathname, "/", pkgEnd+2)[pkgEnd+1]
+				if strings.HasPrefix(pkgName, "@jsr/") {
+					pkgName = "jsr/@" + strings.ReplaceAll(pkgName[5:], "__", "/")
+				}
 				if asteriskPrefix {
 					if esmPath.GhPrefix || esmPath.PrPrefix {
 						pkgName = pkgName[0:3] + "*" + pkgName[3:]
@@ -854,14 +857,8 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 				if extraQuery != "" {
 					pkgName += "&" + extraQuery
 				}
-				if esmPath.SubPath != "" {
-					subPath = "/" + esmPath.SubPath
-				}
-				if rawQuery != "" {
-					query = "?" + rawQuery
-				}
-				header.Set("Cache-Control", fmt.Sprintf("public, max-age=%d", config.NpmQueryCacheTTL))
-				redirect(w, fmt.Sprintf("%s/%s%s%s", origin, pkgName, subPath, query), false)
+				redirectPath := &url.URL{Path: subPath, RawQuery: rawQuery}
+				redirect(w, origin+"/"+pkgName+redirectPath.String(), false)
 				return
 			}
 			if pathKind != EsmEntry {
@@ -1610,7 +1607,11 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 			dtsUrl := origin + buildMeta.Dts
 			header.Set("X-TypeScript-Types", dtsUrl)
 			header.Set("Content-Type", ctJavaScript)
-			header.Set("Cache-Control", ccImmutable)
+			if isExactVersion {
+				header.Set("Cache-Control", ccImmutable)
+			} else {
+				header.Set("Cache-Control", fmt.Sprintf("public, max-age=%d", config.NpmQueryCacheTTL))
+			}
 			if r.Method == http.MethodHead {
 				writeBody(w, []byte{})
 				return
