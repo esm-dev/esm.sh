@@ -87,6 +87,102 @@ func TestS3StorageBuildCancellation(t *testing.T) {
 	}
 }
 
+func TestS3StoragePutCache(t *testing.T) {
+	for _, result := range []string{"success", "rejected", "transport error", "canceled"} {
+		for _, original := range []string{"", "original"} {
+			t.Run(result+"/"+original, func(t *testing.T) {
+				cache, err := NewFSStorage(t.TempDir())
+				if err != nil {
+					t.Fatal(err)
+				}
+				s3 := &s3Storage{apiEndpoint: "https://storage.test", fsCache: cache.(*fsStorage)}
+				const key = "test.txt"
+				if original != "" {
+					if err := cache.Put(key, strings.NewReader(original)); err != nil {
+						t.Fatal(err)
+					}
+				}
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+				client := http.DefaultClient
+				t.Cleanup(func() { http.DefaultClient = client })
+				transportErr := errors.New("upload failed")
+				http.DefaultClient = &http.Client{Transport: s3TestTransport(func(req *http.Request) (*http.Response, error) {
+					if req.Method != http.MethodPut {
+						return &http.Response{StatusCode: 404, Body: http.NoBody}, nil
+					}
+					defer req.Body.Close()
+					data, err := io.ReadAll(req.Body)
+					if err != nil || string(data) != "replacement" {
+						t.Fatalf("upload: content %q, error %v", data, err)
+					}
+					content, _, err := cache.Get(key)
+					if original == "" {
+						if content != nil {
+							content.Close()
+						}
+						if !errors.Is(err, ErrNotFound) {
+							t.Errorf("cache before response: got %v, want ErrNotFound", err)
+						}
+					} else {
+						if err != nil {
+							t.Fatal(err)
+						}
+						data, err := io.ReadAll(content)
+						content.Close()
+						if err != nil || string(data) != original {
+							t.Errorf("cache before response: content %q, error %v", data, err)
+						}
+					}
+					switch result {
+					case "rejected":
+						return &http.Response{StatusCode: 500, Body: http.NoBody}, nil
+					case "transport error":
+						return nil, transportErr
+					case "canceled":
+						cancel()
+						return nil, req.Context().Err()
+					default:
+						return &http.Response{StatusCode: 200, Body: http.NoBody}, nil
+					}
+				})}
+				err = s3.PutContext(ctx, key, bytes.NewBufferString("replacement"))
+				if (err == nil) != (result == "success") {
+					t.Fatalf("Put returned %v", err)
+				}
+				if result == "transport error" && !errors.Is(err, transportErr) {
+					t.Fatalf("Put returned %v, want %v", err, transportErr)
+				}
+				if result == "canceled" && !errors.Is(err, context.Canceled) {
+					t.Fatalf("Put returned %v, want context.Canceled", err)
+				}
+				want := original
+				if result == "success" {
+					want = "replacement"
+				}
+				stat, statErr := s3.Stat(key)
+				content, _, err := s3.Get(key)
+				if content != nil {
+					defer content.Close()
+				}
+				if want == "" {
+					if !errors.Is(statErr, ErrNotFound) || !errors.Is(err, ErrNotFound) {
+						t.Fatalf("failed upload remains readable: Stat error %v, Get error %v", statErr, err)
+					}
+				} else {
+					if statErr != nil || err != nil {
+						t.Fatalf("Stat error %v, Get error %v", statErr, err)
+					}
+					data, err := io.ReadAll(content)
+					if err != nil || string(data) != want || stat.Size() != int64(len(want)) {
+						t.Fatalf("cache after upload: content %q, size %d, error %v", data, stat.Size(), err)
+					}
+				}
+			})
+		}
+	}
+}
+
 type s3TestTransport func(*http.Request) (*http.Response, error)
 
 func (transport s3TestTransport) RoundTrip(req *http.Request) (*http.Response, error) {
