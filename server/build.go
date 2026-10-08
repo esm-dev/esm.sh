@@ -52,7 +52,7 @@ type BuildContext struct {
 	path        string
 	status      atomic.Value
 	splitting   *set.ReadOnlySet[string]
-	importsMu   sync.Mutex
+	importsLock sync.Mutex
 	esmImports  [][2]string
 	cjsRequires [][3]string
 	smOffset    int
@@ -923,13 +923,13 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 					}
 					if ok {
 						if args.Kind == esbuild.ResolveJSRequireCall || args.Kind == esbuild.ResolveJSRequireResolve {
-							ctx.importsMu.Lock()
+							ctx.importsLock.Lock()
 							ctx.cjsRequires = append(ctx.cjsRequires, [3]string{
 								"npm:" + specifier,
 								string(replacement.IIFE),
 								"",
 							})
-							ctx.importsMu.Unlock()
+							ctx.importsLock.Unlock()
 							return esbuild.OnResolveResult{
 								Path:     "npm:" + specifier,
 								External: true,
