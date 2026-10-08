@@ -1,4 +1,4 @@
 package cli
 
 // could be overridden by `-ldflags`
-var VERSION = "v0.1.1"
+var VERSION = "v0.2.0"
