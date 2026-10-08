@@ -6,6 +6,7 @@ Deno.test("transform API", async () => {
     code: `
       import { renderToString } from "preact-render-to-string";
       const render: (() => string) = () => renderToString(<h1>esm.sh</h1>);
+      export const unicode = "é🦕:<&>\u2028\u2029";
       export default render;
     `,
     target: "es2022",
@@ -18,9 +19,16 @@ Deno.test("transform API", async () => {
     sourceMap: "external",
     minify: true,
   };
-  const hash = await computeHash(
-    options.lang + options.code + options.target + JSON.stringify(options.importMap) + options.sourceMap + options.minify,
-  );
+  const hash = await computeHash([
+    options.lang,
+    options.code,
+    options.target,
+    JSON.stringify(options.importMap),
+    "",
+    options.sourceMap,
+    String(options.minify),
+    "",
+  ]);
   const res1 = await fetch("http://localhost:8080/transform", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -48,11 +56,12 @@ Deno.test("transform API", async () => {
   assertEquals(map, transformOut.map);
 });
 
-async function computeHash(input: string): Promise<string> {
+async function computeHash(fields: string[]): Promise<string> {
+  const enc = new TextEncoder();
   const buffer = new Uint8Array(
     await crypto.subtle.digest(
       "SHA-1",
-      new TextEncoder().encode(input),
+      enc.encode(fields.map((v) => enc.encode(v).length + ":" + v).join("")),
     ),
   );
   return [...buffer].map((b) => b.toString(16).padStart(2, "0")).join("");
