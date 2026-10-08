@@ -253,6 +253,9 @@ func ParseEsmPath(pathnameOrUrl string) (imp Import, err error) {
 		err = fmt.Errorf("invalid pathname or url: %s", pathnameOrUrl)
 		return
 	}
+	if strings.HasPrefix(pathname, "/*") {
+		pathname = "/" + pathname[2:]
+	}
 	if strings.HasPrefix(pathname, "/gh/") {
 		imp.Github = true
 		pathname = pathname[3:]
@@ -261,11 +264,12 @@ func ParseEsmPath(pathnameOrUrl string) (imp Import, err error) {
 		pathname = pathname[4:]
 	}
 	segs := strings.Split(utils.NormalizePathname(pathname)[1:], "/")
-	if len(segs) == 0 {
+	segs[0] = strings.TrimPrefix(segs[0], "*")
+	if segs[0] == "" {
 		err = fmt.Errorf("invalid pathname: %s", pathname)
 		return
 	}
-	if strings.HasPrefix(segs[0], "@") {
+	if imp.Github || strings.HasPrefix(segs[0], "@") {
 		if len(segs) == 1 || segs[1] == "" {
 			err = fmt.Errorf("invalid pathname: %s", pathname)
 			return
@@ -278,8 +282,6 @@ func ParseEsmPath(pathnameOrUrl string) (imp Import, err error) {
 		imp.Name, imp.Version = utils.SplitByLastByte(segs[0], '@')
 		segs = segs[1:]
 	}
-	// remove the leading `*` from the package name if it is from esm.sh
-	imp.Name = strings.TrimPrefix(imp.Name, "*")
 	if len(segs) > 0 {
 		var hasTargetSegment bool
 		switch segs[0] {
