@@ -1,1 +1,1 @@
-export default (a, cb) => a.flatMap(p, cb);
+export default (a, cb) => a.flatMap(cb);

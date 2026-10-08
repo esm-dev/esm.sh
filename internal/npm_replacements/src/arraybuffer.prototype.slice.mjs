@@ -1,1 +1,1 @@
-export default (a, s, e) => a.slice(p, s, e);
+export default (a, s, e) => a.slice(s, e);

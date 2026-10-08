@@ -1,2 +1,1 @@
-// Promise.any
-export default Promise.any;
+export default (iterable) => Promise.any(iterable);
