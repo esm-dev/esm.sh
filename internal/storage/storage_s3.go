@@ -296,14 +296,21 @@ func (s3 *s3Storage) PutContext(ctx context.Context, name string, content io.Rea
 	if s3.shouldUseFSCache(name) {
 		cacheKey := s3.fsCacheKey(name)
 		pr, pw := io.Pipe()
-		defer pr.Close()
-		go func(content io.Reader) {
+		done := make(chan error, 1)
+		defer func() {
+			pw.CloseWithError(err)
+			if cacheErr := <-done; err == nil {
+				err = cacheErr
+			}
+		}()
+		go func() {
 			unlock := s3.fsCacheLock.Lock(name)
 			defer unlock()
-			err := s3.fsCache.Put(cacheKey, io.TeeReader(content, pw))
-			pw.CloseWithError(err)
-		}(content)
-		content = pr
+			err := s3.fsCache.Put(cacheKey, pr)
+			pr.CloseWithError(err)
+			done <- err
+		}()
+		content = io.TeeReader(content, pw)
 	}
 	req, err := http.NewRequestWithContext(ctx, "PUT", s3.apiEndpoint+"/"+name, content)
 	if err != nil {
