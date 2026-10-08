@@ -2,16 +2,110 @@ package server
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/esm-dev/esm.sh/internal/npm"
 	"github.com/esm-dev/esm.sh/internal/storage"
 	"github.com/ije/gox/log"
 )
+
+func TestBuildModuleConcurrentResolvers(t *testing.T) {
+	wd := t.TempDir()
+	pkgDir := filepath.Join(wd, "node_modules", "example")
+	if err := os.MkdirAll(pkgDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	const count = 100
+	var entry strings.Builder
+	deps := map[string]string{}
+	for i := range count {
+		deps[fmt.Sprintf("dep-%d", i)] = "1.0.0"
+		deps[fmt.Sprintf("esm-%d", i)] = "1.0.0"
+		fmt.Fprintf(&entry, "export { value as value%d } from './mod-%d.js';\n", i, i)
+		files := map[string]string{
+			fmt.Sprintf("mod-%d.js", i): fmt.Sprintf(`import { value as imported } from "esm-%d";
+import { leaf } from "./leaf-%d.js";
+export const value = require("dep-%d").default + imported + leaf + require("object-assign")({}, { value: %d }).value;`, i, i, i, i),
+			fmt.Sprintf("leaf-%d.js", i): fmt.Sprintf("export const leaf = %d;", i),
+		}
+		for name, content := range files {
+			if err := os.WriteFile(filepath.Join(pkgDir, name), []byte(content), 0644); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if err := os.WriteFile(filepath.Join(pkgDir, "index.js"), []byte(entry.String()), 0644); err != nil {
+		t.Fatal(err)
+	}
+	fs, err := storage.NewFSStorage(filepath.Join(wd, "storage"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	logger, err := log.New("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	logger.SetOutput(io.Discard)
+	for _, analyze := range []bool{false, true} {
+		t.Run(fmt.Sprintf("analyze=%v", analyze), func(t *testing.T) {
+			ctx := &BuildContext{
+				wd: wd, target: "es2022", storage: fs, logger: logger, npmrc: &NpmRC{},
+				esmPath: EsmPath{PkgName: "example", PkgVersion: "1.0.0"},
+				pkgJson: &npm.PackageJSON{Name: "example", Version: "1.0.0", Type: "module", Main: "./index.js", Types: "./index.d.ts", Dependencies: deps},
+			}
+			ctx.Path()
+			meta, includes, err := ctx.buildModule(analyze)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if analyze {
+				if len(includes) != count*2 {
+					t.Fatalf("got %d dependency edges, want %d", len(includes), count*2)
+				}
+				for i := range count {
+					for _, edge := range [][2]string{
+						{fmt.Sprintf("mod-%d.js", i), "index.js"},
+						{fmt.Sprintf("leaf-%d.js", i), fmt.Sprintf("mod-%d.js", i)},
+					} {
+						if !slices.Contains(includes, edge) {
+							t.Errorf("missing dependency edge %v", edge)
+						}
+					}
+				}
+				return
+			}
+			f, _, err := fs.Get(ctx.getSavePath())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer f.Close()
+			output, err := io.ReadAll(f)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for i := range count {
+				if !strings.Contains(string(output), fmt.Sprintf(`case"dep-%d":`, i)) {
+					t.Errorf("missing require case for dep-%d", i)
+				}
+				for _, name := range []string{fmt.Sprintf("dep-%d", i), fmt.Sprintf("esm-%d", i)} {
+					if !slices.Contains(meta.Imports, "/"+name+"@1.0.0/es2022/"+name+".mjs") {
+						t.Errorf("missing import %q", name)
+					}
+				}
+			}
+			if !strings.Contains(string(output), `case"npm:object-assign":`) {
+				t.Error("missing require case for replacement module")
+			}
+		})
+	}
+}
 
 func TestBuildModuleNativeEntry(t *testing.T) {
 	oldConfig, oldClient := config, http.DefaultClient

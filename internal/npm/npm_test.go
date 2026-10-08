@@ -35,6 +35,31 @@ func TestResolveDependencyVersionRejectsEscapingName(t *testing.T) {
 	}
 }
 
+func TestResolveDependencyVersionGitPath(t *testing.T) {
+	for _, scheme := range []string{"git+https", "git+ssh", "git"} {
+		for _, path := range []string{"", "/", "/owner", "/owner/", "/owner/.git", "//repo", "/owner/repo/extra", "/owner/.."} {
+			version := scheme + "://github.com" + path
+			t.Run(version, func(t *testing.T) {
+				if _, err := ResolveDependencyVersion(version); err == nil {
+					t.Fatal("expected an invalid repository path error")
+				}
+			})
+		}
+		for _, suffix := range []string{"", ".git"} {
+			version := scheme + "://github.com/esm-dev/esm.sh" + suffix + "#v1.0.0"
+			pkg, err := ResolveDependencyVersion(version)
+			if err != nil || !pkg.Github || pkg.Name != "esm-dev/esm.sh" || pkg.Version != "v1.0.0" {
+				t.Fatalf("ResolveDependencyVersion(%q) = %+v, %v", version, pkg, err)
+			}
+		}
+	}
+	for _, version := range []string{"https://pkg.pr.new", "https://pkg.pr.new/"} {
+		if _, err := ResolveDependencyVersion(version); err == nil {
+			t.Fatalf("ResolveDependencyVersion(%q) returned no error", version)
+		}
+	}
+}
+
 func TestToNpmPackageDropsInvalidDependencyNames(t *testing.T) {
 	pkg := (&PackageJSONRaw{
 		Dependencies:     map[string]any{"react": "19.0.0", "../escape": "1.0.0"},

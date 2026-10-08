@@ -15,6 +15,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 	"sync/atomic"
 
 	"github.com/esm-dev/esm.sh/internal/npm"
@@ -51,6 +52,7 @@ type BuildContext struct {
 	path        string
 	status      atomic.Value
 	splitting   *set.ReadOnlySet[string]
+	importsMu   sync.Mutex
 	esmImports  [][2]string
 	cjsRequires [][3]string
 	smOffset    int
@@ -272,6 +274,7 @@ func (ctx *BuildContext) buildPath() {
 }
 
 func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, includes [][2]string, err error) {
+	var includesMu sync.Mutex
 	if err = ctx.checkCanceled(); err != nil {
 		return
 	}
@@ -829,7 +832,9 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 								pkgDir := path.Join(ctx.wd, "node_modules", pkgName)
 								short := strings.TrimPrefix(resolvedFilename, pkgDir)[1:]
 								if analyzeMode && resolvedFilename != entryModuleFilename && strings.HasPrefix(args.Importer, pkgDir) {
+									includesMu.Lock()
 									includes = append(includes, [2]string{short, strings.TrimPrefix(args.Importer, pkgDir)[1:]})
+									includesMu.Unlock()
 								}
 								if !analyzeMode && ctx.splitting != nil && ctx.splitting.Has(short) {
 									specifier = pkgJson.Name + utils.NormalizePathname(stripEntryModuleExt(short))
@@ -918,11 +923,13 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 					}
 					if ok {
 						if args.Kind == esbuild.ResolveJSRequireCall || args.Kind == esbuild.ResolveJSRequireResolve {
+							ctx.importsMu.Lock()
 							ctx.cjsRequires = append(ctx.cjsRequires, [3]string{
 								"npm:" + specifier,
 								string(replacement.IIFE),
 								"",
 							})
+							ctx.importsMu.Unlock()
 							return esbuild.OnResolveResult{
 								Path:     "npm:" + specifier,
 								External: true,

@@ -725,10 +725,14 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 				}
 			}
 			if kind == esbuild.ResolveJSRequireCall {
+				ctx.importsMu.Lock()
 				ctx.cjsRequires = append(ctx.cjsRequires, [3]string{specifier, resolvedPathFull, resolvedPath})
+				ctx.importsMu.Unlock()
 				resolvedPath = specifier
 			} else if kind == esbuild.ResolveJSImportStatement && !withTypeJSON {
+				ctx.importsMu.Lock()
 				ctx.esmImports = append(ctx.esmImports, [2]string{resolvedPathFull, resolvedPath})
+				ctx.importsMu.Unlock()
 			}
 		}
 	}()
