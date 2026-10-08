@@ -1,2 +1,1 @@
-// Promise.allSettled
-export default Promise.allSettled;
+export default (iterable) => Promise.allSettled(iterable);

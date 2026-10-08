@@ -1,1 +1,1 @@
-export default (a, f) => a.map(p, f);
+export default (a, f) => a.map(f);
