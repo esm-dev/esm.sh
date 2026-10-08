@@ -601,7 +601,7 @@ func (npmrc *NpmRC) installDependenciesContext(ctx context.Context, wd string, p
 				}
 				pkg.Version = p.Version
 			}
-			markId := fmt.Sprintf("%s@%s:%s:%v", pkgJson.Name, pkgJson.Version, pkg.String(), npmMode)
+			markId := fmt.Sprintf("%s@%s:%s:%s:%v", pkgJson.Name, pkgJson.Version, name, pkg.String(), npmMode)
 			if mark.Has(markId) {
 				return
 			}

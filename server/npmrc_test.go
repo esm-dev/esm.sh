@@ -164,6 +164,60 @@ func TestInstallPackageAtomic(t *testing.T) {
 	}
 }
 
+func TestInstallDependenciesAliases(t *testing.T) {
+	workDir := config.WorkDir
+	config.WorkDir = t.TempDir()
+	t.Cleanup(func() { config.WorkDir = workDir })
+	npmrc := &NpmRC{globalRegistry: &NpmRegistry{NpmRegistryConfig: NpmRegistryConfig{Registry: npmRegistry}}}
+	pkg := npm.Package{Name: "@scope/alias-target", Version: "1.0.0"}
+	installDir := filepath.Join(npmrc.StoreDir(), pkg.String(), "node_modules", pkg.Name)
+	if err := os.MkdirAll(installDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(installDir, "package.json"), []byte(`{"name":"@scope/alias-target","version":"1.0.0","dependencies":{"self":"npm:@scope/alias-target@1.0.0"}}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	dependencies := map[string]string{pkg.Name: pkg.Version}
+	for i := range 100 {
+		name := fmt.Sprintf("alias-%d", i)
+		if i%2 == 0 {
+			name = "@scope/" + name
+		}
+		dependencies[name] = "npm:" + pkg.String()
+	}
+	for _, npmMode := range []bool{false, true} {
+		t.Run(fmt.Sprintf("npmMode=%v", npmMode), func(t *testing.T) {
+			wd := t.TempDir()
+			if err := os.Mkdir(filepath.Join(wd, "node_modules"), 0755); err != nil {
+				t.Fatal(err)
+			}
+			root := &npm.PackageJSON{Name: "root", Version: "1.0.0"}
+			if npmMode {
+				root.PeerDependencies = dependencies
+			} else {
+				root.Dependencies = dependencies
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := npmrc.installDependenciesContext(ctx, wd, root, npmMode, nil); err != nil {
+				t.Fatal(err)
+			}
+			linked := 0
+			for name := range dependencies {
+				if target, err := os.Readlink(filepath.Join(wd, "node_modules", name)); err == nil && target == installDir {
+					linked++
+				}
+			}
+			if linked != len(dependencies) {
+				t.Errorf("linked %d dependencies, want %d", linked, len(dependencies))
+			}
+			if target, err := os.Readlink(filepath.Join(wd, "node_modules", "self")); err != nil || target != installDir {
+				t.Errorf("recursive alias target = %q, %v", target, err)
+			}
+		})
+	}
+}
+
 func TestInstallLockCancellation(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		key := t.Name()
