@@ -89,6 +89,30 @@ func TestUpdateImportMapAfterClassicScript(t *testing.T) {
 	}
 }
 
+func TestUpdateImportMapEscaping(t *testing.T) {
+	t.Chdir(t.TempDir())
+	source := `<head><script type="importmap">{"imports":{"local":"data:text/javascript,export default \"\u003c/script\u003e\"","z":null}}</script></head>`
+	if err := os.WriteFile("index.html", []byte(source), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := updateImportMap(nil, false, true, true, false); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile("index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, raw, _ := strings.Cut(string(got), `<script type="importmap">`)
+	raw, _, _ = strings.Cut(raw, "</script>")
+	var im importmap.ImportMapJson
+	if err := json.Unmarshal([]byte(raw), &im); err != nil {
+		t.Fatalf("invalid import map: %v\n%s", err, got)
+	}
+	if im.Imports["local"] != `data:text/javascript,export default "</script>"` {
+		t.Fatalf("incorrect data URL: %q", im.Imports["local"])
+	}
+}
+
 func TestUpdateImportMapFailurePreservesHTML(t *testing.T) {
 	transport := http.DefaultTransport
 	t.Cleanup(func() { http.DefaultTransport = transport })
