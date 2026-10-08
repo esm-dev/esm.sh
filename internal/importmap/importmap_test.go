@@ -1,13 +1,136 @@
 package importmap
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/url"
+	"reflect"
 	"sort"
 	"strings"
 	"sync"
 	"testing"
 )
+
+func TestAddImportDependencyVersions(t *testing.T) {
+	const origin = "https://importmap-versions.test"
+	for _, tc := range []struct {
+		version string
+		want    string
+	}{
+		{"1.0.0", "1.0.0"},
+		{"2.0.0", "2.0.0"},
+		{"^1.0.0", "1.0.0"},
+		{"^2.0.0", "2.0.0"},
+	} {
+		for _, mode := range []struct{ peer, direct bool }{{false, false}, {false, true}, {true, false}} {
+			t.Run(fmt.Sprintf("%s/peer=%t/direct=%t", tc.version, mode.peer, mode.direct), func(t *testing.T) {
+				im := Blank()
+				im.SetConfig(Config{CDN: origin})
+				if mode.direct {
+					warnings, errors := im.AddImport(ImportMeta{Import: Import{Name: "dep", Version: "2.0.0"}}, true)
+					if len(warnings) != 0 || len(errors) != 0 {
+						t.Fatalf("warnings %v, errors %v", warnings, errors)
+					}
+				}
+				for version, resolved := range map[string]string{"2.0.0": "2.0.0", tc.version: tc.want} {
+					cacheKey := origin + "/dep@" + version + "?meta"
+					fetchCache.Store(cacheKey, ImportMeta{Import: Import{Name: "dep", Version: resolved}})
+					t.Cleanup(func() { fetchCache.Delete(cacheKey) })
+				}
+				for i, version := range []string{"2.0.0", tc.version} {
+					imp := ImportMeta{Import: Import{Name: fmt.Sprintf("pkg-%d", i), Version: "1.0.0"}}
+					if mode.peer {
+						imp.PeerImports = []string{"/dep@" + version}
+					} else {
+						imp.Imports = []string{"/dep@" + version}
+					}
+					warnings, errors := im.AddImport(imp, true)
+					if len(errors) != 0 {
+						t.Fatal(errors)
+					}
+					if mode.peer && i == 1 && tc.want != "2.0.0" {
+						if len(warnings) != 1 || !strings.Contains(warnings[0], "unmet "+tc.version) {
+							t.Fatalf("expected peer warning, got %v", warnings)
+						}
+					} else if len(warnings) != 0 {
+						t.Fatal(warnings)
+					}
+				}
+				for i, version := range []string{"2.0.0", tc.want} {
+					if mode.peer {
+						version = "2.0.0"
+					}
+					referrer, _ := url.Parse(fmt.Sprintf("%s/*pkg-%d@1.0.0/es2022/pkg-%d.mjs", origin, i, i))
+					want := origin + "/dep@" + version + "/es2022/dep.mjs"
+					if got, ok := im.Resolve("dep", referrer); !ok || got != want {
+						t.Errorf("Resolve(dep, %s) = %q, %v; want %q", referrer, got, ok, want)
+					}
+				}
+			})
+		}
+	}
+}
+
+func TestFormatJSON(t *testing.T) {
+	for _, source := range []string{
+		`{"imports":{"quote\"\\\n\t":"data:text/javascript,export default \"hello\\world\""}}`,
+		`{"config":{"cdn":"https://cdn.test/\"\\\n","target":"esnext\"\\\t"},"imports":{}}`,
+		`{"imports":{},"scopes":{"https://example.com/\"\\\n/":{"quote\"\\\t":"data:text/javascript,export default \"hello\""}}}`,
+		`{"imports":{},"integrity":{"url\"\\\n":"sha384-\"\\\t"}}`,
+	} {
+		t.Run(source, func(t *testing.T) {
+			im, err := Parse(nil, []byte(source))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var want ImportMapJson
+			if err := json.Unmarshal([]byte(source), &want); err != nil {
+				t.Fatal(err)
+			}
+			for _, indent := range []int{0, 2} {
+				data := im.FormatJSON(indent)
+				var got ImportMapJson
+				if err := json.Unmarshal([]byte(data), &got); err != nil {
+					t.Fatalf("invalid JSON: %v\n%s", err, data)
+				}
+				if !reflect.DeepEqual(got, want) {
+					t.Fatalf("got %#v, want %#v", got, want)
+				}
+			}
+			if _, err := json.Marshal(im); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestFormatJSONEmptyValues(t *testing.T) {
+	for _, entries := range []string{
+		`"a":"./a.js","z":null`,
+		`"a":"./a.js","z":""`,
+		`"a":null,"b":"./b.js","c":null,"d":"./d.js","z":null`,
+		`"z":null`,
+	} {
+		t.Run(entries, func(t *testing.T) {
+			source := fmt.Sprintf(`{"imports":{%s},"scopes":{"/app/":{%s}},"integrity":{%s}}`, entries, entries, entries)
+			im, err := Parse(nil, []byte(source))
+			if err != nil {
+				t.Fatal(err)
+			}
+			data := im.FormatJSON(0)
+			var got ImportMapJson
+			if err := json.Unmarshal([]byte(data), &got); err != nil {
+				t.Fatalf("invalid JSON: %v\n%s", err, data)
+			}
+			im.Imports.Range(func(key, value string) bool {
+				if value != "" && (got.Imports[key] != value || got.Scopes["/app/"][key] != value || got.Integrity[key] != value) {
+					t.Errorf("lost mapping %q: %q", key, value)
+				}
+				return true
+			})
+		})
+	}
+}
 
 func TestAddImportConcurrentResults(t *testing.T) {
 	const count = 64

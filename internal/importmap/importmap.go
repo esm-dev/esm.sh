@@ -440,25 +440,20 @@ func (im *ImportMap) addImport(mark *sync.Map, imp ImportMeta, indirect bool, ta
 					addedImport, err := ParseEsmPath(addedUrl)
 					if err == nil && npm.IsExactVersion(addedImport.Version) {
 						if depImport.Version == addedImport.Version {
-							// the version of the dependency is exact and equals to the version in the import map
 							return
 						}
-						// if the version of the dependency is not exact,
-						// check if it is satisfied with the version in the import map
-						// or create a new scope for the dependency
 						if !npm.IsExactVersion(depImport.Version) {
 							c, err := semver.NewConstraint(depImport.Version)
 							if err == nil && c.Check(semver.MustParse(addedImport.Version)) {
-								// the version of the dependency is exact and satisfied with the version in the import map
 								return
 							}
-							if isPeer {
-								result.warnings = append(result.warnings, "incorrect peer dependency "+depImport.Name+"@"+addedImport.Version+term.Dim("(unmet "+depImport.Version+")"))
-								return
-							}
-							scope := cdnOrigin + "/" + imp.EsmSpecifier() + "/"
-							targetImports = im.getOrCreateScopeImports(scope)
 						}
+						if isPeer {
+							result.warnings = append(result.warnings, "incorrect peer dependency "+depImport.Name+"@"+addedImport.Version+term.Dim("(unmet "+depImport.Version+")"))
+							return
+						}
+						scope := cdnOrigin + "/" + imp.EsmSpecifier() + "/"
+						targetImports = im.getOrCreateScopeImports(scope)
 					}
 				}
 				meta, err := im.FetchImportMeta(depImport)
@@ -503,9 +498,8 @@ func (im *ImportMap) FormatJSON(indent int) string {
 		buf.WriteString("\"config\": {\n")
 		if cf.CDN != "" {
 			buf.Write(indentStr)
-			buf.WriteString("  \"cdn\": \"")
-			buf.WriteString(cf.CDN)
-			buf.WriteString("\"")
+			buf.WriteString("  \"cdn\": ")
+			formatString(&buf, cf.CDN)
 			if cf.Target != "" {
 				buf.WriteString(",\n")
 			} else {
@@ -514,9 +508,9 @@ func (im *ImportMap) FormatJSON(indent int) string {
 		}
 		if cf.Target != "" {
 			buf.Write(indentStr)
-			buf.WriteString("  \"target\": \"")
-			buf.WriteString(cf.Target)
-			buf.WriteString("\"\n")
+			buf.WriteString("  \"target\": ")
+			formatString(&buf, cf.Target)
+			buf.WriteByte('\n')
 		}
 		buf.Write(indentStr)
 		buf.WriteString("},\n")
@@ -551,9 +545,9 @@ func (im *ImportMap) FormatJSON(indent int) string {
 				continue
 			}
 			buf.Write(indentStr)
-			buf.WriteString("  \"")
-			buf.WriteString(scope)
-			buf.WriteString("\": {\n")
+			buf.WriteString("  ")
+			formatString(&buf, scope)
+			buf.WriteString(": {\n")
 			formatMap(&buf, imports, indent+3)
 			buf.Write(indentStr)
 			buf.WriteString("  }")
@@ -584,23 +578,29 @@ func formatMap(buf *strings.Builder, m *Imports, indent int) {
 	keys := m.Keys()
 	sort.Strings(keys)
 	indentStr := bytes.Repeat([]byte{' ', ' '}, indent)
-	for i, key := range keys {
+	written := false
+	for _, key := range keys {
 		value, ok := m.Get(key)
 		if !ok || value == "" {
-			// ignore empty values
 			continue
 		}
-		buf.Write(indentStr)
-		buf.WriteByte('"')
-		buf.WriteString(key)
-		buf.WriteString("\": \"")
-		buf.WriteString(value)
-		buf.WriteByte('"')
-		if i < len(keys)-1 {
-			buf.WriteByte(',')
+		if written {
+			buf.WriteString(",\n")
 		}
+		buf.Write(indentStr)
+		formatString(buf, key)
+		buf.WriteString(": ")
+		formatString(buf, value)
+		written = true
+	}
+	if written {
 		buf.WriteByte('\n')
 	}
+}
+
+func formatString(buf *strings.Builder, value string) {
+	data, _ := json.Marshal(value)
+	buf.Write(data)
 }
 
 func newImports(imports map[string]string) *Imports {
