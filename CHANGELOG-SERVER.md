@@ -1,5 +1,16 @@
 # Server Changelog
 
+## v139_3
+
+* Support PBF asset files. (#1415)
+* Fix incompatible npm package replacements. (#1416)
+* Reject malformed dependency URLs and prevent partial package installs and data races during concurrent builds. (#1419)
+* Fix missing dependency aliases when multiple names resolve to the same package. (#1420)
+* Prevent transform cache collisions and update the browser TSX loader to use the same cache keys. (#1423)
+* Preserve build paths and queries in floating-version redirects and fix caching for floating types-only packages. (#1423)
+* Prevent failed S3 uploads from publishing partial cache entries. (#1418)
+* Report deployment startup failures and honor the configured SSH port. (#1417)
+
 ## v139_2
 
 * Persist negative package and build records with bbolt. (#1411)
