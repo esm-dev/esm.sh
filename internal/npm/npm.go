@@ -114,9 +114,17 @@ func resolveDependencyVersion(v string) (Package, error) {
 		if e != nil || gitUrl.Hostname() != "github.com" {
 			return Package{}, errors.New("unsupported git dependency")
 		}
-		repo := strings.TrimSuffix(gitUrl.Path[1:], ".git")
+		repo, ok := strings.CutPrefix(gitUrl.Path, "/")
+		if !ok {
+			return Package{}, errors.New("invalid git repository path")
+		}
+		repo = strings.TrimSuffix(repo, ".git")
 		if gitUrl.Scheme == "git+ssh" && gitUrl.Port() != "" {
 			repo = gitUrl.Port() + "/" + repo
+		}
+		owner, name, ok := strings.Cut(repo, "/")
+		if !ok || owner == "" || name == "" || owner == "." || owner == ".." || name == "." || name == ".." || strings.ContainsRune(name, '/') {
+			return Package{}, errors.New("invalid git repository path")
 		}
 		return Package{
 			Github:  true,
@@ -130,6 +138,9 @@ func resolveDependencyVersion(v string) (Package, error) {
 			return Package{}, errors.New("unsupported http dependency")
 		}
 		if u.Host == "pkg.pr.new" {
+			if len(u.Path) <= 1 {
+				return Package{}, errors.New("unsupported http dependency")
+			}
 			pkgName, rest := utils.SplitByLastByte(u.Path[1:], '@')
 			if rest == "" {
 				return Package{}, errors.New("unsupported http dependency")

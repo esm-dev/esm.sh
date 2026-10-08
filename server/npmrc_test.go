@@ -18,12 +18,151 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"testing/synctest"
 	"time"
 
 	"github.com/esm-dev/esm.sh/internal/npm"
 )
+
+func TestInstallDependenciesMalformedGitURL(t *testing.T) {
+	for _, version := range []string{"git+https://github.com", "git+ssh://github.com", "git://github.com", "https://pkg.pr.new"} {
+		pkg := &npm.PackageJSON{Name: "example", Dependencies: map[string]string{"dep": version}}
+		if err := new(NpmRC).installDependencies(t.TempDir(), pkg, false, nil); err == nil {
+			t.Fatalf("installDependencies(%q) returned no error", version)
+		}
+	}
+}
+
+func TestInstallPackageAtomic(t *testing.T) {
+	for _, source := range []string{"npm", "github", "pkg.pr.new"} {
+		for _, fail := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/fail=%v", source, fail), func(t *testing.T) {
+				synctest.Test(t, func(t *testing.T) {
+					workDir, transport := config.WorkDir, http.DefaultTransport
+					config.WorkDir = t.TempDir()
+					t.Cleanup(func() { config.WorkDir, http.DefaultTransport = workDir, transport })
+					pkg := npm.Package{Name: "@scope/atomic-install", Version: "1.0.0"}
+					switch source {
+					case "github":
+						pkg.Name, pkg.Github = "owner/atomic-install", true
+					case "pkg.pr.new":
+						pkg.PkgPrNew = true
+					}
+					npmrc := &NpmRC{globalRegistry: &NpmRegistry{NpmRegistryConfig: NpmRegistryConfig{Registry: npmRegistry}}}
+					key := "npm:" + pkg.Name + "@" + pkg.Version
+					setCacheItem(key, &npm.PackageJSON{Name: pkg.Name, Version: pkg.Version, Dist: npm.NpmPackageDist{Tarball: npmRegistry + "atomic-install.tgz"}}, time.Minute)
+					t.Cleanup(func() { deleteCacheItem(key) })
+					release := make(chan struct{})
+					var requests atomic.Int32
+					http.DefaultTransport = ghTestTransport(func(r *http.Request) (*http.Response, error) {
+						request := requests.Add(1)
+						pr, pw := io.Pipe()
+						go func() {
+							defer pw.Close()
+							gz := gzip.NewWriter(pw)
+							tw := tar.NewWriter(gz)
+							for _, file := range []struct{ name, content string }{
+								{"package.json", fmt.Sprintf(`{"name":%q,"version":"1.0.0","main":"index.js"}`, pkg.Name)},
+								{"index.js", "export default 42;"},
+							} {
+								if err := tw.WriteHeader(&tar.Header{Name: "package/" + file.name, Mode: 0644, Size: int64(len(file.content))}); err != nil {
+									t.Error(err)
+									return
+								}
+								if _, err := io.WriteString(tw, file.content); err != nil {
+									t.Error(err)
+									return
+								}
+								if file.name == "package.json" && request == 1 {
+									if err := tw.Flush(); err != nil {
+										t.Error(err)
+										return
+									}
+									if err := gz.Flush(); err != nil {
+										t.Error(err)
+										return
+									}
+									<-release
+									if fail {
+										pw.CloseWithError(errors.New("interrupted tarball"))
+										return
+									}
+								}
+							}
+							if err := tw.Close(); err != nil {
+								t.Error(err)
+								return
+							}
+							if err := gz.Close(); err != nil {
+								t.Error(err)
+							}
+						}()
+						return &http.Response{StatusCode: 200, Body: pr}, nil
+					})
+					first, second := make(chan error, 1), make(chan error, 1)
+					go func() {
+						_, err := npmrc.installPackage(pkg)
+						first <- err
+					}()
+					synctest.Wait()
+					installDir := filepath.Join(npmrc.StoreDir(), pkg.String())
+					staged, err := filepath.Glob(filepath.Join(npmrc.StoreDir(), ".install-*", "node_modules", pkg.Name, "package.json"))
+					if err != nil || len(staged) != 1 {
+						t.Errorf("expected a staged manifest, got %v, %v", staged, err)
+					}
+					if existsFile(filepath.Join(installDir, "node_modules", pkg.Name, "package.json")) {
+						t.Error("published package.json before extraction completed")
+					}
+					go func() {
+						_, err := npmrc.installPackage(pkg)
+						second <- err
+					}()
+					ctx, cancel := context.WithCancel(context.Background())
+					canceled := make(chan error, 1)
+					go func() {
+						_, err := npmrc.installPackageContext(ctx, pkg)
+						canceled <- err
+					}()
+					synctest.Wait()
+					if len(first) != 0 || len(second) != 0 || len(canceled) != 0 {
+						t.Error("installer returned before extraction completed")
+					}
+					cancel()
+					if err := <-canceled; !errors.Is(err, context.Canceled) {
+						t.Errorf("waiting installer did not cancel: %v", err)
+					}
+					close(release)
+					if err := <-first; (err != nil) != fail {
+						t.Fatalf("first installer error = %v, want failure = %v", err, fail)
+					}
+					if err := <-second; err != nil {
+						t.Fatal(err)
+					}
+					if _, err := npmrc.installPackage(pkg); err != nil {
+						t.Fatal(err)
+					}
+					wantRequests := int32(1)
+					if fail {
+						wantRequests++
+					}
+					if requests.Load() != wantRequests {
+						t.Errorf("got %d downloads, want %d", requests.Load(), wantRequests)
+					}
+					data, err := os.ReadFile(filepath.Join(installDir, "node_modules", pkg.Name, "index.js"))
+					if err != nil || string(data) != "export default 42;" {
+						t.Fatalf("installed entry = %q, %v", data, err)
+					}
+					staged, err = filepath.Glob(filepath.Join(npmrc.StoreDir(), ".install-*"))
+					if err != nil || len(staged) != 0 {
+						t.Fatalf("staging directories remain: %v, %v", staged, err)
+					}
+				})
+			})
+		}
+	}
+}
 
 func TestInstallLockCancellation(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {

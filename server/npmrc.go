@@ -427,6 +427,16 @@ func (npmrc *NpmRC) installPackageContext(ctx context.Context, pkg npm.Package) 
 			negativeCache.put(missingKey, err.Error(), packageNotFoundTTL)
 		}
 	}()
+	finalDir := installDir
+	if err = ensureDir(npmrc.StoreDir()); err != nil {
+		return nil, err
+	}
+	installDir, err = os.MkdirTemp(npmrc.StoreDir(), ".install-")
+	if err != nil {
+		return nil, err
+	}
+	defer os.RemoveAll(installDir)
+	packageJsonPath = filepath.Join(installDir, "node_modules", pkg.Name, "package.json")
 
 	if pkg.Github {
 		err = ghInstallContext(ctx, installDir, pkg.Name, pkg.Version)
@@ -500,9 +510,20 @@ func (npmrc *NpmRC) installPackageContext(ctx context.Context, pkg npm.Package) 
 
 	err = utils.ParseJSONFile(packageJsonPath, &raw)
 	if err != nil {
-		os.RemoveAll(installDir)
 		err = fmt.Errorf("failed to install %s: %v", pkg.String(), err)
 		return
+	}
+	if err = ctx.Err(); err != nil {
+		return nil, err
+	}
+	if err = ensureDir(filepath.Dir(finalDir)); err != nil {
+		return nil, err
+	}
+	if err = os.RemoveAll(finalDir); err != nil {
+		return nil, err
+	}
+	if err = os.Rename(installDir, finalDir); err != nil {
+		return nil, err
 	}
 
 	packageJson = raw.ToNpmPackage()
