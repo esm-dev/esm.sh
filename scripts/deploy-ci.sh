@@ -3,7 +3,7 @@
 mkdir -p ~/.ssh
 echo "${DEPLOY_SSH_PRIVATE_KEY}" >> ~/.ssh/id_ed25519
 chmod 600 ~/.ssh/id_ed25519
-ssh-keyscan $DEPLOY_HOST >> ~/.ssh/known_hosts
+ssh-keyscan -p "$DEPLOY_SSH_PORT" "$DEPLOY_HOST" >> ~/.ssh/known_hosts
 echo "Host esm.sh" >> ~/.ssh/config
 echo "  HostName ${DEPLOY_HOST}" >> ~/.ssh/config
 echo "  Port ${DEPLOY_SSH_PORT}" >> ~/.ssh/config
@@ -92,7 +92,7 @@ ssh esm.sh << EOF
     systemctl enable esmd.service
   fi
 
-  systemctl start esmd.service
+  systemctl start esmd.service || exit 1
   echo "Started esmd.service."
 EOF
 if [ "$?" != "0" ]; then
