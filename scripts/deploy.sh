@@ -133,9 +133,11 @@ ssh -p $sshPort ${user}@${host} << EOF
     systemctl restart cron.service
   fi
 
-  systemctl start esmd.service
+  systemctl start esmd.service || exit 1
   echo "Started esmd.service."
 EOF
+status=$?
 
 rm -f esmd
 rm -f esmd.tar.gz
+exit $status
