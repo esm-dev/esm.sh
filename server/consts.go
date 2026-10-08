@@ -48,6 +48,7 @@ var assetExts = map[string]bool{
 	"otf":        true,
 	"woff":       true,
 	"woff2":      true,
+	"pbf":        true,
 	"m4a":        true,
 	"mp3":        true,
 	"m3a":        true,
