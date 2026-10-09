@@ -48,8 +48,8 @@ const (
 
 const (
 	ccMustRevalidate = "public, max-age=0, must-revalidate"
-	ccTenMinutes     = "public, max-age=600"
-	ccOneDay         = "public, max-age=86400"
+	ccTenMinutes     = "public, max-age=600, stale-if-error=86400"
+	ccOneDay         = "public, max-age=86400, stale-if-error=86400"
 	ccImmutable      = "public, max-age=31536000, immutable"
 	ctHTML           = "text/html; charset=utf-8"
 	ctCSS            = "text/css; charset=utf-8"
