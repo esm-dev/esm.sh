@@ -1487,6 +1487,81 @@ REBUILD:
 			io.Copy(finalJS, header)
 			finalJS.Write(jsContent)
 
+			if ctx.bundleMode == BundleDeps && !ctx.externalAll && ctx.isBrowserTarget() && bytes.Contains(finalJS.Bytes(), []byte(`"/node/`)) {
+				banner, _, _ := bytes.Cut(finalJS.Bytes(), []byte{'\n'})
+				options := esbuild.BuildOptions{
+					Bundle: true, Format: esbuild.FormatESModule, Target: targets[ctx.target],
+					MinifyWhitespace: minify, MinifyIdentifiers: minify, MinifySyntax: minify, KeepNames: keepNames,
+					Supported: supported,
+					Outfile:   file.Path,
+					Banner:    map[string]string{"js": string(banner)},
+					Plugins: []esbuild.Plugin{{Name: "bundle-node-runtime", Setup: func(build esbuild.PluginBuild) {
+						build.OnResolve(esbuild.OnResolveOptions{Filter: ".*"}, func(args esbuild.OnResolveArgs) (esbuild.OnResolveResult, error) {
+							specifier := args.Path
+							if args.Namespace == "node-runtime" && isRelPathSpecifier(specifier) {
+								specifier = path.Join(path.Dir(args.Importer), specifier)
+							}
+							if strings.HasPrefix(specifier, "/node/") {
+								return esbuild.OnResolveResult{Path: specifier, Namespace: "node-runtime"}, nil
+							}
+							return esbuild.OnResolveResult{Path: specifier, External: true}, nil
+						})
+						build.OnLoad(esbuild.OnLoadOptions{Filter: ".*", Namespace: "node-runtime"}, func(args esbuild.OnLoadArgs) (esbuild.OnLoadResult, error) {
+							js, ok := getNodeRuntimeJS(strings.TrimPrefix(args.Path, "/node/"))
+							if !ok {
+								return esbuild.OnLoadResult{}, fmt.Errorf("node runtime module not found: %s", args.Path)
+							}
+							code := string(js)
+							return esbuild.OnLoadResult{Contents: &code, Loader: esbuild.LoaderJS}, nil
+						})
+					}}},
+				}
+				sourceMapIndex := -1
+				if config.SourceMap && !dropSourceMap {
+					for i, output := range res.OutputFiles {
+						if output.Path == file.Path+".map" {
+							var sourceMap map[string]any
+							if err = json.Unmarshal(output.Contents, &sourceMap); err != nil {
+								return
+							}
+							if mappings, ok := sourceMap["mappings"].(string); ok {
+								sourceMap["mappings"] = strings.Repeat(";", ctx.smOffset) + mappings
+							}
+							data, e := json.Marshal(sourceMap)
+							if e != nil {
+								err = e
+								return
+							}
+							finalJS.WriteString("\n//# sourceMappingURL=data:application/json;base64,")
+							finalJS.WriteString(base64.StdEncoding.EncodeToString(data))
+							options.Sourcemap = esbuild.SourceMapExternal
+							sourceMapIndex = i
+							break
+						}
+					}
+				}
+				options.Stdin = &esbuild.StdinOptions{Contents: finalJS.String(), Sourcefile: file.Path, Loader: esbuild.LoaderJS}
+				bundled := esbuild.Build(options)
+				if len(bundled.Errors) > 0 {
+					err = errors.New("esbuild: " + bundled.Errors[0].Text)
+					return
+				}
+				for _, output := range bundled.OutputFiles {
+					if output.Path == file.Path {
+						finalJS.Reset()
+						finalJS.Write(output.Contents)
+					} else if sourceMapIndex >= 0 && output.Path == file.Path+".map" {
+						res.OutputFiles[sourceMapIndex].Contents = output.Contents
+					}
+				}
+				ctx.smOffset = 0
+				for _, specifier := range imports.Values() {
+					if strings.HasPrefix(specifier, "/node/") {
+						imports.Remove(specifier)
+					}
+				}
+			}
+
 			// check if the package is deprecated
 			if !ctx.esmPath.GhPrefix && !ctx.esmPath.PrPrefix {
 				deprecated, _ := ctx.npmrc.isDeprecated(ctx.pkgJson.Name, ctx.pkgJson.Version)
