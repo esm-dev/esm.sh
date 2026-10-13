@@ -217,7 +217,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, transfo
 			return "", nil
 		}
 
-		if specifier == "node" || isNodeBuiltinSpecifier(specifier) {
+		if specifier == "node" || strings.HasPrefix(specifier, "node:") {
 			return specifier, nil
 		}
 

@@ -209,6 +209,56 @@ func TestTransformDTSStorageTimeout(t *testing.T) {
 }
 
 func TestTransformDTS(t *testing.T) {
+	t.Run("preserves runtime node modules", func(t *testing.T) {
+		transport := http.DefaultTransport
+		t.Cleanup(func() { http.DefaultTransport = transport })
+		http.DefaultTransport = ghTestTransport(func(req *http.Request) (*http.Response, error) {
+			t.Errorf("unexpected registry request: %s", req.URL)
+			return &http.Response{StatusCode: 400, Status: "400 Bad Request", Body: http.NoBody}, nil
+		})
+		root := t.TempDir()
+		pkgDir := filepath.Join(root, "node_modules", "electron")
+		if err := os.MkdirAll(pkgDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		entry := `declare module 'node:original-fs' {
+  import * as fs from 'node:fs';
+  export = fs;
+}
+export type RuntimeFS = typeof import('node:original-fs');
+export * from 'node:original-fs';
+`
+		if err := os.WriteFile(filepath.Join(pkgDir, "electron.d.ts"), []byte(entry), 0644); err != nil {
+			t.Fatal(err)
+		}
+		fs, err := storage.NewFSStorage(filepath.Join(root, "storage"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		ctx := &BuildContext{
+			storage: fs,
+			esmPath: EsmPath{PkgName: "electron", PkgVersion: "40.1.0"},
+			wd:      root,
+			pkgJson: &npm.PackageJSON{},
+			npmrc:   &NpmRC{globalRegistry: &NpmRegistry{NpmRegistryConfig: NpmRegistryConfig{Registry: npmRegistry}}},
+		}
+		if _, err := transformDTS(ctx, "./electron.d.ts", "", nil); err != nil {
+			t.Fatal(err)
+		}
+		content, _, err := fs.Get("types/electron@40.1.0/electron.d.ts")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer content.Close()
+		data, err := io.ReadAll(content)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(data) != entry {
+			t.Fatalf("transformed dts = %s, want %s", data, entry)
+		}
+	})
+
 	t.Run("does not publish a parent when a dependency fails", func(t *testing.T) {
 		root := t.TempDir()
 		pkgDir := filepath.Join(root, "node_modules", "pkg")
