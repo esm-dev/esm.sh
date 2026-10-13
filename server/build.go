@@ -829,6 +829,9 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 						bundleInternalModule := exportAs == "" && !isDynamicImport && ctx.shouldBundleInternalModules()
 						if modulePath == entry.main || exportAs == entrySpecifier || (!isDynamicImport && !noBundle) || bundleInternalModule {
 							if existsFile(resolvedFilename) {
+								if strings.HasSuffix(resolvedFilename, ".css") {
+									return esbuild.OnResolveResult{Path: resolvedFilename}, nil
+								}
 								pkgDir := path.Join(ctx.wd, "node_modules", pkgName)
 								short := strings.TrimPrefix(resolvedFilename, pkgDir)[1:]
 								if analyzeMode && resolvedFilename != entryModuleFilename && strings.HasPrefix(args.Importer, pkgDir) {

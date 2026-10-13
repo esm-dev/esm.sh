@@ -134,6 +134,89 @@ func TestBuildModuleBundleNodeRuntime(t *testing.T) {
 	}
 }
 
+func TestBuildModuleSharedCSS(t *testing.T) {
+	for _, target := range []string{"es2022", "denonext"} {
+		for _, cached := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/cached=%v", target, cached), func(t *testing.T) {
+				wd := t.TempDir()
+				pkgDir := filepath.Join(wd, "node_modules", "example")
+				if err := os.MkdirAll(pkgDir, 0755); err != nil {
+					t.Fatal(err)
+				}
+				for name, code := range map[string]string{
+					"a.js":       `import "./shared.css"; export { value } from "./shared.js";`,
+					"b.js":       `import "./shared.css"; export { value } from "./shared.js";`,
+					"shared.js":  `export const value = 1;`,
+					"shared.css": `.shared { color: red; }`,
+				} {
+					if err := os.WriteFile(filepath.Join(pkgDir, name), []byte(code), 0644); err != nil {
+						t.Fatal(err)
+					}
+				}
+				if cached {
+					if err := os.WriteFile(filepath.Join(wd, "splitting.txt"), []byte("2\nshared.js\nshared.css"), 0644); err != nil {
+						t.Fatal(err)
+					}
+				}
+				fs, err := storage.NewFSStorage(filepath.Join(wd, "storage"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				logger, err := log.New("")
+				if err != nil {
+					t.Fatal(err)
+				}
+				logger.SetOutput(io.Discard)
+				ctx := &BuildContext{
+					wd: wd, target: target, storage: fs, logger: logger, npmrc: &NpmRC{},
+					esmPath: EsmPath{PkgName: "example", PkgVersion: "1.0.0", SubPath: "a"},
+					pkgJson: &npm.PackageJSON{
+						Name: "example", Version: "1.0.0", Type: "module", Types: "./index.d.ts",
+						SideEffects: *set.NewReadOnly("*.css"),
+						Exports:     npm.NewJSONObject([]string{"./a", "./b"}, map[string]any{"./a": "./a.js", "./b": "./b.js"}),
+					},
+				}
+				ctx.analyzeSplitting()
+				meta, _, err := ctx.buildModule(false)
+				if err != nil {
+					t.Fatal(err)
+				}
+				f, _, err := fs.Get(ctx.getSavePath())
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer f.Close()
+				output, err := io.ReadAll(f)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if strings.Contains(string(output), ".css") {
+					t.Errorf("JavaScript imports CSS: %s", output)
+				}
+				wantImports := []string{"/example@1.0.0/" + target + "/shared.mjs"}
+				if !slices.Equal(meta.Imports, wantImports) {
+					t.Errorf("imports = %v, want %v", meta.Imports, wantImports)
+				}
+				if !meta.CSSInJS {
+					t.Fatal("missing CSS output metadata")
+				}
+				f, _, err = fs.Get(strings.TrimSuffix(ctx.getSavePath(), ".mjs") + ".css")
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer f.Close()
+				css, err := io.ReadAll(f)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !strings.Contains(string(css), ".shared") || !strings.Contains(string(css), "red") {
+					t.Errorf("missing shared styles: %s", css)
+				}
+			})
+		}
+	}
+}
+
 func TestBuildModuleConcurrentResolvers(t *testing.T) {
 	wd := t.TempDir()
 	pkgDir := filepath.Join(wd, "node_modules", "example")
