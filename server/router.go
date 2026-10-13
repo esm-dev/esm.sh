@@ -769,7 +769,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 					pathKind = RawFile
 				}
 			default:
-				if ext != "" && assetExts[ext[1:]] {
+				if (ext != "" && assetExts[ext[1:]]) || isLicenseFile(pathname) {
 					pathKind = RawFile
 				}
 			}
