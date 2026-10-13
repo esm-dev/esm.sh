@@ -155,7 +155,7 @@ To deploy the server with CloudFlare CDN, create the following cache rules in th
 
 For rules 1–4, set **"Do not serve stale content while updating"** to **Off**.
 
-Floating module entries, metadata, and temporary redirects use `npmQueryCacheTTL` for fresh responses. Their headers permit 60 seconds of asynchronous revalidation (`stale-while-revalidate=60`) and one day of error fallback (`stale-if-error=86400`) after expiry. Cloudflare requires the setting above to allow [asynchronous revalidation](https://developers.cloudflare.com/cache/concepts/revalidation/).
+Floating module entries, metadata, and temporary redirects use `npmQueryCacheTTL` for fresh responses. The `stale-while-revalidate` window equals `min(npmQueryCacheTTL, 86400)` seconds, measured from cache expiry. The default TTL gives `max-age=600, stale-while-revalidate=600`. The `stale-if-error=86400` directive permits one day of error fallback after expiry. Cloudflare requires the setting above to allow [asynchronous revalidation](https://developers.cloudflare.com/cache/concepts/revalidation/).
 
 #### 1. Cache Static Content
 

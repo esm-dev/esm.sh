@@ -26,7 +26,7 @@ Deno.test("redirect semantic versioning module for deno target", async () => {
     const res = await fetch("http://localhost:8080/preact", { redirect: "manual" });
     res.body?.cancel();
     assertEquals(res.status, 302);
-    assertEquals(res.headers.get("cache-control"), "public, max-age=600, stale-while-revalidate=60, stale-if-error=86400");
+    assertEquals(res.headers.get("cache-control"), "public, max-age=600, stale-while-revalidate=600, stale-if-error=86400");
     assertStringIncludes(res.headers.get("location")!, "http://localhost:8080/preact@");
     assertStringIncludes(res.headers.get("vary") ?? "", "User-Agent");
   }
@@ -36,7 +36,7 @@ Deno.test("redirect semantic versioning module for deno target", async () => {
     const res = await fetch("http://localhost:8080/preact", { redirect: "manual", headers: { "User-Agent": "ES/2022" } });
     const code = await res.text();
     assertEquals(res.status, 200);
-    assertEquals(res.headers.get("cache-control"), "public, max-age=600, stale-while-revalidate=60, stale-if-error=86400");
+    assertEquals(res.headers.get("cache-control"), "public, max-age=600, stale-while-revalidate=600, stale-if-error=86400");
     assertEquals(res.headers.get("content-type"), "application/javascript; charset=utf-8");
     assertStringIncludes(res.headers.get("vary") ?? "", "User-Agent");
     assertStringIncludes(code, "/preact@");
@@ -49,7 +49,7 @@ Deno.test("redirect asset URLs", async () => {
     const res = await fetch("http://localhost:8080/react/package.json", { redirect: "manual" });
     res.body?.cancel();
     assertEquals(res.status, 302);
-    assertEquals(res.headers.get("cache-control"), "public, max-age=600, stale-while-revalidate=60, stale-if-error=86400");
+    assertEquals(res.headers.get("cache-control"), "public, max-age=600, stale-while-revalidate=600, stale-if-error=86400");
     assertStringIncludes(res.headers.get("location")!, "http://localhost:8080/react@");
 
     const res2 = await fetch(res.headers.get("location")!, { redirect: "manual" });
@@ -62,7 +62,7 @@ Deno.test("redirect asset URLs", async () => {
     const res = await fetch("http://localhost:8080/react@^18.3.1/package.json", { redirect: "manual" });
     res.body?.cancel();
     assertEquals(res.status, 302);
-    assertEquals(res.headers.get("cache-control"), "public, max-age=600, stale-while-revalidate=60, stale-if-error=86400");
+    assertEquals(res.headers.get("cache-control"), "public, max-age=600, stale-while-revalidate=600, stale-if-error=86400");
     assertStringIncludes(res.headers.get("location")!, "http://localhost:8080/react@18.");
 
     const res2 = await fetch(res.headers.get("location")!, { redirect: "manual" });
@@ -75,7 +75,7 @@ Deno.test("redirect asset URLs", async () => {
     const res = await fetch("http://localhost:8080/react/package.json?module", { redirect: "manual" });
     res.body?.cancel();
     assertEquals(res.status, 302);
-    assertEquals(res.headers.get("cache-control"), "public, max-age=600, stale-while-revalidate=60, stale-if-error=86400");
+    assertEquals(res.headers.get("cache-control"), "public, max-age=600, stale-while-revalidate=600, stale-if-error=86400");
     assertStringIncludes(res.headers.get("location")!, "http://localhost:8080/react@");
     assert(res.headers.get("location")!.endsWith("/package.json?module"));
 
