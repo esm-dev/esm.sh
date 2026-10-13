@@ -3,12 +3,14 @@ package server
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path"
 	"regexp"
 )
 
 var (
+	regSanitizeHTMLExport       = regexp.MustCompile(`(?m)^ {2,4}(?:interface|type|const|function) ([\w$]+)`)
 	regReadTailwindPreflightCSS = regexp.MustCompile(`[a-zA-Z.]+\.readFileSync\(.+?/preflight\.css"\),\s*"utf-?8"\)`)
 )
 
@@ -42,6 +44,18 @@ func (ctx *BuildContext) rewriteJS(in []byte) (out []byte, dropSourceMap bool) {
 
 func (ctx *BuildContext) rewriteDTS(filename string, buf *bytes.Buffer) *bytes.Buffer {
 	switch ctx.esmPath.PkgName {
+	case "@types/sanitize-html":
+		if filename == "./index.d.ts" {
+			dts := buf.Bytes()
+			_, namespace, ok := bytes.Cut(dts, []byte("\ndeclare namespace sanitize {\n"))
+			if ok && bytes.Contains(dts, []byte("\nexport = sanitize;\n")) {
+				buf = bytes.NewBuffer(bytes.Replace(dts, []byte("\nexport = sanitize;\n"), []byte("\nexport default sanitize;\n"), 1))
+				for _, match := range regSanitizeHTMLExport.FindAllSubmatch(namespace, -1) {
+					fmt.Fprintf(buf, "export import %s = sanitize.%s;\n", match[1], match[1])
+				}
+				return buf
+			}
+		}
 	case "preact":
 		// fix preact/compat types
 		if filename == "./compat/src/index.d.ts" {
