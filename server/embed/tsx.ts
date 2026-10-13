@@ -5,7 +5,6 @@
  */
 
 const d = document;
-const l = localStorage;
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 const stringify = JSON.stringify;
@@ -53,6 +52,7 @@ function run() {
     const script = d.createElement("script");
     let js: string | null | undefined;
     try {
+      const l = localStorage;
       js = l.getItem(cacheKey);
       if (js && l.getItem(hashCacheKey) !== hash) {
         js = null;
@@ -82,6 +82,7 @@ function run() {
         }
       }
       try {
+        const l = localStorage;
         l.setItem(cacheKey, js!);
         l.setItem(hashCacheKey, hash);
       } catch {
