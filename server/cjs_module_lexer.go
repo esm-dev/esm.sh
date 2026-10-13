@@ -24,7 +24,7 @@ import (
 	"github.com/ije/gox/utils"
 )
 
-var cjsModuleLexerVersion = "1.1.0"
+var cjsModuleLexerVersion = "1.2.1"
 var cjsModuleLexerIgnoredPackages = set.New(
 	"@babel/types",
 	"cheerio",
@@ -35,11 +35,13 @@ var cjsModuleLexerIgnoredPackages = set.New(
 	"maplibre-gl",
 	"pako",
 	"postcss-selector-parser",
+	"prop-types",
 	"react-draggable",
 	"safe-buffer",
 	"stream-browserify",
 	"typescript",
 	"vscode-oniguruma",
+	"vscode-textmate",
 	"web-streams-ponyfill",
 )
 
@@ -49,8 +51,13 @@ type cjsModuleLexerResult struct {
 }
 
 func cjsModuleLexer(b *BuildContext, cjsEntry string) (ret cjsModuleLexerResult, err error) {
+	useDeno := cjsModuleLexerIgnoredPackages.Has(b.esmPath.PkgName)
+	version := cjsModuleLexerVersion
+	if useDeno {
+		version = "deno-" + denoVersion
+	}
 	h := sha1.New()
-	h.Write([]byte(cjsModuleLexerVersion))
+	h.Write([]byte(version + "-2"))
 	h.Write([]byte(cjsEntry))
 	h.Write([]byte(b.getNodeEnv()))
 	cacheFileName := path.Join(b.wd, ".cjs-module-lexer", base64.RawURLEncoding.EncodeToString(h.Sum(nil))+".json")
@@ -73,7 +80,7 @@ func cjsModuleLexer(b *BuildContext, cjsEntry string) (ret cjsModuleLexerResult,
 		}
 	}()
 
-	if cjsModuleLexerIgnoredPackages.Has(b.esmPath.PkgName) {
+	if useDeno {
 		denoPath := resolveDenoPath(config.WorkDir)
 		err = doOnce("check-deno", func() (err error) {
 			return checkDenoPath(denoPath)
@@ -121,8 +128,7 @@ func cjsModuleLexer(b *BuildContext, cjsEntry string) (ret cjsModuleLexerResult,
 			return
 		}
 		for _, name := range namedExports {
-			// These names are spliced into `export const { ... }` by buildModule.
-			if isJsIdentifier(name) && !isJsReservedWord(name) {
+			if isJsIdentifier(name) && name != "default" {
 				ret.Exports = append(ret.Exports, name)
 			}
 		}
@@ -154,13 +160,13 @@ RETRY:
 	err = cmd.Run()
 	if err != nil {
 		if stderr.Len() > 0 {
-			msg := stderr.String()
-			if strings.HasPrefix(msg, "thread 'main' panicked at") {
-				formattedMessage := strings.Split(msg, "\n")[1]
+			msg := strings.TrimSpace(stderr.String())
+			if header, message, ok := strings.Cut(msg, "\n"); ok && strings.HasPrefix(header, "thread 'main' ") && strings.Contains(header, " panicked at ") {
+				formattedMessage, _, _ := strings.Cut(message, "\n")
 				if strings.HasPrefix(formattedMessage, "failed to resolve reexport: NotFound(") && !retried {
 					retried = true
 					// install dependencies and retry
-					err = b.npmrc.installDependenciesContext(b.Context(), b.wd, b.pkgJson, true, nil)
+					err = b.npmrc.installDependenciesContext(b.Context(), b.wd, b.pkgJson, true, b.args.Deps, nil)
 					if err != nil {
 						return
 					}
@@ -186,7 +192,7 @@ RETRY:
 		if strings.HasPrefix(line, "@") {
 			ret.Reexport = line[1:]
 			break
-		} else if isJsIdentifier(line) && !isJsReservedWord(line) {
+		} else if isJsIdentifier(line) && line != "default" {
 			ret.Exports = append(ret.Exports, line)
 		}
 	}

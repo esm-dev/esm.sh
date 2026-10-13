@@ -133,7 +133,8 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 			} else {
 				for _, name := range pkgJson.Exports.Keys() {
 					conditions, _ := pkgJson.Exports.Get(name)
-					if stripEntryModuleExt(name) == "./"+subPath {
+					name = stripEntryModuleExt(name)
+					if name == "./"+subPath {
 						if s, ok := conditions.(string); ok {
 							/**
 							exports: {
@@ -218,9 +219,11 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 		if utils.ParseJSONFile(path.Join(ctx.wd, "node_modules", ctx.esmPath.PkgName, subPath, "package.json"), &rawInfo) == nil {
 			p := rawInfo.ToNpmPackage()
 			if entry.main == "" {
-				if p.Module != "" && ctx.existsPkgFile(subPath, p.Module) {
+				if p.Module != "" {
 					entry.update("./"+path.Join(subPath, p.Module), true)
-				} else if p.Main != "" && ctx.existsPkgFile(subPath, p.Main) {
+					ctx.finalizeBuildEntry(&entry)
+				}
+				if entry.main == "" && p.Main != "" && ctx.existsPkgFile(subPath, p.Main) {
 					entry.update("./"+path.Join(subPath, p.Main), p.Type == "module")
 				}
 			}
@@ -298,17 +301,23 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 			}
 		}
 	} else {
-		if pkgJson.Module != "" && ctx.existsPkgFile(pkgJson.Module) {
+		if pkgJson.Module != "" {
 			entry.update(pkgJson.Module, true)
-		} else if pkgJson.Main != "" {
+			ctx.finalizeBuildEntry(&entry)
+		}
+		if entry.main == "" && pkgJson.Main != "" {
 			entry.update(pkgJson.Main, pkgJson.Type == "module")
 		}
 		if pkgJson.Types != "" {
 			entry.types = normalizeEntryPath(pkgJson.Types)
 		}
 		if len(pkgJson.Browser) > 0 && ctx.isBrowserTarget() {
-			if path, ok := pkgJson.Browser["."]; ok && ctx.existsPkgFile(path) {
-				entry.update(path, pkgJson.Type == "module")
+			if path, ok := pkgJson.Browser["."]; ok {
+				browserEntry := BuildEntry{main: path, module: pkgJson.Type == "module"}
+				ctx.finalizeBuildEntry(&browserEntry)
+				if browserEntry.main != "" {
+					entry.update(browserEntry.main, browserEntry.module)
+				}
 			}
 		}
 
@@ -418,8 +427,12 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 	// resolve entry main from `browser` field if it's defined
 	if len(pkgJson.Browser) > 0 && ctx.isBrowserTarget() {
 		if entry.main != "" {
-			if path, ok := pkgJson.Browser[entry.main]; ok && ctx.existsPkgFile(path) {
-				entry.update(path, pkgJson.Type == "module")
+			if path, ok := pkgJson.Browser[entry.main]; ok {
+				browserEntry := BuildEntry{main: path, module: pkgJson.Type == "module"}
+				ctx.finalizeBuildEntry(&browserEntry)
+				if browserEntry.main != "" {
+					entry.update(browserEntry.main, browserEntry.module)
+				}
 			}
 		}
 	}
@@ -745,7 +758,22 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 
 	// check `?external`
 	packageName := toPackageName(specifier)
-	if ctx.externalAll || ctx.args.External.Has(packageName) || isPackageInExternalNamespace(packageName, ctx.args.External) {
+	externalAll := ctx.externalAll
+	if externalAll && ctx.pkgJson.Exports.Len() > 0 && (packageName == ctx.pkgJson.Name || packageName == ctx.pkgJson.PkgName) {
+		if subPath, ok := strings.CutPrefix(specifier, packageName+"/"); ok {
+			externalAll = false
+			subPath = stripEntryModuleExt(subPath)
+			for _, exportName := range ctx.pkgJson.Exports.Keys() {
+				exportName = stripEntryModuleExt(exportName)
+				_, match := matchAsteriskExport(exportName, subPath)
+				if exportName == "./"+subPath || match {
+					externalAll = true
+					break
+				}
+			}
+		}
+	}
+	if externalAll || isExternalModule(specifier, ctx.args.External) {
 		resolvedPath = specifier
 		return
 	}
@@ -754,6 +782,8 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 	if isNodeBuiltinSpecifier(specifier) {
 		if ctx.externalAll || ctx.target == "node" || ctx.target == "denonext" || ctx.args.External.Has(specifier) {
 			resolvedPath = specifier
+		} else if !nodeBuiltinModules[specifier[5:]] {
+			resolvedPath = fmt.Sprintf("/error.js?type=unsupported-node-builtin-module&name=%s&importer=%s", specifier, ctx.esmPath.String())
 		} else if ctx.target == "deno" {
 			resolvedPath = fmt.Sprintf("https://deno.land/std@0.177.1/node/%s.ts", specifier[5:])
 		} else {

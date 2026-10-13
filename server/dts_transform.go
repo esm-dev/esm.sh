@@ -162,6 +162,46 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, transfo
 		rawSpecifier := specifier
 		specifier = normalizeImportSpecifier(specifier)
 
+		if strings.HasPrefix(specifier, "#") {
+			value, ok := ctx.pkgJson.Imports.Get(specifier)
+			var pattern, match string
+			if !ok {
+				for _, name := range ctx.pkgJson.Imports.Keys() {
+					if diff, matched := matchAsteriskExport("./"+name, specifier); matched {
+						prefix, bestPrefix := strings.IndexByte(name, '*'), strings.IndexByte(pattern, '*')
+						if prefix > bestPrefix || (prefix == bestPrefix && len(name) > len(pattern)) {
+							value, _ = ctx.pkgJson.Imports.Get(name)
+							pattern, match = name, diff
+						}
+					}
+				}
+			}
+			var target string
+			if s, ok := value.(string); ok {
+				target = s
+			} else if obj, ok := value.(npm.JSONObject); ok {
+				entry := ctx.resolveConditionExportEntry(obj, ctx.pkgJson.Type)
+				target = entry.types
+				if target == "" {
+					target = entry.main
+				}
+			}
+			if target == "" {
+				return specifier, nil
+			}
+			if pattern != "" {
+				target = strings.ReplaceAll(target, "*", match)
+			}
+			rawSpecifier = target
+			specifier = normalizeImportSpecifier(target)
+			if isRelPathSpecifier(specifier) {
+				specifier, resolveErr = relPath(path.Dir(dtsFilename), path.Join(ctx.wd, "node_modules", ctx.esmPath.PkgName, specifier))
+				if resolveErr != nil {
+					return "", resolveErr
+				}
+			}
+		}
+
 		if isRelPathSpecifier(specifier) {
 			dtsDir := path.Dir(dtsFilename)
 			specifier = strings.TrimSuffix(specifier, ".d")
@@ -217,7 +257,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, transfo
 			return "", nil
 		}
 
-		if specifier == "node" || isNodeBuiltinSpecifier(specifier) {
+		if specifier == "node" || strings.HasPrefix(specifier, "node:") {
 			return specifier, nil
 		}
 
@@ -281,7 +321,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, transfo
 		}
 
 		// respect `?external` query
-		if ctx.externalAll || ctx.args.External.Has(depPkgName) || isPackageInExternalNamespace(depPkgName, ctx.args.External) {
+		if ctx.externalAll || isExternalModule(specifier, ctx.args.External) {
 			if !aliased && strings.HasPrefix(rawSpecifier, "npm:") {
 				return rawSpecifier, nil
 			}

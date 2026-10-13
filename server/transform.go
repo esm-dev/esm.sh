@@ -4,11 +4,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/esm-dev/esm.sh/internal/importmap"
 	"github.com/esm-dev/esm.sh/internal/npm"
 	esbuild "github.com/ije/esbuild-internal/api"
+	esbuild_config "github.com/ije/esbuild-internal/config"
+	"github.com/ije/esbuild-internal/js_ast"
+	"github.com/ije/esbuild-internal/js_parser"
+	"github.com/ije/esbuild-internal/logger"
+	"github.com/ije/gox/set"
 	"github.com/ije/gox/utils"
 )
 
@@ -108,6 +114,7 @@ func transform(options *ResolvedTransformOptions) (out *TransformOutput, err err
 		Contents:   sourceCode,
 		Loader:     loader,
 	}
+	solidJSXRuntimes := set.New[string]()
 	opts := esbuild.BuildOptions{
 		Stdin:             stdin,
 		Platform:          esbuild.PlatformBrowser,
@@ -128,13 +135,24 @@ func transform(options *ResolvedTransformOptions) (out *TransformOutput, err err
 				Name: "resolver",
 				Setup: func(build esbuild.PluginBuild) {
 					build.OnResolve(esbuild.OnResolveOptions{Filter: ".*"}, func(args esbuild.OnResolveArgs) (esbuild.OnResolveResult, error) {
+						path := args.Path
 						if importMap != nil {
-							path, ok := importMap.Resolve(args.Path, nil)
-							if ok && isHttpSpecifier(path) {
-								return esbuild.OnResolveResult{Path: path, External: true}, nil
+							if resolved, ok := importMap.Resolve(path, nil); ok && isHttpSpecifier(resolved) {
+								path = resolved
 							}
 						}
-						return esbuild.OnResolveResult{Path: args.Path, External: true}, nil
+						runtimePath := path
+						if isHttpSpecifier(path) {
+							runtimePath = ""
+							if u, err := url.Parse(path); err == nil && u.Hostname() == "esm.sh" {
+								runtimePath = u.Path
+							}
+						}
+						pkgName, _, subPath := splitEsmPath(runtimePath)
+						if pkgName == "solid-js" && (subPath == "jsx-runtime" || subPath == "jsx-dev-runtime") {
+							solidJSXRuntimes.Add(path)
+						}
+						return esbuild.OnResolveResult{Path: path, External: true}, nil
 					})
 				},
 			},
@@ -149,15 +167,43 @@ func transform(options *ResolvedTransformOptions) (out *TransformOutput, err err
 		err = errors.New("failed to validate code: no output files")
 		return
 	}
-	out = &TransformOutput{}
+	output := &TransformOutput{}
 	for _, file := range ret.OutputFiles {
 		if strings.HasSuffix(file.Path, ".js") || strings.HasSuffix(file.Path, ".css") {
-			out.Code = string(file.Contents)
+			if err = validateSolidJSX(file.Contents, solidJSXRuntimes); err != nil {
+				return
+			}
+			output.Code = string(file.Contents)
 		} else if strings.HasSuffix(file.Path, ".map") {
-			out.Map = string(file.Contents)
+			output.Map = string(file.Contents)
 		}
 	}
+	out = output
 	return
+}
+
+func validateSolidJSX(code []byte, runtimes *set.Set[string]) error {
+	if runtimes.Len() == 0 {
+		return nil
+	}
+	log := logger.NewDeferLog(logger.DeferLogNoVerboseOrDebug, nil)
+	ast, ok := js_parser.Parse(log, logger.Source{Contents: string(code)}, js_parser.OptionsFromConfig(&esbuild_config.Options{}))
+	if ok {
+		for _, part := range ast.Parts {
+			for _, stmt := range part.Stmts {
+				imported, ok := stmt.Data.(*js_ast.SImport)
+				if !ok || imported.Items == nil || !runtimes.Has(ast.ImportRecords[imported.ImportRecordIndex].Path.Text) {
+					continue
+				}
+				for _, item := range *imported.Items {
+					if item.Alias == "jsx" || item.Alias == "jsxs" || item.Alias == "jsxDEV" {
+						return errors.New("Solid JSX is not supported. Compile it with babel-preset-solid first.")
+					}
+				}
+			}
+		}
+	}
+	return nil
 }
 
 // treeShake tree-shakes the given javascript code with the given exports.
