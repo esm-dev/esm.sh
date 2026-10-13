@@ -168,10 +168,11 @@ func resolveBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esm EsmP
 			}
 			if args.External.Len() > 0 {
 				for _, name := range args.External.Values() {
-					if strings.HasPrefix(name, "node:") || (name == esm.PkgName && esm.SubPath != "") {
+					pkgName := toPackageName(name)
+					if strings.HasPrefix(name, "node:") || (pkgName == esm.PkgName && esm.SubPath != "") {
 						continue
 					}
-					if !deps.Has(name) {
+					if !deps.Has(pkgName) {
 						return nil, false, nil
 					}
 				}
@@ -228,12 +229,12 @@ func resolveBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esm EsmP
 					external = append(external, name)
 					continue
 				}
-				// Check if this is a namespace pattern (e.g., @radix-ui)
-				isNamespace := strings.HasPrefix(name, "@") && !strings.Contains(name[1:], "/")
+				namespace := strings.TrimSuffix(name, "/*")
+				isNamespace := strings.HasPrefix(namespace, "@") && !strings.Contains(namespace[1:], "/")
 				if isNamespace {
 					// Add all packages from this namespace that are in deps
 					for _, dep := range deps.Values() {
-						if strings.HasPrefix(dep, name+"/") {
+						if strings.HasPrefix(dep, namespace+"/") {
 							external = append(external, dep)
 						}
 					}
@@ -241,12 +242,12 @@ func resolveBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esm EsmP
 					external = append(external, name)
 					continue
 				}
-				// if the subModule externalizes the package entry
-				if name == esm.PkgName && esm.SubPath != "" {
+				pkgName := toPackageName(name)
+				if pkgName == esm.PkgName && esm.SubPath != "" {
 					external = append(external, name)
 					continue
 				}
-				if name != esm.PkgName && deps.Has(name) {
+				if pkgName != esm.PkgName && deps.Has(pkgName) {
 					external = append(external, name)
 				}
 			}

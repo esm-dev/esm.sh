@@ -310,3 +310,135 @@ func TestBuildModuleExternalAllSplitting(t *testing.T) {
 		})
 	}
 }
+
+func TestResolveExternalModulePatterns(t *testing.T) {
+	wd := t.TempDir()
+	deps := map[string]string{"css-in-js-utils": "2.0.1", "css-in-js-utils-extra": "1.0.0", "@scope/pkg": "1.0.0", "@scope/pkg-extra": "1.0.0", "@scope-extra/pkg": "1.0.0"}
+	for name := range deps {
+		pkgDir := filepath.Join(wd, "node_modules", name)
+		if err := os.MkdirAll(pkgDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(pkgDir, "package.json"), []byte(fmt.Sprintf(`{"name":%q,"version":%q}`, name, deps[name])), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, tt := range []struct {
+		external, specifier string
+		match               bool
+	}{
+		{"css-in-js-utils/*", "css-in-js-utils/lib/isPrefixedValue", true},
+		{"css-in-js-utils/*", "css-in-js-utils", false},
+		{"css-in-js-utils/*", "css-in-js-utils-extra/lib/isPrefixedValue", false},
+		{"css-in-js-utils/lib/*", "css-in-js-utils/lib/nested/value", true},
+		{"css-in-js-utils/lib/*", "css-in-js-utils/library/value", false},
+		{"css-in-js-utils", "css-in-js-utils", true},
+		{"css-in-js-utils", "css-in-js-utils/lib/isPrefixedValue", true},
+		{"css-in-js-utils", "css-in-js-utils-extra", false},
+		{"css-in-js-utils/lib/isPrefixedValue", "css-in-js-utils/lib/isPrefixedValue", true},
+		{"css-in-js-utils/lib/isPrefixedValue", "css-in-js-utils/lib/other", false},
+		{"@scope/pkg/*", "@scope/pkg/sub", true},
+		{"@scope/pkg/*", "@scope/pkg", false},
+		{"@scope/pkg/*", "@scope/pkg-extra/sub", false},
+		{"@scope/pkg", "@scope/pkg/sub", true},
+		{"@scope", "@scope/pkg", true},
+		{"@scope", "@scope/pkg/sub", true},
+		{"@scope", "@scope-extra/pkg/sub", false},
+		{"@scope/*", "@scope/pkg", true},
+		{"@scope/*", "@scope/pkg/sub", true},
+		{"@scope/*", "@scope-extra/pkg/sub", false},
+	} {
+		t.Run(tt.external+":"+tt.specifier, func(t *testing.T) {
+			ctx := &BuildContext{
+				wd: wd, target: "es2022",
+				esmPath: EsmPath{PkgName: "example", PkgVersion: "1.0.0"},
+				pkgJson: &npm.PackageJSON{Name: "example", Version: "1.0.0", Dependencies: deps},
+				args:    BuildArgs{External: *set.NewReadOnly(tt.external)},
+			}
+			got, _, err := ctx.resolveExternalModule(tt.specifier, esbuild.ResolveJSImportStatement, false, false)
+			if err != nil || (got == tt.specifier) != tt.match {
+				t.Fatalf("resolved = %q, %v; want external = %v", got, err, tt.match)
+			}
+		})
+	}
+}
+
+func TestBuildExternalWildcard(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		mode BundleMode
+	}{
+		{"default", BundleDefault},
+		{"bundle", BundleDeps},
+		{"nobundle", BundleFalse},
+		{"types", BundleDefault},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			wd := t.TempDir()
+			const code = `export { default } from "css-in-js-utils/lib/isPrefixedValue";`
+			for name, contents := range map[string]string{
+				"example/package.json":                   `{"name":"example","version":"1.0.0","dependencies":{"css-in-js-utils":"2.0.1"}}`,
+				"example/index.js":                       code,
+				"example/index.d.ts":                     code,
+				"css-in-js-utils/package.json":           `{"name":"css-in-js-utils","version":"2.0.1","type":"module"}`,
+				"css-in-js-utils/lib/isPrefixedValue.js": `export default function isPrefixedValue() { return true; }`,
+			} {
+				filename := filepath.Join(wd, "node_modules", name)
+				if err := os.MkdirAll(filepath.Dir(filename), 0755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filename, []byte(contents), 0644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			fs, err := storage.NewFSStorage(filepath.Join(wd, "storage"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			logger, err := log.New("")
+			if err != nil {
+				t.Fatal(err)
+			}
+			logger.SetOutput(io.Discard)
+			ctx := &BuildContext{
+				wd: wd, target: "es2022", bundleMode: tt.mode, storage: fs, logger: logger, npmrc: &NpmRC{},
+				esmPath: EsmPath{PkgName: "example", PkgVersion: "1.0.0"},
+				pkgJson: &npm.PackageJSON{Name: "example", Version: "1.0.0", Type: "module", Main: "./index.js", Types: "./index.d.ts", Dependencies: map[string]string{"css-in-js-utils": "2.0.1"}},
+				args:    BuildArgs{External: *set.NewReadOnly("css-in-js-utils/*")},
+			}
+			if err := resolveBuildArgs(nil, wd, &ctx.args, ctx.esmPath); err != nil {
+				t.Fatal(err)
+			}
+			var savePath string
+			if tt.name == "types" {
+				ctx.target = "types"
+				meta, err := ctx.buildTypes()
+				if err != nil {
+					t.Fatal(err)
+				}
+				savePath = normalizeSavePath("types" + meta.Dts)
+			} else {
+				meta, _, err := ctx.buildModule(false)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if len(meta.Imports) != 0 {
+					t.Errorf("unexpected CDN imports: %v", meta.Imports)
+				}
+				savePath = ctx.getSavePath()
+			}
+			f, _, err := fs.Get(savePath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer f.Close()
+			output, err := io.ReadAll(f)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(string(output), `"css-in-js-utils/lib/isPrefixedValue"`) {
+				t.Fatalf("missing bare import in output:\n%s", output)
+			}
+		})
+	}
+}

@@ -275,6 +275,8 @@ esm.sh introduces the `?external` for specifying external dependencies. By emplo
 </script>
 ```
 
+Use `?external=preact/*` to keep subpath imports such as `preact/hooks` unchanged. Use `?external=preact` to keep both the package root and its subpaths unchanged.
+
 Alternatively, you can **mark all dependencies as external** by adding a `*` prefix before the package name:
 
 ```json

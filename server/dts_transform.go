@@ -321,7 +321,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, transfo
 		}
 
 		// respect `?external` query
-		if ctx.externalAll || ctx.args.External.Has(depPkgName) || isPackageInExternalNamespace(depPkgName, ctx.args.External) {
+		if ctx.externalAll || isExternalModule(specifier, ctx.args.External) {
 			if !aliased && strings.HasPrefix(rawSpecifier, "npm:") {
 				return rawSpecifier, nil
 			}
