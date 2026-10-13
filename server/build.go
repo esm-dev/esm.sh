@@ -1121,6 +1121,9 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 			define["window"] = "globalThis"
 		}
 		for k, v := range define {
+			if k == "process" {
+				continue
+			}
 			define["global."+k] = v
 			define["globalThis."+k] = v
 		}
