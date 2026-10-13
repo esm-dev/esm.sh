@@ -746,7 +746,22 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 
 	// check `?external`
 	packageName := toPackageName(specifier)
-	if ctx.externalAll || ctx.args.External.Has(packageName) || isPackageInExternalNamespace(packageName, ctx.args.External) {
+	externalAll := ctx.externalAll
+	if externalAll && ctx.pkgJson.Exports.Len() > 0 && (packageName == ctx.pkgJson.Name || packageName == ctx.pkgJson.PkgName) {
+		if subPath, ok := strings.CutPrefix(specifier, packageName+"/"); ok {
+			externalAll = false
+			subPath = stripEntryModuleExt(subPath)
+			for _, exportName := range ctx.pkgJson.Exports.Keys() {
+				exportName = stripEntryModuleExt(exportName)
+				_, match := matchAsteriskExport(exportName, subPath)
+				if exportName == "./"+subPath || match {
+					externalAll = true
+					break
+				}
+			}
+		}
+	}
+	if externalAll || ctx.args.External.Has(packageName) || isPackageInExternalNamespace(packageName, ctx.args.External) {
 		resolvedPath = specifier
 		return
 	}
