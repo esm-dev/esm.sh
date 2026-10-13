@@ -35,11 +35,13 @@ var cjsModuleLexerIgnoredPackages = set.New(
 	"maplibre-gl",
 	"pako",
 	"postcss-selector-parser",
+	"prop-types",
 	"react-draggable",
 	"safe-buffer",
 	"stream-browserify",
 	"typescript",
 	"vscode-oniguruma",
+	"vscode-textmate",
 	"web-streams-ponyfill",
 )
 
@@ -49,8 +51,13 @@ type cjsModuleLexerResult struct {
 }
 
 func cjsModuleLexer(b *BuildContext, cjsEntry string) (ret cjsModuleLexerResult, err error) {
+	useDeno := cjsModuleLexerIgnoredPackages.Has(b.esmPath.PkgName)
+	version := cjsModuleLexerVersion
+	if useDeno {
+		version = "deno-" + denoVersion
+	}
 	h := sha1.New()
-	h.Write([]byte(cjsModuleLexerVersion + "-2"))
+	h.Write([]byte(version + "-2"))
 	h.Write([]byte(cjsEntry))
 	h.Write([]byte(b.getNodeEnv()))
 	cacheFileName := path.Join(b.wd, ".cjs-module-lexer", base64.RawURLEncoding.EncodeToString(h.Sum(nil))+".json")
@@ -73,7 +80,7 @@ func cjsModuleLexer(b *BuildContext, cjsEntry string) (ret cjsModuleLexerResult,
 		}
 	}()
 
-	if cjsModuleLexerIgnoredPackages.Has(b.esmPath.PkgName) {
+	if useDeno {
 		denoPath := resolveDenoPath(config.WorkDir)
 		err = doOnce("check-deno", func() (err error) {
 			return checkDenoPath(denoPath)
