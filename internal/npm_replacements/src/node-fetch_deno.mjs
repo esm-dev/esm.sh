@@ -3,8 +3,7 @@ export const AbortError = Error;
 export const FetchError = Error;
 export const isRedirect = (code) => (code > 300 && code < 304) || (code > 306 && code < 309);
 
-fetch.isRedirect = isRedirect;
-fetch.Promise = globalThis.Promise;
+Object.assign(fetch, { default: fetch, Headers, Request, Response, FetchError, AbortError, isRedirect, Promise: globalThis.Promise });
 export default fetch;
 
 export async function blobFrom(path, type) {
