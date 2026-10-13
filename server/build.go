@@ -1181,7 +1181,10 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 	} else {
 		options.Stdin = &stdin
 	}
-	if ctx.target == "node" {
+	if ctx.isDenoTarget() {
+		options.Platform = esbuild.PlatformNeutral
+		options.MainFields = []string{"module", "main"}
+	} else if ctx.target == "node" {
 		options.Platform = esbuild.PlatformNode
 	}
 	if config.SourceMap {
