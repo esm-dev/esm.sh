@@ -153,6 +153,10 @@ CMD ["esmd", "--config", "/etc/esmd/config.json"]
 
 To deploy the server with CloudFlare CDN, create the following cache rules in the CloudFlare dashboard (see [link](https://developers.cloudflare.com/cache/how-to/cache-rules/create-dashboard/)). Set rules 1–4 to **"Eligible for cache"**, and the purge endpoint rule to **"Bypass cache"**:
 
+For rules 1–4, set **"Do not serve stale content while updating"** to **Off**.
+
+Floating module entries, metadata, and temporary redirects use `npmQueryCacheTTL` for fresh responses. Their headers permit 60 seconds of asynchronous revalidation (`stale-while-revalidate=60`) and one day of error fallback (`stale-if-error=86400`) after expiry. Cloudflare requires the setting above to allow [asynchronous revalidation](https://developers.cloudflare.com/cache/concepts/revalidation/).
+
 #### 1. Cache Static Content
 
 ```ruby

@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -163,6 +162,7 @@ func TestRouterCacheRegressions(t *testing.T) {
 	previousConfig, previousNpmRC, transport := config, defaultNpmRC, http.DefaultTransport
 	testConfig := *config
 	testConfig.WorkDir = t.TempDir()
+	testConfig.NpmQueryCacheTTL = 120
 	config, defaultNpmRC = &testConfig, nil
 	t.Cleanup(func() {
 		config, defaultNpmRC, http.DefaultTransport = previousConfig, previousNpmRC, transport
@@ -244,7 +244,7 @@ func TestRouterCacheRegressions(t *testing.T) {
 				if res.Code != 302 || res.Header().Get("Location") != want {
 					t.Errorf("%s%s: HTTP %d, location=%q, want %q", test.prefix, test.name+suffix, res.Code, res.Header().Get("Location"), want)
 				}
-				if got := res.Header().Get("Cache-Control"); got != fmt.Sprintf("public, max-age=%d", config.NpmQueryCacheTTL) {
+				if got := res.Header().Get("Cache-Control"); got != "public, max-age=120, stale-while-revalidate=60, stale-if-error=86400" {
 					t.Errorf("unexpected cache policy: %s", got)
 				}
 			}
@@ -282,12 +282,51 @@ func TestRouterCacheRegressions(t *testing.T) {
 				if res.Code != 200 || res.Header().Get("X-TypeScript-Types") != "http://localhost"+dts {
 					t.Fatalf("%s %s: HTTP %d, headers=%v, body=%s", method, version, res.Code, res.Header(), res.Body.String())
 				}
-				want := fmt.Sprintf("public, max-age=%d", config.NpmQueryCacheTTL)
+				want := "public, max-age=120, stale-while-revalidate=60, stale-if-error=86400"
 				if version == "@1.0.0" {
 					want = ccImmutable
 				}
 				if got := res.Header().Get("Cache-Control"); got != want {
 					t.Errorf("%s %s: cache policy=%q, want %q", method, version, got, want)
+				}
+			}
+		}
+	})
+
+	t.Run("module entry cache policy", func(t *testing.T) {
+		const name = "module-cache-test"
+		build := &BuildContext{esmPath: EsmPath{PkgName: name, PkgVersion: "1.0.0"}, target: "es2022"}
+		defer cacheLRU.Remove(build.Path())
+		if err := NewBuildMetaDB(fs).Put(build.Path(), encodeBuildMeta(&BuildMeta{CSSInJS: true, Integrity: "sha384-test"})); err != nil {
+			t.Fatal(err)
+		}
+		for _, version := range []string{"@1.0.0", "", "@latest", "@^1"} {
+			key := "npm:" + name + "@" + npm.NormalizePackageVersion(strings.TrimPrefix(version, "@"))
+			setCacheItem(key, &npm.PackageJSON{Name: name, Version: "1.0.0"}, time.Minute)
+			t.Cleanup(func() { deleteCacheItem(key) })
+			for _, query := range []string{"", "&meta", "&css"} {
+				for _, method := range []string{"GET", "HEAD"} {
+					res := httptest.NewRecorder()
+					handler.ServeHTTP(res, httptest.NewRequest(method, "http://localhost/"+name+version+"?target=es2022"+query, nil))
+					status := 200
+					if query == "&css" {
+						status = 302
+						if version == "@1.0.0" {
+							status = 301
+						}
+					} else if method == "HEAD" && query == "" {
+						status = 204
+					}
+					if res.Code != status {
+						t.Fatalf("%s %s%s: HTTP %d, want %d: %s", method, version, query, res.Code, status, res.Body.String())
+					}
+					want := "public, max-age=120, stale-while-revalidate=60, stale-if-error=86400"
+					if version == "@1.0.0" {
+						want = ccImmutable
+					}
+					if got := res.Header().Get("Cache-Control"); got != want {
+						t.Errorf("%s %s%s: cache policy=%q, want %q", method, version, query, got, want)
+					}
 				}
 			}
 		}
