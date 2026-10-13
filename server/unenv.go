@@ -113,6 +113,16 @@ func buildUnenvNodeRuntime() (err error) {
 			{
 				Name: "resolve-node-builtin-modules",
 				Setup: func(build esbuild.PluginBuild) {
+					build.OnLoad(esbuild.OnLoadOptions{Filter: `/unenv/dist/runtime/node/internal/process/process\.mjs$`}, func(args esbuild.OnLoadArgs) (esbuild.OnLoadResult, error) {
+						data, err := os.ReadFile(args.Path)
+						if err != nil {
+							return esbuild.OnLoadResult{}, err
+						}
+						// A fake Node version makes Emscripten use Node APIs in browsers.
+						code := strings.ReplaceAll(string(data), "return { node: NODE_VERSION };", "return {};")
+						code = strings.ReplaceAll(code, "return `v${NODE_VERSION}`;", `return "";`)
+						return esbuild.OnLoadResult{Contents: &code, Loader: esbuild.LoaderJS}, nil
+					})
 					// https://github.com/unjs/unenv/issues/365
 					build.OnResolve(esbuild.OnResolveOptions{Filter: `^unenv/dist/runtime/node/stream$`}, func(args esbuild.OnResolveArgs) (esbuild.OnResolveResult, error) {
 						return esbuild.OnResolveResult{Path: "/node/stream.mjs", External: true}, nil

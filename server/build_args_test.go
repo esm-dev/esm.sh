@@ -67,7 +67,7 @@ func TestResolveBuildArgsExternalWithoutWalkingDeps(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	for _, external := range []string{"node:fs", "example"} {
+	for _, external := range []string{"node:fs", "example", "example/*", "broken/*", "node:sqlite", "node:test/reporters"} {
 		t.Run(external, func(t *testing.T) {
 			args := BuildArgs{External: *set.NewReadOnly(external)}
 			err := resolveBuildArgs(nil, wd, &args, EsmPath{PkgName: "example", PkgVersion: "1.0.0", SubPath: "sub"})
@@ -76,6 +76,35 @@ func TestResolveBuildArgsExternalWithoutWalkingDeps(t *testing.T) {
 			}
 			if !args.External.Has(external) {
 				t.Fatalf("lost external %q", external)
+			}
+		})
+	}
+}
+
+func TestResolveBuildArgsExternalPatterns(t *testing.T) {
+	wd := t.TempDir()
+	for name, contents := range map[string]string{
+		"example":         `{"name":"example","dependencies":{"dep":"1.0.0"}}`,
+		"dep":             `{"name":"dep","dependencies":{"css-in-js-utils":"2.0.1","@scope/pkg":"1.0.0"}}`,
+		"css-in-js-utils": `{"name":"css-in-js-utils"}`,
+		"@scope/pkg":      `{"name":"@scope/pkg"}`,
+	} {
+		pkgDir := filepath.Join(wd, "node_modules", name)
+		if err := os.MkdirAll(pkgDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(pkgDir, "package.json"), []byte(contents), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, external := range []string{"css-in-js-utils/*", "css-in-js-utils/lib/*", "@scope/pkg/*", "@scope/*", "@scope", "css-in-js-utils", "@scope/pkg"} {
+		t.Run(external, func(t *testing.T) {
+			args := BuildArgs{External: *set.NewReadOnly(external, "unrelated/*")}
+			if err := resolveBuildArgs(nil, wd, &args, EsmPath{PkgName: "example", PkgVersion: "1.0.0"}); err != nil {
+				t.Fatal(err)
+			}
+			if !args.External.Has(external) || args.External.Has("unrelated/*") {
+				t.Fatalf("unexpected external patterns: %v", args.External.Values())
 			}
 		})
 	}

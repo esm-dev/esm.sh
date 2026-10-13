@@ -156,20 +156,34 @@ func TestResolveEntryWildcardSuffix(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	for _, conditions := range []any{
-		"./src/*.js",
-		npm.NewJSONObject([]string{"types", "import"}, map[string]any{"types": "./src/*.d.ts", "import": "./src/*.js"}),
+	for _, tt := range []struct{ pattern, subpath string }{
+		{"./features/*-feature", "features/one-feature"},
+		{"./*.js", "one.js"},
+		{"./features/*.js", "features/one.js"},
+		{"./features/*.mjs", "features/one.mjs"},
+		{"./features/*.cjs", "features/one.cjs"},
+		{"./features/*-feature.js", "features/one-feature.js"},
 	} {
-		esm := EsmPath{PkgName: "example", PkgVersion: "1.0.0", SubPath: "features/one-feature"}
-		ctx := &BuildContext{
-			wd: wd, target: "es2022", esmPath: esm,
-			pkgJson: &npm.PackageJSON{
-				Name: "example", Version: "1.0.0", Type: "module",
-				Exports: npm.NewJSONObject([]string{"./features/*-feature"}, map[string]any{"./features/*-feature": conditions}),
-			},
-		}
-		if entry := ctx.resolveEntry(esm); entry.main != "./src/one.js" || entry.types != "./src/one.d.ts" || !entry.module {
-			t.Fatalf("unexpected entry: %+v", entry)
+		for i, conditions := range []any{
+			"./src/*.js",
+			npm.NewJSONObject([]string{"types", "import"}, map[string]any{"types": "./src/*.d.ts", "import": "./src/*.js"}),
+		} {
+			t.Run(fmt.Sprintf("%s/%d", tt.pattern, i), func(t *testing.T) {
+				esm, _, _, _, _, err := parseEsmPathSyntax("/example@1.0.0/" + tt.subpath)
+				if err != nil {
+					t.Fatal(err)
+				}
+				ctx := &BuildContext{
+					wd: wd, target: "es2022", esmPath: esm,
+					pkgJson: &npm.PackageJSON{
+						Name: "example", Version: "1.0.0", Type: "module",
+						Exports: npm.NewJSONObject([]string{tt.pattern}, map[string]any{tt.pattern: conditions}),
+					},
+				}
+				if entry := ctx.resolveEntry(esm); entry.main != "./src/one.js" || entry.types != "./src/one.d.ts" || !entry.module {
+					t.Fatalf("unexpected entry: %+v", entry)
+				}
+			})
 		}
 	}
 	for _, tt := range []struct {
@@ -186,5 +200,245 @@ func TestResolveEntryWildcardSuffix(t *testing.T) {
 		if got, ok := matchAsteriskExport(tt.pattern, tt.subpath); got != tt.want || ok != tt.match {
 			t.Errorf("match(%q, %q) = %q, %v; want %q, %v", tt.pattern, tt.subpath, got, ok, tt.want, tt.match)
 		}
+	}
+}
+
+func TestResolveExternalAllSelfModule(t *testing.T) {
+	for _, tt := range []struct {
+		name, specifier, external, want string
+		noExports                       bool
+	}{
+		{name: "private", specifier: "@scope/example/dist/shared-hash", want: "./dist/shared-hash.mjs"},
+		{name: "explicit package", specifier: "@scope/example/dist/shared-hash", external: "@scope/example", want: "@scope/example/dist/shared-hash"},
+		{name: "explicit namespace", specifier: "@scope/example/dist/shared-hash", external: "@scope", want: "@scope/example/dist/shared-hash"},
+		{name: "main", specifier: "@scope/example", want: "@scope/example"},
+		{name: "public", specifier: "@scope/example/public", want: "@scope/example/public"},
+		{name: "wildcard", specifier: "@scope/example/features/one", want: "@scope/example/features/one"},
+		{name: "no exports", specifier: "@scope/example/dist/shared-hash", noExports: true, want: "@scope/example/dist/shared-hash"},
+		{name: "dependency", specifier: "dependency/private", want: "dependency/private"},
+		{name: "builtin", specifier: "node:fs", want: "node:fs"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			pkg := &npm.PackageJSON{
+				Name: "@scope/example", Version: "1.0.0", Type: "module",
+				Exports: npm.NewJSONObject([]string{".", "./public", "./features/*"}, map[string]any{
+					".": "./index.js", "./public": "./public.js", "./features/*": "./features/*.js",
+				}),
+			}
+			if tt.noExports {
+				pkg.Exports = npm.JSONObject{}
+			}
+			ctx := &BuildContext{
+				target: "es2022", externalAll: true, pkgJson: pkg,
+				esmPath: EsmPath{PkgName: pkg.Name, PkgVersion: pkg.Version},
+			}
+			if tt.external != "" {
+				ctx.args.External = *set.NewReadOnly(tt.external)
+			}
+			got, _, err := ctx.resolveExternalModule(tt.specifier, esbuild.ResolveJSImportStatement, false, false)
+			if err != nil || got != tt.want {
+				t.Fatalf("resolved = %q, %v; want %q", got, err, tt.want)
+			}
+		})
+	}
+}
+
+func TestBuildModuleExternalAllSplitting(t *testing.T) {
+	wd := t.TempDir()
+	pkgDir := filepath.Join(wd, "node_modules", "@scope", "example", "dist")
+	if err := os.MkdirAll(pkgDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	for filename, contents := range map[string]string{
+		"index.js":       `export { state } from "./shared-hash.js";`,
+		"other.js":       `export { state } from "./shared-hash.js";`,
+		"shared-hash.js": `import { value } from "dependency"; export const state = { value };`,
+	} {
+		if err := os.WriteFile(filepath.Join(pkgDir, filename), []byte(contents), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	fs, err := storage.NewFSStorage(filepath.Join(wd, "storage"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	logger, err := log.New("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	logger.SetOutput(io.Discard)
+	pkg := &npm.PackageJSON{
+		Name: "@scope/example", Version: "1.0.0", Type: "module", Types: "./index.d.ts",
+		Exports:      npm.NewJSONObject([]string{".", "./other"}, map[string]any{".": "./dist/index.js", "./other": "./dist/other.js"}),
+		Dependencies: map[string]string{"dependency": "1.0.0"},
+	}
+	for _, subPath := range []string{"", "other", "dist/shared-hash"} {
+		t.Run(subPath, func(t *testing.T) {
+			ctx := &BuildContext{
+				wd: wd, target: "es2022", externalAll: true, storage: fs, logger: logger, npmrc: &NpmRC{}, pkgJson: pkg,
+				esmPath: EsmPath{PkgName: pkg.Name, PkgVersion: pkg.Version, SubPath: subPath},
+			}
+			ctx.analyzeSplitting()
+			if ctx.splitting == nil || !ctx.splitting.Has("dist/shared-hash.js") {
+				t.Fatal("shared module was not split")
+			}
+			meta, _, err := ctx.buildModule(false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			f, _, err := fs.Get(ctx.getSavePath())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer f.Close()
+			output, err := io.ReadAll(f)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := `"./dist/shared-hash.mjs"`
+			if subPath == "dist/shared-hash" {
+				want = `"dependency"`
+				if len(meta.Imports) != 0 {
+					t.Fatalf("dependency must remain external, got %v", meta.Imports)
+				}
+			} else if len(meta.Imports) != 1 || meta.Imports[0] != "/*@scope/example@1.0.0/es2022/dist/shared-hash.mjs" {
+				t.Errorf("unexpected shared module imports: %v", meta.Imports)
+			}
+			if !strings.Contains(string(output), want) {
+				t.Fatalf("missing %s:\n%s", want, output)
+			}
+		})
+	}
+}
+
+func TestResolveExternalModulePatterns(t *testing.T) {
+	wd := t.TempDir()
+	deps := map[string]string{"css-in-js-utils": "2.0.1", "css-in-js-utils-extra": "1.0.0", "@scope/pkg": "1.0.0", "@scope/pkg-extra": "1.0.0", "@scope-extra/pkg": "1.0.0"}
+	for name := range deps {
+		pkgDir := filepath.Join(wd, "node_modules", name)
+		if err := os.MkdirAll(pkgDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(pkgDir, "package.json"), []byte(fmt.Sprintf(`{"name":%q,"version":%q}`, name, deps[name])), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, tt := range []struct {
+		external, specifier string
+		match               bool
+	}{
+		{"css-in-js-utils/*", "css-in-js-utils/lib/isPrefixedValue", true},
+		{"css-in-js-utils/*", "css-in-js-utils", false},
+		{"css-in-js-utils/*", "css-in-js-utils-extra/lib/isPrefixedValue", false},
+		{"css-in-js-utils/lib/*", "css-in-js-utils/lib/nested/value", true},
+		{"css-in-js-utils/lib/*", "css-in-js-utils/library/value", false},
+		{"css-in-js-utils", "css-in-js-utils", true},
+		{"css-in-js-utils", "css-in-js-utils/lib/isPrefixedValue", true},
+		{"css-in-js-utils", "css-in-js-utils-extra", false},
+		{"css-in-js-utils/lib/isPrefixedValue", "css-in-js-utils/lib/isPrefixedValue", true},
+		{"css-in-js-utils/lib/isPrefixedValue", "css-in-js-utils/lib/other", false},
+		{"@scope/pkg/*", "@scope/pkg/sub", true},
+		{"@scope/pkg/*", "@scope/pkg", false},
+		{"@scope/pkg/*", "@scope/pkg-extra/sub", false},
+		{"@scope/pkg", "@scope/pkg/sub", true},
+		{"@scope", "@scope/pkg", true},
+		{"@scope", "@scope/pkg/sub", true},
+		{"@scope", "@scope-extra/pkg/sub", false},
+		{"@scope/*", "@scope/pkg", true},
+		{"@scope/*", "@scope/pkg/sub", true},
+		{"@scope/*", "@scope-extra/pkg/sub", false},
+	} {
+		t.Run(tt.external+":"+tt.specifier, func(t *testing.T) {
+			ctx := &BuildContext{
+				wd: wd, target: "es2022",
+				esmPath: EsmPath{PkgName: "example", PkgVersion: "1.0.0"},
+				pkgJson: &npm.PackageJSON{Name: "example", Version: "1.0.0", Dependencies: deps},
+				args:    BuildArgs{External: *set.NewReadOnly(tt.external)},
+			}
+			got, _, err := ctx.resolveExternalModule(tt.specifier, esbuild.ResolveJSImportStatement, false, false)
+			if err != nil || (got == tt.specifier) != tt.match {
+				t.Fatalf("resolved = %q, %v; want external = %v", got, err, tt.match)
+			}
+		})
+	}
+}
+
+func TestBuildExternalWildcard(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		mode BundleMode
+	}{
+		{"default", BundleDefault},
+		{"bundle", BundleDeps},
+		{"nobundle", BundleFalse},
+		{"types", BundleDefault},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			wd := t.TempDir()
+			const code = `export { default } from "css-in-js-utils/lib/isPrefixedValue";`
+			for name, contents := range map[string]string{
+				"example/package.json":                   `{"name":"example","version":"1.0.0","dependencies":{"css-in-js-utils":"2.0.1"}}`,
+				"example/index.js":                       code,
+				"example/index.d.ts":                     code,
+				"css-in-js-utils/package.json":           `{"name":"css-in-js-utils","version":"2.0.1","type":"module"}`,
+				"css-in-js-utils/lib/isPrefixedValue.js": `export default function isPrefixedValue() { return true; }`,
+			} {
+				filename := filepath.Join(wd, "node_modules", name)
+				if err := os.MkdirAll(filepath.Dir(filename), 0755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filename, []byte(contents), 0644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			fs, err := storage.NewFSStorage(filepath.Join(wd, "storage"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			logger, err := log.New("")
+			if err != nil {
+				t.Fatal(err)
+			}
+			logger.SetOutput(io.Discard)
+			ctx := &BuildContext{
+				wd: wd, target: "es2022", bundleMode: tt.mode, storage: fs, logger: logger, npmrc: &NpmRC{},
+				esmPath: EsmPath{PkgName: "example", PkgVersion: "1.0.0"},
+				pkgJson: &npm.PackageJSON{Name: "example", Version: "1.0.0", Type: "module", Main: "./index.js", Types: "./index.d.ts", Dependencies: map[string]string{"css-in-js-utils": "2.0.1"}},
+				args:    BuildArgs{External: *set.NewReadOnly("css-in-js-utils/*")},
+			}
+			if err := resolveBuildArgs(nil, wd, &ctx.args, ctx.esmPath); err != nil {
+				t.Fatal(err)
+			}
+			var savePath string
+			if tt.name == "types" {
+				ctx.target = "types"
+				meta, err := ctx.buildTypes()
+				if err != nil {
+					t.Fatal(err)
+				}
+				savePath = normalizeSavePath("types" + meta.Dts)
+			} else {
+				meta, _, err := ctx.buildModule(false)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if len(meta.Imports) != 0 {
+					t.Errorf("unexpected CDN imports: %v", meta.Imports)
+				}
+				savePath = ctx.getSavePath()
+			}
+			f, _, err := fs.Get(savePath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer f.Close()
+			output, err := io.ReadAll(f)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(string(output), `"css-in-js-utils/lib/isPrefixedValue"`) {
+				t.Fatalf("missing bare import in output:\n%s", output)
+			}
+		})
 	}
 }

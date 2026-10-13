@@ -1,7 +1,7 @@
 import { assertEquals } from "jsr:@std/assert";
 
-// shim document.createTreeWalker and HTMLElement class
 class HTMLElement {}
+Reflect.set(globalThis, "window", globalThis);
 Reflect.set(globalThis, "HTMLElement", HTMLElement);
 Reflect.set(globalThis, "document", { createTreeWalker: () => {} });
 
