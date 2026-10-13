@@ -897,6 +897,11 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 						isDynamicImport := args.Kind == esbuild.ResolveJSDynamicImport && !bundledDynamicImports.Has(resolvedFilename)
 						bundleInternalModule := exportAs == "" && !isDynamicImport && ctx.shouldBundleInternalModules()
 						if modulePath == entry.main || exportAs == entrySpecifier || (!isDynamicImport && !noBundle) || bundleInternalModule {
+							suffix := ""
+							if strings.HasSuffix(resolvedFilename, ".wasm?module") {
+								resolvedFilename = strings.TrimSuffix(resolvedFilename, "?module")
+								suffix = "?module"
+							}
 							if existsFile(resolvedFilename) {
 								if strings.HasSuffix(resolvedFilename, ".css") {
 									return esbuild.OnResolveResult{Path: resolvedFilename}, nil
@@ -920,12 +925,12 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 										External:    true,
 									}, nil
 								}
-								bundledModules.Add(resolvedFilename)
-								// embed wasm as WebAssembly.Module
+								bundledModules.Add(resolvedFilename + suffix)
 								if strings.HasSuffix(resolvedFilename, ".wasm") {
 									return esbuild.OnResolveResult{
 										Path:      resolvedFilename,
 										Namespace: "wasm",
+										Suffix:    suffix,
 									}, nil
 								}
 								// transfrom svelte component
@@ -1096,7 +1101,11 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 						return
 					}
 					wasm64 := base64.StdEncoding.EncodeToString(wasm)
-					code := fmt.Sprintf("export default Uint8Array.from(atob('%s'), c => c.charCodeAt(0))", wasm64)
+					code := fmt.Sprintf("Uint8Array.from(atob('%s'), c => c.charCodeAt(0))", wasm64)
+					if args.Suffix == "?module" {
+						code = "new WebAssembly.Module(" + code + ")"
+					}
+					code = "export default " + code
 					return esbuild.OnLoadResult{Contents: &code, Loader: esbuild.LoaderJS}, nil
 				},
 			)
