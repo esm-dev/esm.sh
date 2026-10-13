@@ -530,20 +530,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 					specifier := normalizeImportSpecifier(args.Path)
 					withTypeJSON := len(args.With) > 0 && args.With["type"] == "json"
 
-					// it's implicit external
-					if implicitExternal.Has(args.Path) {
-						externalPath, sideEffects, err := ctx.resolveExternalModule(args.Path, args.Kind, withTypeJSON, analyzeMode)
-						if err != nil {
-							return esbuild.OnResolveResult{}, err
-						}
-						return esbuild.OnResolveResult{
-							Path:        externalPath,
-							SideEffects: sideEffects,
-							External:    true,
-						}, nil
-					}
-
-					// check `?alias` option
+					originalSpecifier := specifier
 					if len(ctx.args.Alias) > 0 && !isRelPathSpecifier(specifier) {
 						pkgName, _, subPath := splitEsmPath(specifier)
 						if name, ok := ctx.args.Alias[pkgName]; ok {
@@ -552,6 +539,18 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 								specifier += "/" + subPath
 							}
 						}
+					}
+
+					if implicitExternal.Has(args.Path) || implicitExternal.Has(specifier) {
+						externalPath, sideEffects, err := ctx.resolveExternalModule(specifier, args.Kind, withTypeJSON, analyzeMode)
+						if err != nil {
+							return esbuild.OnResolveResult{}, err
+						}
+						return esbuild.OnResolveResult{
+							Path:        externalPath,
+							SideEffects: sideEffects,
+							External:    true,
+						}, nil
 					}
 
 					// resolve specifier using the `imports` field of package.json/deno.json
@@ -692,7 +691,8 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 						pkgName := toPackageName(specifier)
 						if ctx.bundleMode == BundleDeps && !isExternalModule(specifier, ctx.args.External) && !implicitExternal.Has(specifier) {
 							_, ok := pkgJson.PeerDependencies[pkgName]
-							if !ok {
+							_, originalPeer := pkgJson.PeerDependencies[toPackageName(originalSpecifier)]
+							if !ok && !originalPeer {
 								return esbuild.OnResolveResult{}, nil
 							}
 						}
@@ -1216,6 +1216,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 	}
 	options := esbuild.BuildOptions{
 		AbsWorkingDir:     ctx.wd,
+		Alias:             ctx.args.Alias,
 		PreserveSymlinks:  true,
 		Format:            esbuild.FormatESModule,
 		Target:            targets[ctx.target],
