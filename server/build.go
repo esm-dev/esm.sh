@@ -488,7 +488,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 					specifier := normalizeImportSpecifier(args.Path)
 					withTypeJSON := len(args.With) > 0 && args.With["type"] == "json"
 
-					aliased := false
+					originalSpecifier := specifier
 					if len(ctx.args.Alias) > 0 && !isRelPathSpecifier(specifier) {
 						pkgName, _, subPath := splitEsmPath(specifier)
 						if name, ok := ctx.args.Alias[pkgName]; ok {
@@ -496,12 +496,10 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 							if len(subPath) > 0 {
 								specifier += "/" + subPath
 							}
-							aliased = true
 						}
 					}
 
-					// Do not let esbuild resolve the original package after an alias.
-					if aliased || implicitExternal.Has(args.Path) {
+					if implicitExternal.Has(args.Path) || implicitExternal.Has(specifier) {
 						externalPath, sideEffects, err := ctx.resolveExternalModule(specifier, args.Kind, withTypeJSON, analyzeMode)
 						if err != nil {
 							return esbuild.OnResolveResult{}, err
@@ -635,7 +633,8 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 						pkgName := toPackageName(specifier)
 						if ctx.bundleMode == BundleDeps && !ctx.args.External.Has(pkgName) && !isPackageInExternalNamespace(pkgName, ctx.args.External) && !implicitExternal.Has(specifier) {
 							_, ok := pkgJson.PeerDependencies[pkgName]
-							if !ok {
+							_, originalPeer := pkgJson.PeerDependencies[toPackageName(originalSpecifier)]
+							if !ok && !originalPeer {
 								return esbuild.OnResolveResult{}, nil
 							}
 						}
@@ -1157,6 +1156,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 	}
 	options := esbuild.BuildOptions{
 		AbsWorkingDir:     ctx.wd,
+		Alias:             ctx.args.Alias,
 		PreserveSymlinks:  true,
 		Format:            esbuild.FormatESModule,
 		Target:            targets[ctx.target],

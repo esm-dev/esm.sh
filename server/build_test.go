@@ -468,3 +468,95 @@ func TestBuildModuleBundleAliases(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildModuleBundleAliasDependencies(t *testing.T) {
+	for _, tt := range []struct {
+		from    string
+		to      string
+		subpath string
+		missing bool
+	}{
+		{"old", "new", "", false},
+		{"@scope/old", "@scope/new", "", false},
+		{"old", "new/compat", "/runtime", false},
+		{"old", "old", "", false},
+		{"old", "new", "", true},
+	} {
+		for _, peer := range []bool{false, true} {
+			for _, code := range []string{`export { value } from %q;`, `export const value = require(%q);`, `export const load = () => import(%q);`} {
+				t.Run(fmt.Sprintf("%s:%s%s/peer=%v/missing=%v/%s", tt.from, tt.to, tt.subpath, peer, tt.missing, code), func(t *testing.T) {
+					wd := t.TempDir()
+					target, _, subpath := splitEsmPath(tt.to + tt.subpath)
+					files := map[string]string{
+						"example/index.js": fmt.Sprintf(code, tt.from+tt.subpath),
+					}
+					for _, name := range []string{tt.from, target} {
+						value := "alias value"
+						if name == tt.from {
+							value = "original value"
+						}
+						files[name+"/package.json"] = fmt.Sprintf(`{"name":%q,"version":"1.0.0","type":"module","exports":{".":"./index.js","./runtime":"./index.js","./compat/runtime":"./index.js"}}`, name)
+						if !tt.missing || name != target {
+							files[name+"/index.js"] = fmt.Sprintf(`export const value = %q;`, value)
+						}
+					}
+					for name, content := range files {
+						filename := filepath.Join(wd, "node_modules", name)
+						if err := os.MkdirAll(filepath.Dir(filename), 0755); err != nil {
+							t.Fatal(err)
+						}
+						if err := os.WriteFile(filename, []byte(content), 0644); err != nil {
+							t.Fatal(err)
+						}
+					}
+					fs, err := storage.NewFSStorage(filepath.Join(wd, "storage"))
+					if err != nil {
+						t.Fatal(err)
+					}
+					logger, err := log.New("")
+					if err != nil {
+						t.Fatal(err)
+					}
+					logger.SetOutput(io.Discard)
+					ctx := &BuildContext{
+						wd: wd, target: "es2022", bundleMode: BundleDeps, storage: fs, logger: logger, npmrc: &NpmRC{},
+						esmPath: EsmPath{PkgName: "example", PkgVersion: "1.0.0"},
+						args:    BuildArgs{Alias: map[string]string{tt.from: tt.to}},
+						pkgJson: &npm.PackageJSON{Name: "example", Version: "1.0.0", Type: "module", Main: "./index.js", Types: "./index.d.ts", Dependencies: map[string]string{tt.from: "1.0.0", target: "1.0.0"}},
+					}
+					if peer {
+						ctx.pkgJson.PeerDependencies = map[string]string{tt.from: "1.0.0"}
+					}
+					meta, _, err := ctx.buildModule(false)
+					if err != nil {
+						t.Fatal(err)
+					}
+					f, _, err := fs.Get(ctx.getSavePath())
+					if err != nil {
+						t.Fatal(err)
+					}
+					defer f.Close()
+					output, err := io.ReadAll(f)
+					if err != nil {
+						t.Fatal(err)
+					}
+					want := "alias value"
+					if tt.from == tt.to {
+						want = "original value"
+					}
+					if peer || tt.missing {
+						if subpath == "" {
+							subpath = filepath.Base(target)
+						}
+						want = fmt.Sprintf("/%s@1.0.0/es2022/%s.mjs", target, subpath)
+					} else if len(meta.Imports) != 0 || strings.Contains(string(output), "/"+target+"@") {
+						t.Fatalf("alias dependency remains external: %s", output)
+					}
+					if !strings.Contains(string(output), want) || (tt.from != tt.to && strings.Contains(string(output), "original value")) {
+						t.Fatalf("expected %q in bundle:\n%s", want, output)
+					}
+				})
+			}
+		}
+	}
+}
