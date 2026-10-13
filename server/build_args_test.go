@@ -67,7 +67,7 @@ func TestResolveBuildArgsExternalWithoutWalkingDeps(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	for _, external := range []string{"node:fs", "node:sqlite", "node:test/reporters", "example", "example/*", "broken/*"} {
+	for _, external := range []string{"node:fs", "example", "example/*", "broken/*", "node:sqlite", "node:test/reporters"} {
 		t.Run(external, func(t *testing.T) {
 			args := BuildArgs{External: *set.NewReadOnly(external)}
 			err := resolveBuildArgs(nil, wd, &args, EsmPath{PkgName: "example", PkgVersion: "1.0.0", SubPath: "sub"})

@@ -4,11 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/esm-dev/esm.sh/internal/npm"
-	"github.com/esm-dev/esm.sh/internal/storage"
-	esbuild "github.com/ije/esbuild-internal/api"
-	"github.com/ije/gox/log"
-	"github.com/ije/gox/set"
 	"io"
 	"net/http"
 	"os"
@@ -16,6 +11,12 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/esm-dev/esm.sh/internal/npm"
+	"github.com/esm-dev/esm.sh/internal/storage"
+	esbuild "github.com/ije/esbuild-internal/api"
+	"github.com/ije/gox/log"
+	"github.com/ije/gox/set"
 )
 
 func TestBuildModuleBundleNodeRuntime(t *testing.T) {
@@ -547,5 +548,152 @@ func TestBuildModuleSharedCSS(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestBuildModulePrivateNodeModules(t *testing.T) {
+	wd := t.TempDir()
+	pkgDir := filepath.Join(wd, "node_modules")
+	for name, content := range map[string]string{
+		"example/src/index.js":                      `export { value } from "lib/value"; export const commonjs = require("lib/value").default;`,
+		"example/src/node_modules/lib/value.js":     `import { number } from "types/numbers"; import { dep } from "dep"; export const value = number + dep; export default value;`,
+		"example/src/node_modules/types/numbers.js": `export { number } from "number";`,
+		"example/src/node_modules/number.js":        `export const number = 42;`,
+		"dep/package.json":                          `{ "name": "dep", "version": "1.0.0", "type": "module" }`,
+		"dep/index.js":                              `export const dep = 1;`,
+	} {
+		filename := filepath.Join(pkgDir, name)
+		if err := os.MkdirAll(filepath.Dir(filename), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filename, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	fs, err := storage.NewFSStorage(filepath.Join(wd, "storage"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	logger, err := log.New("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	logger.SetOutput(io.Discard)
+	for _, target := range []string{"es2022", "denonext"} {
+		t.Run(target, func(t *testing.T) {
+			ctx := &BuildContext{
+				wd: wd, target: target, storage: fs, logger: logger, npmrc: &NpmRC{},
+				esmPath: EsmPath{PkgName: "example", PkgVersion: "1.0.0"},
+				pkgJson: &npm.PackageJSON{Name: "example", Version: "1.0.0", Type: "module", Main: "./src/index.js", Types: "./index.d.ts", Dependencies: map[string]string{"dep": "1.0.0"}},
+			}
+			meta, _, err := ctx.buildModule(false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := []string{"/dep@1.0.0/" + target + "/dep.mjs"}
+			if !slices.Equal(meta.Imports, want) {
+				t.Errorf("imports = %v, want %v", meta.Imports, want)
+			}
+			f, _, err := fs.Get(ctx.getSavePath())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer f.Close()
+			output, err := io.ReadAll(f)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(string(output), "42") {
+				t.Error("missing private module value")
+			}
+		})
+	}
+}
+
+func TestBuildModulePrivateNodeModulesExternal(t *testing.T) {
+	wd := t.TempDir()
+	for name, content := range map[string]string{
+		"index.js":                         `export { value } from "lib/value"; export { value as scoped } from "@scope/lib/value";`,
+		"node_modules/lib/value.js":        `export const value = 42;`,
+		"node_modules/@scope/lib/value.js": `export const value = 99;`,
+	} {
+		filename := filepath.Join(wd, "node_modules", "example", name)
+		if err := os.MkdirAll(filepath.Dir(filename), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filename, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	fs, err := storage.NewFSStorage(filepath.Join(wd, "storage"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	logger, err := log.New("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	logger.SetOutput(io.Discard)
+	for _, tt := range []struct {
+		name     string
+		external []string
+		all      bool
+		mode     BundleMode
+		imports  []string
+	}{
+		{name: "default"},
+		{name: "package", external: []string{"lib"}, imports: []string{"lib/value"}},
+		{name: "package with bundle", mode: BundleDeps, external: []string{"lib"}, imports: []string{"lib/value"}},
+		{name: "exact subpath", external: []string{"lib/value"}, imports: []string{"lib/value"}},
+		{name: "subpath wildcard", external: []string{"lib/*"}, imports: []string{"lib/value"}},
+		{name: "subpath wildcard with bundle", mode: BundleDeps, external: []string{"lib/*"}, imports: []string{"lib/value"}},
+		{name: "scoped subpath wildcard", external: []string{"@scope/lib/*"}, imports: []string{"@scope/lib/value"}},
+		{name: "scoped subpath wildcard with bundle", mode: BundleDeps, external: []string{"@scope/lib/*"}, imports: []string{"@scope/lib/value"}},
+		{name: "subpath wildcard boundary", external: []string{"lib/value/*", "@scope/lib/value/*"}},
+		{name: "scoped package", external: []string{"@scope/lib"}, imports: []string{"@scope/lib/value"}},
+		{name: "namespace", external: []string{"@scope"}, imports: []string{"@scope/lib/value"}},
+		{name: "namespace with bundle", mode: BundleDeps, external: []string{"@scope"}, imports: []string{"@scope/lib/value"}},
+		{name: "unrelated namespace", external: []string{"@sc"}},
+		{name: "all", all: true, imports: []string{"@scope/lib/value", "lib/value"}},
+		{name: "all with explicit package", all: true, external: []string{"lib"}, imports: []string{"@scope/lib/value", "lib/value"}},
+		{name: "all without bundle", all: true, mode: BundleFalse, imports: []string{"@scope/lib/value", "lib/value"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := &BuildContext{
+				wd: wd, target: "es2022", storage: fs, logger: logger, npmrc: &NpmRC{}, bundleMode: tt.mode, externalAll: tt.all,
+				esmPath: EsmPath{PkgName: "example", PkgVersion: "1.0.0"},
+				args:    BuildArgs{External: *set.NewReadOnly(tt.external...)},
+				pkgJson: &npm.PackageJSON{Name: "example", Version: "1.0.0", Type: "module", Main: "./index.js", Types: "./index.d.ts", Dependencies: map[string]string{"lib": "1.0.0", "@scope/lib": "1.0.0"}},
+			}
+			if _, _, err := ctx.buildModule(false); err != nil {
+				t.Fatal(err)
+			}
+			f, _, err := fs.Get(ctx.getSavePath())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer f.Close()
+			output, err := io.ReadAll(f)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var imports []string
+			result := esbuild.Build(esbuild.BuildOptions{
+				Stdin: &esbuild.StdinOptions{Contents: string(output)}, Bundle: true, Format: esbuild.FormatESModule,
+				Plugins: []esbuild.Plugin{{Name: "imports", Setup: func(build esbuild.PluginBuild) {
+					build.OnResolve(esbuild.OnResolveOptions{Filter: ".*"}, func(args esbuild.OnResolveArgs) (esbuild.OnResolveResult, error) {
+						imports = append(imports, args.Path)
+						return esbuild.OnResolveResult{Path: args.Path, External: true}, nil
+					})
+				}}},
+			})
+			if len(result.Errors) > 0 {
+				t.Fatal(result.Errors)
+			}
+			slices.Sort(imports)
+			if !slices.Equal(imports, tt.imports) {
+				t.Errorf("imports = %v, want %v", imports, tt.imports)
+			}
+		})
 	}
 }

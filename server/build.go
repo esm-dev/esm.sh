@@ -430,6 +430,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 	browserExclude := map[string]*set.Set[string]{}
 	implicitExternal := set.New[string]()
 	noBundle := !ctx.shouldBundle()
+	nativeResolve := new(bool)
 	esmifyPlugin := esbuild.Plugin{
 		Name: "esmify",
 		Setup: func(build esbuild.PluginBuild) {
@@ -437,6 +438,10 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 			build.OnResolve(
 				esbuild.OnResolveOptions{Filter: ".*"},
 				func(args esbuild.OnResolveArgs) (esbuild.OnResolveResult, error) {
+					if args.PluginData == nativeResolve {
+						return esbuild.OnResolveResult{}, nil
+					}
+
 					// entry point
 					if args.Path == entryPoint || args.Path == entrySpecifier {
 						path := args.Path
@@ -585,6 +590,22 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 						specifier = strings.TrimPrefix(filename, path.Join(ctx.wd, "node_modules")+"/")
 					} else {
 						filename = path.Join(ctx.wd, "node_modules", specifier)
+						if !ctx.externalAll && !isExternalModule(specifier, ctx.args.External) {
+							pkgDir := ctx.getPkgFullPath("")
+							for dir := args.ResolveDir; dir == pkgDir || strings.HasPrefix(dir, pkgDir+"/"); dir = path.Dir(dir) {
+								if path.Base(dir) != "node_modules" && existsDir(path.Join(dir, "node_modules")) {
+									resolved := build.Resolve(specifier, esbuild.ResolveOptions{
+										Importer: args.Importer, Namespace: args.Namespace, ResolveDir: args.ResolveDir,
+										Kind: args.Kind, With: args.With, PluginData: nativeResolve,
+									})
+									if len(resolved.Errors) == 0 && strings.HasPrefix(resolved.Path, pkgDir+"/") {
+										filename = resolved.Path
+										specifier = strings.TrimPrefix(filename, path.Join(ctx.wd, "node_modules")+"/")
+									}
+									break
+								}
+							}
+						}
 					}
 
 					// check if the filename is within the working directory
