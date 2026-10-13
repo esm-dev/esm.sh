@@ -1116,10 +1116,6 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 		if ctx.isBrowserTarget() && safeReserveProcessPackages[ctx.esmPath.PkgName] {
 			delete(define, "process")
 		}
-		if ctx.isDenoTarget() {
-			// deno 2 has removed the `window` global object, let's replace it with `globalThis`
-			define["window"] = "globalThis"
-		}
 		for k, v := range define {
 			if k == "process" {
 				continue
