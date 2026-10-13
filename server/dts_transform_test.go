@@ -1,11 +1,14 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -209,6 +212,56 @@ func TestTransformDTSStorageTimeout(t *testing.T) {
 }
 
 func TestTransformDTS(t *testing.T) {
+	t.Run("preserves runtime node modules", func(t *testing.T) {
+		transport := http.DefaultTransport
+		t.Cleanup(func() { http.DefaultTransport = transport })
+		http.DefaultTransport = ghTestTransport(func(req *http.Request) (*http.Response, error) {
+			t.Errorf("unexpected registry request: %s", req.URL)
+			return &http.Response{StatusCode: 400, Status: "400 Bad Request", Body: http.NoBody}, nil
+		})
+		root := t.TempDir()
+		pkgDir := filepath.Join(root, "node_modules", "electron")
+		if err := os.MkdirAll(pkgDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		entry := `declare module 'node:original-fs' {
+  import * as fs from 'node:fs';
+  export = fs;
+}
+export type RuntimeFS = typeof import('node:original-fs');
+export * from 'node:original-fs';
+`
+		if err := os.WriteFile(filepath.Join(pkgDir, "electron.d.ts"), []byte(entry), 0644); err != nil {
+			t.Fatal(err)
+		}
+		fs, err := storage.NewFSStorage(filepath.Join(root, "storage"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		ctx := &BuildContext{
+			storage: fs,
+			esmPath: EsmPath{PkgName: "electron", PkgVersion: "40.1.0"},
+			wd:      root,
+			pkgJson: &npm.PackageJSON{},
+			npmrc:   &NpmRC{globalRegistry: &NpmRegistry{NpmRegistryConfig: NpmRegistryConfig{Registry: npmRegistry}}},
+		}
+		if _, err := transformDTS(ctx, "./electron.d.ts", "", nil); err != nil {
+			t.Fatal(err)
+		}
+		content, _, err := fs.Get("types/electron@40.1.0/electron.d.ts")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer content.Close()
+		data, err := io.ReadAll(content)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(data) != entry {
+			t.Fatalf("transformed dts = %s, want %s", data, entry)
+		}
+	})
+
 	t.Run("does not publish a parent when a dependency fails", func(t *testing.T) {
 		root := t.TempDir()
 		pkgDir := filepath.Join(root, "node_modules", "pkg")
@@ -289,4 +342,171 @@ export * from "npm:foo@1.2.3/sub";
 			t.Fatalf("transformed dts not match, want:\n%s\ngot:\n%s", entry, data)
 		}
 	})
+}
+
+func TestTransformDTSPackageImports(t *testing.T) {
+	registry := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("unexpected registry request: %s", r.URL)
+		http.NotFound(w, r)
+	}))
+	defer registry.Close()
+	npmrc := &NpmRC{globalRegistry: &NpmRegistry{NpmRegistryConfig: NpmRegistryConfig{Registry: registry.URL + "/"}}}
+	for _, tt := range []struct {
+		name, imports, specifier, want string
+		external                       bool
+	}{
+		{"exact", `"#value":"./types/value.d.ts"`, "#value", "../../types/value.d.ts", false},
+		{"pattern", `"#types/*":"./types/*.d.ts"`, "#types/value", "../../types/value.d.ts", false},
+		{"pattern suffix", `"#types/*.js":"./types/*.d.ts"`, "#types/value.js", "../../types/value.d.ts", false},
+		{"exact before pattern", `"#types/*":"./wrong/*.d.ts","#types/value":"./types/value.d.ts"`, "#types/value", "../../types/value.d.ts", false},
+		{"longest prefix", `"#*":"./wrong/*.d.ts","#types/*":"./types/*.d.ts"`, "#types/value", "../../types/value.d.ts", false},
+		{"longest suffix", `"#types/*":"./wrong/*.d.ts","#types/*.js":"./types/*.d.ts"`, "#types/value.js", "../../types/value.d.ts", false},
+		{"types condition", `"#value":{"types":"./types/value.d.ts","default":"./wrong.js"}`, "#value", "../../types/value.d.ts", false},
+		{"nested condition", `"#types/*":{"import":{"types":"./types/*.d.ts","default":"./wrong/*.js"}}`, "#types/value", "../../types/value.d.ts", false},
+		{"javascript target", `"#value":"./types/value.js"`, "#value", "../../types/value.d.ts", false},
+		{"dependency", `"#value":"dep/sub"`, "#value", "dep/sub", true},
+		{"builtin", `"#value":"node:fs"`, "#value", "node:fs", false},
+		{"unmapped", ``, "#value", "#value", false},
+		{"blocked", `"#types/*":"./types/*.d.ts","#types/value":null`, "#types/value", "#types/value", false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			root := t.TempDir()
+			pkgDir := filepath.Join(root, "node_modules", "pkg")
+			files := map[string]string{
+				"dist/node/index.d.ts": fmt.Sprintf("export * from %q;", tt.specifier),
+				"types/value.d.ts":     `export * from "#shared";`,
+				"types/shared.d.ts":    `export interface Value { value: string }`,
+			}
+			for name, content := range files {
+				filename := filepath.Join(pkgDir, name)
+				if err := os.MkdirAll(filepath.Dir(filename), 0755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filename, []byte(content), 0644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			imports := `{"#shared":"./types/shared.d.ts"`
+			if tt.imports != "" {
+				imports += "," + tt.imports
+			}
+			p := &npm.PackageJSON{Type: "module"}
+			if err := p.Imports.UnmarshalJSON([]byte(imports + "}")); err != nil {
+				t.Fatal(err)
+			}
+			fs, err := storage.NewFSStorage(filepath.Join(root, "storage"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			ctx := &BuildContext{
+				storage: fs, wd: root, esmPath: EsmPath{PkgName: "pkg", PkgVersion: "1.0.0"},
+				pkgJson: p, npmrc: npmrc, externalAll: tt.external,
+			}
+			n, err := transformDTS(ctx, "./dist/node/index.d.ts", "", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			wantFiles := map[string]string{"dist/node/index.d.ts": fmt.Sprintf("export * from %q;", tt.want)}
+			if strings.HasPrefix(tt.want, "../") {
+				wantFiles["types/value.d.ts"] = `export * from "./shared.d.ts";`
+				wantFiles["types/shared.d.ts"] = files["types/shared.d.ts"]
+			}
+			if n != len(wantFiles)-1 {
+				t.Fatalf("transformed %d dependencies, want %d", n, len(wantFiles)-1)
+			}
+			for name, want := range wantFiles {
+				want += "\n"
+				content, _, err := fs.Get(path.Join("types", ctx.esmPath.PackageId(), name))
+				if err != nil {
+					t.Fatal(err)
+				}
+				data, err := io.ReadAll(content)
+				content.Close()
+				if err != nil {
+					t.Fatal(err)
+				}
+				if string(data) != want {
+					t.Errorf("%s = %q, want %q", name, data, want)
+				}
+			}
+		})
+	}
+}
+
+func TestTransformDTSRelativePaths(t *testing.T) {
+	root := t.TempDir()
+	pkgDir := filepath.Join(root, "node_modules", "pkg")
+	files := map[string]string{
+		"Materials/Node/Blocks/Dual/reflection.d.ts": `export * from "../../../..//Meshes/subMesh.d.ts";`,
+		"Meshes/subMesh.d.ts": `export * from "../Materials/Node/Blocks/Dual/reflection.d.ts";
+export * from "./local//types.js";
+export * from "./local///module.mjs";
+export * from "./local/../local//common.cjs";
+export * from "https://example.com//types.d.ts";`,
+		"Meshes/local/types.d.ts":   "export {};",
+		"Meshes/local/module.d.mts": "export {};",
+		"Meshes/local/common.d.cts": "export {};",
+	}
+	for name, content := range files {
+		filename := filepath.Join(pkgDir, name)
+		if err := os.MkdirAll(filepath.Dir(filename), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filename, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	fs, err := storage.NewFSStorage(filepath.Join(root, "storage"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := &BuildContext{storage: fs, wd: root, esmPath: EsmPath{PkgName: "pkg", PkgVersion: "1.0.0"}, pkgJson: &npm.PackageJSON{}}
+	if n, err := transformDTS(ctx, "./Meshes/subMesh.d.ts", "", nil); err != nil || n != len(files)-1 {
+		t.Fatalf("transform = %d, %v", n, err)
+	}
+	queue := []string{"https://esm.test/pkg@1.0.0/Meshes/subMesh.d.ts"}
+	seen := map[string]bool{}
+	for len(queue) > 0 {
+		current := queue[0]
+		queue = queue[1:]
+		if seen[current] {
+			continue
+		}
+		seen[current] = true
+		if len(seen) > len(files) {
+			t.Fatalf("declaration cycle produced an extra URL: %s", current)
+		}
+		base, err := url.Parse(current)
+		if err != nil {
+			t.Fatal(err)
+		}
+		content, _, err := fs.Get(normalizeSavePath(path.Join("types", base.Path)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = parseDts(content, new(bytes.Buffer), func(specifier string, kind TsImportKind, position int) (string, error) {
+			if isHttpSpecifier(specifier) {
+				if specifier != "https://example.com//types.d.ts" {
+					t.Errorf("remote URL changed: %s", specifier)
+				}
+				return specifier, nil
+			}
+			if !isRelPathSpecifier(specifier) || strings.Contains(specifier, "//") {
+				t.Errorf("noncanonical relative import: %s", specifier)
+			}
+			ref, err := url.Parse(specifier)
+			if err != nil {
+				return "", err
+			}
+			queue = append(queue, base.ResolveReference(ref).String())
+			return specifier, nil
+		})
+		content.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(seen) != len(files) {
+		t.Fatalf("visited %d declaration URLs, want %d", len(seen), len(files))
+	}
 }
