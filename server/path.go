@@ -256,16 +256,20 @@ func toPackageName(specifier string) string {
 	return name
 }
 
-// isPackageInExternalNamespace checks if a package belongs to an external namespace
-// For example, if "@radix-ui" is in external, then "@radix-ui/react-dropdown" would match
-func isPackageInExternalNamespace(pkgName string, external set.ReadOnlySet[string]) bool {
+func isExternalModule(specifier string, external set.ReadOnlySet[string]) bool {
+	if external.Len() == 0 {
+		return false
+	}
+	pkgName := toPackageName(specifier)
+	if external.Has(pkgName) || external.Has(specifier) {
+		return true
+	}
 	for _, ext := range external.Values() {
-		// Check if ext is a namespace (starts with @ and has no /)
-		if strings.HasPrefix(ext, "@") && !strings.Contains(ext[1:], "/") {
-			// Check if the package belongs to this namespace
-			if strings.HasPrefix(pkgName, ext+"/") {
-				return true
-			}
+		if strings.HasPrefix(ext, "@") && !strings.Contains(ext[1:], "/") && strings.HasPrefix(pkgName, ext+"/") {
+			return true
+		}
+		if strings.HasSuffix(ext, "/*") && strings.HasPrefix(specifier, ext[:len(ext)-1]) {
+			return true
 		}
 	}
 	return false
