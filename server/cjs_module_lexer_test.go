@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"os"
@@ -183,5 +184,34 @@ exit 1
 				t.Fatalf("dependency installed = %v, want %v", installed, tt.wantRuns == 2)
 			}
 		})
+	}
+}
+
+func TestInstallCjsModuleLexerOffline(t *testing.T) {
+	oldClient, oldConfig := http.DefaultClient, config
+	config = &Config{WorkDir: t.TempDir()}
+	t.Cleanup(func() { http.DefaultClient, config = oldClient, oldConfig })
+	blocked := errors.New("GitHub is blocked")
+	requests := 0
+	http.DefaultClient = &http.Client{Transport: ghTestTransport(func(r *http.Request) (*http.Response, error) {
+		requests++
+		return nil, blocked
+	})}
+	if err := installCjsModuleLexerContext(context.Background()); !errors.Is(err, blocked) || requests != 1 {
+		t.Fatalf("missing lexer did not require GitHub: requests=%d, error=%v", requests, err)
+	}
+	binDir := filepath.Join(config.WorkDir, "bin")
+	if err := os.MkdirAll(binDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	filename := filepath.Join(binDir, "cjs-module-lexer-"+cjsModuleLexerVersion)
+	if err := os.WriteFile(filename, []byte("preinstalled lexer"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := installCjsModuleLexerContext(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if requests != 1 {
+		t.Fatalf("preinstalled lexer required GitHub: requests=%d", requests)
 	}
 }
