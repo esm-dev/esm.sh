@@ -774,11 +774,20 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 							if readErr == nil && bytes.Contains(data, []byte("export")) && bytes.ContainsRune(data, '*') {
 								ast, parseErr := parseJS(resolvedFilename, data)
 								if parseErr == nil && len(ast.ExportStarImportRecords) > 0 {
-									externalPath, sideEffects, err := ctx.resolveExternalModule(specifier, args.Kind, withTypeJSON, analyzeMode)
-									if err != nil {
-										return esbuild.OnResolveResult{}, err
+									externalize := !ctx.isDenoTarget()
+									for _, record := range ast.ExportStarImportRecords {
+										if !isRelPathSpecifier(ast.ImportRecords[record].Path.Text) {
+											externalize = true
+											break
+										}
 									}
-									return esbuild.OnResolveResult{Path: externalPath, SideEffects: sideEffects, External: true}, nil
+									if externalize {
+										externalPath, sideEffects, err := ctx.resolveExternalModule(specifier, args.Kind, withTypeJSON, analyzeMode)
+										if err != nil {
+											return esbuild.OnResolveResult{}, err
+										}
+										return esbuild.OnResolveResult{Path: externalPath, SideEffects: sideEffects, External: true}, nil
+									}
 								}
 							}
 						}
