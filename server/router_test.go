@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -19,6 +20,88 @@ import (
 	esbuild "github.com/ije/esbuild-internal/api"
 	"github.com/ije/gox/log"
 )
+
+func TestRawFileExports(t *testing.T) {
+	useNegativeCache(t)
+	previousConfig, previousNpmRC, transport := config, defaultNpmRC, http.DefaultTransport
+	testConfig := *config
+	testConfig.WorkDir = t.TempDir()
+	config, defaultNpmRC = &testConfig, nil
+	t.Cleanup(func() {
+		config, defaultNpmRC, http.DefaultTransport = previousConfig, previousNpmRC, transport
+	})
+	fs, err := storage.NewFSStorage(filepath.Join(config.WorkDir, "storage"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	logger := new(log.Logger)
+	logger.SetOutput(io.Discard)
+	handler := esmRouter(fs, logger)
+	http.DefaultTransport = ghTestTransport(func(r *http.Request) (*http.Response, error) {
+		t.Errorf("unexpected request: %s", r.URL)
+		return &http.Response{StatusCode: 500, Body: http.NoBody}, nil
+	})
+	for i, test := range []struct{ name, exports, subpath, resolved string }{
+		{"wildcard array", `{"./*":["./icons/*"]}`, "outline/plus.svg", "icons/outline/plus.svg"},
+		{"wildcard string", `{"./*":"./icons/*"}`, "outline/plus.svg", "icons/outline/plus.svg"},
+		{"exact array", `{"./plus.svg":["./icons/outline/plus.svg"]}`, "plus.svg", "icons/outline/plus.svg"},
+		{"nested conditions", `{"./*":[{"import":["./icons/*"]}]}`, "outline/plus.svg", "icons/outline/plus.svg"},
+		{"literal file", `{"./*":"./missing/*"}`, "icons/outline/plus.svg", "icons/outline/plus.svg"},
+		{"exact before wildcard", `{"./*":"./missing/*","./plus.svg":"./icons/outline/plus.svg"}`, "plus.svg", "icons/outline/plus.svg"},
+		{"specific wildcard", `{"./*":"./missing/*","./outline/*":"./icons/outline/*"}`, "outline/plus.svg", "icons/outline/plus.svg"},
+		{"wildcard suffix", `{"./*.svg":"./missing/*","./*-icon.svg":"./icons/outline/*.svg"}`, "plus-icon.svg", "icons/outline/plus.svg"},
+		{"exact null", `{"./*":"./icons/*","./outline/plus.svg":null}`, "outline/plus.svg", ""},
+		{"wildcard null", `{"./*":"./icons/*","./outline/*":null}`, "outline/plus.svg", ""},
+		{"empty array", `{"./*":[]}`, "outline/plus.svg", ""},
+		{"missing first target", `{"./*":["./missing/*","./icons/*"]}`, "outline/plus.svg", ""},
+		{"missing specific target", `{"./*":"./icons/*","./outline/*":"./missing/*"}`, "outline/plus.svg", ""},
+		{"invalid target", `{"./*":"../icons/*"}`, "outline/plus.svg", ""},
+		{"invalid array target", `{"./*":["../invalid/*","./icons/*"]}`, "outline/plus.svg", "icons/outline/plus.svg"},
+		{"directory", `{"./*":"./icons/*"}`, "outline.svg", ""},
+		{"no extension guessing", `{"./*":"./icons/*"}`, "missing.svg", ""},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			name := fmt.Sprintf("@raw-exports/test-%d", i)
+			dir := filepath.Join(config.WorkDir, "npm", name+"@1.0.0", "node_modules", name)
+			for filename, content := range map[string]string{
+				"package.json":           `{"name":"` + name + `","version":"1.0.0","exports":` + test.exports + `}`,
+				"icons/outline/plus.svg": "<svg/>\n",
+				"icons/outline.svg/a":    "directory",
+				"icons/missing.svg.js":   "export {};",
+			} {
+				if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, filename)), 0755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(dir, filename), []byte(content), 0644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			for _, prefix := range []string{"/", "/*"} {
+				const query = "?target=esnext&lp=node_modules%252F%2540tabler%252Ficons"
+				base := "http://localhost/" + name + "@1.0.0/"
+				res := httptest.NewRecorder()
+				handler.ServeHTTP(res, httptest.NewRequest("GET", "http://localhost"+prefix+name+"@1.0.0/"+test.subpath+query, nil))
+				if test.resolved == "" {
+					if res.Code != 404 {
+						t.Fatalf("expected 404, got %d: %s", res.Code, res.Body.String())
+					}
+					continue
+				}
+				if test.resolved != test.subpath {
+					if res.Code != 301 || res.Header().Get("Location") != base+test.resolved+query {
+						t.Fatalf("expected redirect to %s, got %d: %v", test.resolved, res.Code, res.Header())
+					}
+					location := res.Header().Get("Location")
+					res = httptest.NewRecorder()
+					handler.ServeHTTP(res, httptest.NewRequest("GET", location, nil))
+				}
+				if res.Code != 200 || res.Header().Get("Content-Type") != "image/svg+xml; charset=utf-8" || res.Body.String() != "<svg/>\n" {
+					t.Fatalf("expected SVG, got %d: %v %s", res.Code, res.Header(), res.Body.String())
+				}
+			}
+		})
+	}
+}
 
 func TestRouterModuleResponses(t *testing.T) {
 	previousConfig, previousNpmRC, transport := config, defaultNpmRC, http.DefaultTransport
