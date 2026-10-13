@@ -708,16 +708,8 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 										// exports: "./foo": "./foo.js"
 										match = true
 									} else if m, ok := v.(npm.JSONObject); ok {
-										// exports: "./foo": { "import": "./foo.js" }
-										// exports: "./foo": { "import": { default: "./foo.js" } }
-										// ...
-										paths := getExportConditionPaths(m)
-										for _, path := range paths {
-											if stripModuleExt(path) == stripModuleExt(modulePath) {
-												match = true
-												break
-											}
-										}
+										exportEntry := ctx.resolveConditionExportEntry(m, pkgJson.Type)
+										match = stripModuleExt(exportEntry.main) == stripModuleExt(modulePath)
 									}
 									if match {
 										exportAs = path.Join(pkgJson.Name, stripModuleExt(exportName))
