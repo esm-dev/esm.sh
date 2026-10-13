@@ -452,3 +452,85 @@ func TestBuildModulePrivateNodeModules(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildModulePrivateNodeModulesExternal(t *testing.T) {
+	wd := t.TempDir()
+	for name, content := range map[string]string{
+		"index.js":                         `export { value } from "lib/value"; export { value as scoped } from "@scope/lib/value";`,
+		"node_modules/lib/value.js":        `export const value = 42;`,
+		"node_modules/@scope/lib/value.js": `export const value = 99;`,
+	} {
+		filename := filepath.Join(wd, "node_modules", "example", name)
+		if err := os.MkdirAll(filepath.Dir(filename), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filename, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	fs, err := storage.NewFSStorage(filepath.Join(wd, "storage"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	logger, err := log.New("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	logger.SetOutput(io.Discard)
+	for _, tt := range []struct {
+		name     string
+		external []string
+		all      bool
+		mode     BundleMode
+		imports  []string
+	}{
+		{name: "default"},
+		{name: "package", external: []string{"lib"}, imports: []string{"lib/value"}},
+		{name: "package with bundle", mode: BundleDeps, external: []string{"lib"}, imports: []string{"lib/value"}},
+		{name: "scoped package", external: []string{"@scope/lib"}, imports: []string{"@scope/lib/value"}},
+		{name: "namespace", external: []string{"@scope"}, imports: []string{"@scope/lib/value"}},
+		{name: "namespace with bundle", mode: BundleDeps, external: []string{"@scope"}, imports: []string{"@scope/lib/value"}},
+		{name: "unrelated namespace", external: []string{"@sc"}},
+		{name: "all", all: true, imports: []string{"@scope/lib/value", "lib/value"}},
+		{name: "all with explicit package", all: true, external: []string{"lib"}, imports: []string{"@scope/lib/value", "lib/value"}},
+		{name: "all without bundle", all: true, mode: BundleFalse, imports: []string{"@scope/lib/value", "lib/value"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := &BuildContext{
+				wd: wd, target: "es2022", storage: fs, logger: logger, npmrc: &NpmRC{}, bundleMode: tt.mode, externalAll: tt.all,
+				esmPath: EsmPath{PkgName: "example", PkgVersion: "1.0.0"},
+				args:    BuildArgs{External: *set.NewReadOnly(tt.external...)},
+				pkgJson: &npm.PackageJSON{Name: "example", Version: "1.0.0", Type: "module", Main: "./index.js", Types: "./index.d.ts", Dependencies: map[string]string{"lib": "1.0.0", "@scope/lib": "1.0.0"}},
+			}
+			if _, _, err := ctx.buildModule(false); err != nil {
+				t.Fatal(err)
+			}
+			f, _, err := fs.Get(ctx.getSavePath())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer f.Close()
+			output, err := io.ReadAll(f)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var imports []string
+			result := esbuild.Build(esbuild.BuildOptions{
+				Stdin: &esbuild.StdinOptions{Contents: string(output)}, Bundle: true, Format: esbuild.FormatESModule,
+				Plugins: []esbuild.Plugin{{Name: "imports", Setup: func(build esbuild.PluginBuild) {
+					build.OnResolve(esbuild.OnResolveOptions{Filter: ".*"}, func(args esbuild.OnResolveArgs) (esbuild.OnResolveResult, error) {
+						imports = append(imports, args.Path)
+						return esbuild.OnResolveResult{Path: args.Path, External: true}, nil
+					})
+				}}},
+			})
+			if len(result.Errors) > 0 {
+				t.Fatal(result.Errors)
+			}
+			slices.Sort(imports)
+			if !slices.Equal(imports, tt.imports) {
+				t.Errorf("imports = %v, want %v", imports, tt.imports)
+			}
+		})
+	}
+}
