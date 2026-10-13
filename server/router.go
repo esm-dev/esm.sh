@@ -256,6 +256,14 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 			return
 		}
 
+		if endsWith(pathname, ".d.ts", ".d.mts", ".d.cts") && strings.Contains(pathname, "//") {
+			canonical := *r.URL
+			canonical.Path = path.Clean(pathname)
+			canonical.RawPath = path.Clean(r.URL.EscapedPath())
+			redirect(w, canonical.RequestURI(), true)
+			return
+		}
+
 		// strip trailing slash
 		if pl := len(pathname); pl > 1 && pathname[pl-1] == '/' {
 			pathname = pathname[:pl-1]

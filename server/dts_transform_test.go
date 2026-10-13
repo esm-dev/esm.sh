@@ -1,12 +1,14 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -428,5 +430,83 @@ func TestTransformDTSPackageImports(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestTransformDTSRelativePaths(t *testing.T) {
+	root := t.TempDir()
+	pkgDir := filepath.Join(root, "node_modules", "pkg")
+	files := map[string]string{
+		"Materials/Node/Blocks/Dual/reflection.d.ts": `export * from "../../../..//Meshes/subMesh.d.ts";`,
+		"Meshes/subMesh.d.ts": `export * from "../Materials/Node/Blocks/Dual/reflection.d.ts";
+export * from "./local//types.js";
+export * from "./local///module.mjs";
+export * from "./local/../local//common.cjs";
+export * from "https://example.com//types.d.ts";`,
+		"Meshes/local/types.d.ts":   "export {};",
+		"Meshes/local/module.d.mts": "export {};",
+		"Meshes/local/common.d.cts": "export {};",
+	}
+	for name, content := range files {
+		filename := filepath.Join(pkgDir, name)
+		if err := os.MkdirAll(filepath.Dir(filename), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filename, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	fs, err := storage.NewFSStorage(filepath.Join(root, "storage"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := &BuildContext{storage: fs, wd: root, esmPath: EsmPath{PkgName: "pkg", PkgVersion: "1.0.0"}, pkgJson: &npm.PackageJSON{}}
+	if n, err := transformDTS(ctx, "./Meshes/subMesh.d.ts", "", nil); err != nil || n != len(files)-1 {
+		t.Fatalf("transform = %d, %v", n, err)
+	}
+	queue := []string{"https://esm.test/pkg@1.0.0/Meshes/subMesh.d.ts"}
+	seen := map[string]bool{}
+	for len(queue) > 0 {
+		current := queue[0]
+		queue = queue[1:]
+		if seen[current] {
+			continue
+		}
+		seen[current] = true
+		if len(seen) > len(files) {
+			t.Fatalf("declaration cycle produced an extra URL: %s", current)
+		}
+		base, err := url.Parse(current)
+		if err != nil {
+			t.Fatal(err)
+		}
+		content, _, err := fs.Get(normalizeSavePath(path.Join("types", base.Path)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = parseDts(content, new(bytes.Buffer), func(specifier string, kind TsImportKind, position int) (string, error) {
+			if isHttpSpecifier(specifier) {
+				if specifier != "https://example.com//types.d.ts" {
+					t.Errorf("remote URL changed: %s", specifier)
+				}
+				return specifier, nil
+			}
+			if !isRelPathSpecifier(specifier) || strings.Contains(specifier, "//") {
+				t.Errorf("noncanonical relative import: %s", specifier)
+			}
+			ref, err := url.Parse(specifier)
+			if err != nil {
+				return "", err
+			}
+			queue = append(queue, base.ResolveReference(ref).String())
+			return specifier, nil
+		})
+		content.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(seen) != len(files) {
+		t.Fatalf("visited %d declaration URLs, want %d", len(seen), len(files))
 	}
 }

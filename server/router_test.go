@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -314,6 +315,42 @@ func TestRouterCacheRegressions(t *testing.T) {
 	http.DefaultTransport = ghTestTransport(func(r *http.Request) (*http.Response, error) {
 		t.Errorf("unexpected request: %s", r.URL)
 		return &http.Response{StatusCode: 500, Body: http.NoBody}, nil
+	})
+
+	t.Run("declaration path redirects", func(t *testing.T) {
+		for _, test := range []struct{ request, canonical string }{
+			{"/@babylonjs/core@8.2.0//Meshes/subMesh.d.ts", "/@babylonjs/core@8.2.0/Meshes/subMesh.d.ts"},
+			{"/@babylonjs/core@8.2.0///Meshes//subMesh.d.ts", "/@babylonjs/core@8.2.0/Meshes/subMesh.d.ts"},
+			{"/pkg@1.0.0//types.d.mts?key=a%2Bb&external=foo", "/pkg@1.0.0/types.d.mts?key=a%2Bb&external=foo"},
+			{"/pkg@1.0.0//types.d.cts", "/pkg@1.0.0/types.d.cts"},
+			{"/pkg@1.0.0//space%20%231.d.ts", "/pkg@1.0.0/space%20%231.d.ts"},
+			{"/pkg@1.0.0//%74ypes.d.ts?", "/pkg@1.0.0/%74ypes.d.ts?"},
+			{"/pkg@1.0.0/%2Ftypes.d.ts", "/pkg@1.0.0/types.d.ts"},
+			{"/pkg@1.0.0//nested%2Ftypes.d.ts", "/pkg@1.0.0/nested%2Ftypes.d.ts"},
+			{"/*pkg@1.0.0//types.d.ts", "/*pkg@1.0.0/types.d.ts"},
+			{"/gh/owner/repo@abcdef0//types.d.ts", "/gh/owner/repo@abcdef0/types.d.ts"},
+			{"//pkg@1.0.0//types.d.ts", "/pkg@1.0.0/types.d.ts"},
+		} {
+			canonical := httptest.NewRequest("GET", "http://localhost"+test.canonical, nil)
+			if err := fs.Put(normalizeSavePath(path.Join("types", canonical.URL.Path)), strings.NewReader("export {};")); err != nil {
+				t.Fatal(err)
+			}
+			for _, method := range []string{"GET", "HEAD"} {
+				res := httptest.NewRecorder()
+				handler.ServeHTTP(res, httptest.NewRequest(method, "http://localhost"+test.request, nil))
+				if res.Code != 301 || res.Header().Get("Location") != test.canonical {
+					t.Errorf("%s %s: HTTP %d, location=%q, want %q", method, test.request, res.Code, res.Header().Get("Location"), test.canonical)
+				}
+				if res.Header().Get("Cache-Control") != ccImmutable {
+					t.Errorf("%s: unexpected cache policy: %s", test.request, res.Header().Get("Cache-Control"))
+				}
+			}
+			res := httptest.NewRecorder()
+			handler.ServeHTTP(res, canonical)
+			if res.Code != 200 || res.Body.String() != "export {};" {
+				t.Errorf("%s: HTTP %d: %s", test.canonical, res.Code, res.Body.String())
+			}
+		}
 	})
 
 	t.Run("transform field boundaries", func(t *testing.T) {
