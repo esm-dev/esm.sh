@@ -188,3 +188,111 @@ func TestResolveEntryWildcardSuffix(t *testing.T) {
 		}
 	}
 }
+
+func TestResolveExternalAllSelfModule(t *testing.T) {
+	for _, tt := range []struct {
+		name, specifier, external, want string
+		noExports                       bool
+	}{
+		{name: "private", specifier: "@scope/example/dist/shared-hash", want: "./dist/shared-hash.mjs"},
+		{name: "explicit package", specifier: "@scope/example/dist/shared-hash", external: "@scope/example", want: "@scope/example/dist/shared-hash"},
+		{name: "explicit namespace", specifier: "@scope/example/dist/shared-hash", external: "@scope", want: "@scope/example/dist/shared-hash"},
+		{name: "main", specifier: "@scope/example", want: "@scope/example"},
+		{name: "public", specifier: "@scope/example/public", want: "@scope/example/public"},
+		{name: "wildcard", specifier: "@scope/example/features/one", want: "@scope/example/features/one"},
+		{name: "no exports", specifier: "@scope/example/dist/shared-hash", noExports: true, want: "@scope/example/dist/shared-hash"},
+		{name: "dependency", specifier: "dependency/private", want: "dependency/private"},
+		{name: "builtin", specifier: "node:fs", want: "node:fs"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			pkg := &npm.PackageJSON{
+				Name: "@scope/example", Version: "1.0.0", Type: "module",
+				Exports: npm.NewJSONObject([]string{".", "./public", "./features/*"}, map[string]any{
+					".": "./index.js", "./public": "./public.js", "./features/*": "./features/*.js",
+				}),
+			}
+			if tt.noExports {
+				pkg.Exports = npm.JSONObject{}
+			}
+			ctx := &BuildContext{
+				target: "es2022", externalAll: true, pkgJson: pkg,
+				esmPath: EsmPath{PkgName: pkg.Name, PkgVersion: pkg.Version},
+			}
+			if tt.external != "" {
+				ctx.args.External = *set.NewReadOnly(tt.external)
+			}
+			got, _, err := ctx.resolveExternalModule(tt.specifier, esbuild.ResolveJSImportStatement, false, false)
+			if err != nil || got != tt.want {
+				t.Fatalf("resolved = %q, %v; want %q", got, err, tt.want)
+			}
+		})
+	}
+}
+
+func TestBuildModuleExternalAllSplitting(t *testing.T) {
+	wd := t.TempDir()
+	pkgDir := filepath.Join(wd, "node_modules", "@scope", "example", "dist")
+	if err := os.MkdirAll(pkgDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	for filename, contents := range map[string]string{
+		"index.js":       `export { state } from "./shared-hash.js";`,
+		"other.js":       `export { state } from "./shared-hash.js";`,
+		"shared-hash.js": `import { value } from "dependency"; export const state = { value };`,
+	} {
+		if err := os.WriteFile(filepath.Join(pkgDir, filename), []byte(contents), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	fs, err := storage.NewFSStorage(filepath.Join(wd, "storage"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	logger, err := log.New("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	logger.SetOutput(io.Discard)
+	pkg := &npm.PackageJSON{
+		Name: "@scope/example", Version: "1.0.0", Type: "module", Types: "./index.d.ts",
+		Exports:      npm.NewJSONObject([]string{".", "./other"}, map[string]any{".": "./dist/index.js", "./other": "./dist/other.js"}),
+		Dependencies: map[string]string{"dependency": "1.0.0"},
+	}
+	for _, subPath := range []string{"", "other", "dist/shared-hash"} {
+		t.Run(subPath, func(t *testing.T) {
+			ctx := &BuildContext{
+				wd: wd, target: "es2022", externalAll: true, storage: fs, logger: logger, npmrc: &NpmRC{}, pkgJson: pkg,
+				esmPath: EsmPath{PkgName: pkg.Name, PkgVersion: pkg.Version, SubPath: subPath},
+			}
+			ctx.analyzeSplitting()
+			if ctx.splitting == nil || !ctx.splitting.Has("dist/shared-hash.js") {
+				t.Fatal("shared module was not split")
+			}
+			meta, _, err := ctx.buildModule(false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			f, _, err := fs.Get(ctx.getSavePath())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer f.Close()
+			output, err := io.ReadAll(f)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := `"./dist/shared-hash.mjs"`
+			if subPath == "dist/shared-hash" {
+				want = `"dependency"`
+				if len(meta.Imports) != 0 {
+					t.Fatalf("dependency must remain external, got %v", meta.Imports)
+				}
+			} else if len(meta.Imports) != 1 || meta.Imports[0] != "/*@scope/example@1.0.0/es2022/dist/shared-hash.mjs" {
+				t.Errorf("unexpected shared module imports: %v", meta.Imports)
+			}
+			if !strings.Contains(string(output), want) {
+				t.Fatalf("missing %s:\n%s", want, output)
+			}
+		})
+	}
+}
