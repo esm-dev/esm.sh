@@ -1453,24 +1453,8 @@ func validateJSFile(filename string) (isESM bool, namedExports []string, err err
 	if err != nil {
 		return
 	}
-	log := logger.NewDeferLog(logger.DeferLogNoVerboseOrDebug, nil)
-	parserOpts := js_parser.OptionsFromConfig(&esbuild_config.Options{
-		JSX: esbuild_config.JSXOptions{
-			Parse: endsWith(filename, ".jsx", ".tsx"),
-		},
-		TS: esbuild_config.TSOptions{
-			Parse: endsWith(filename, ".ts", ".mts", ".cts", ".tsx"),
-		},
-	})
-	ast, pass := js_parser.Parse(log, logger.Source{
-		Index:          0,
-		KeyPath:        logger.Path{Text: "<stdin>"},
-		PrettyPaths:    logger.PrettyPaths{Rel: "<stdin>"},
-		IdentifierName: "stdin",
-		Contents:       string(data),
-	}, parserOpts)
-	if !pass {
-		err = errors.New("invalid syntax, require javascript/typescript")
+	ast, err := parseJS(filename, data)
+	if err != nil {
 		return
 	}
 	isESM = ast.ExportsKind == js_ast.ExportsESM || ast.ExportsKind == js_ast.ExportsESMWithDynamicFallback
@@ -1491,4 +1475,27 @@ func validateJSFile(filename string) (isESM bool, namedExports []string, err err
 		i++
 	}
 	return
+}
+
+func parseJS(filename string, data []byte) (js_ast.AST, error) {
+	log := logger.NewDeferLog(logger.DeferLogNoVerboseOrDebug, nil)
+	parserOpts := js_parser.OptionsFromConfig(&esbuild_config.Options{
+		JSX: esbuild_config.JSXOptions{
+			Parse: endsWith(filename, ".jsx", ".tsx"),
+		},
+		TS: esbuild_config.TSOptions{
+			Parse: endsWith(filename, ".ts", ".mts", ".cts", ".tsx"),
+		},
+	})
+	ast, pass := js_parser.Parse(log, logger.Source{
+		Index:          0,
+		KeyPath:        logger.Path{Text: "<stdin>"},
+		PrettyPaths:    logger.PrettyPaths{Rel: "<stdin>"},
+		IdentifierName: "stdin",
+		Contents:       string(data),
+	}, parserOpts)
+	if !pass {
+		return ast, errors.New("invalid syntax, require javascript/typescript")
+	}
+	return ast, nil
 }

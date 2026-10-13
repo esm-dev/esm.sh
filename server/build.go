@@ -837,54 +837,17 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 							}
 						}
 
-						// split the module that includes `export * from "external"` statement
-						if entry.module && len(pkgJson.Dependencies)+len(pkgJson.PeerDependencies) > 0 && args.Kind == esbuild.ResolveJSImportStatement {
-							fi, err := os.Lstat(resolvedFilename)
-							if err == nil && fi.Size() < 512 {
-								data, err := os.ReadFile(resolvedFilename)
-								if err == nil {
-									var exportFrom []string
-									var moreStmt bool
-									for line := range bytes.SplitSeq(data, []byte{'\n'}) {
-										line = bytes.TrimSpace(line)
-										if len(line) == 0 || bytes.HasPrefix(line, []byte("//")) || (bytes.HasPrefix(line, []byte("/*")) && bytes.HasSuffix(line, []byte("*/"))) {
-											// skip comments
-											continue
-										} else if bytes.HasPrefix(line, []byte("export * from")) || bytes.HasPrefix(line, []byte("export*from")) || (bytes.HasPrefix(line, []byte("export")) && bytes.HasPrefix(bytes.ReplaceAll(line, []byte{' '}, []byte{}), []byte("export*from"))) {
-											a := bytes.Split(line, []byte{'"'})
-											if len(a) != 3 {
-												a = bytes.Split(line, []byte{'\''})
-											}
-											if len(a) == 3 {
-												exportFrom = append(exportFrom, string(a[1]))
-											}
-										} else {
-											moreStmt = true
-										}
+						// Bundled export stars lose names when their source is external.
+						if entry.module && exportAs == "" && args.Kind == esbuild.ResolveJSImportStatement && slices.Contains(moduleExts, path.Ext(resolvedFilename)) {
+							data, readErr := os.ReadFile(resolvedFilename)
+							if readErr == nil && bytes.Contains(data, []byte("export")) && bytes.ContainsRune(data, '*') {
+								ast, parseErr := parseJS(resolvedFilename, data)
+								if parseErr == nil && len(ast.ExportStarImportRecords) > 0 {
+									externalPath, sideEffects, err := ctx.resolveExternalModule(specifier, args.Kind, withTypeJSON, analyzeMode)
+									if err != nil {
+										return esbuild.OnResolveResult{}, err
 									}
-									// single `export * from "external"` statement
-									if len(exportFrom) == 1 && !moreStmt && !isRelPathSpecifier(exportFrom[0]) {
-										externalPath, sideEffects, err := ctx.resolveExternalModule(exportFrom[0], args.Kind, withTypeJSON, analyzeMode)
-										if err != nil {
-											return esbuild.OnResolveResult{}, err
-										}
-										return esbuild.OnResolveResult{
-											Path:        externalPath,
-											SideEffects: sideEffects,
-											External:    true,
-										}, nil
-									}
-									if len(exportFrom) > 0 && moreStmt {
-										externalPath, sideEffects, err := ctx.resolveExternalModule(specifier, args.Kind, withTypeJSON, false)
-										if err != nil {
-											return esbuild.OnResolveResult{}, err
-										}
-										return esbuild.OnResolveResult{
-											Path:        externalPath,
-											SideEffects: sideEffects,
-											External:    true,
-										}, nil
-									}
+									return esbuild.OnResolveResult{Path: externalPath, SideEffects: sideEffects, External: true}, nil
 								}
 							}
 						}
