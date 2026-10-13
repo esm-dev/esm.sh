@@ -393,3 +393,62 @@ func TestBuildTypesArgs(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildModulePrivateNodeModules(t *testing.T) {
+	wd := t.TempDir()
+	pkgDir := filepath.Join(wd, "node_modules")
+	for name, content := range map[string]string{
+		"example/src/index.js":                      `export { value } from "lib/value"; export const commonjs = require("lib/value").default;`,
+		"example/src/node_modules/lib/value.js":     `import { number } from "types/numbers"; import { dep } from "dep"; export const value = number + dep; export default value;`,
+		"example/src/node_modules/types/numbers.js": `export { number } from "number";`,
+		"example/src/node_modules/number.js":        `export const number = 42;`,
+		"dep/package.json":                          `{ "name": "dep", "version": "1.0.0", "type": "module" }`,
+		"dep/index.js":                              `export const dep = 1;`,
+	} {
+		filename := filepath.Join(pkgDir, name)
+		if err := os.MkdirAll(filepath.Dir(filename), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filename, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	fs, err := storage.NewFSStorage(filepath.Join(wd, "storage"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	logger, err := log.New("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	logger.SetOutput(io.Discard)
+	for _, target := range []string{"es2022", "denonext"} {
+		t.Run(target, func(t *testing.T) {
+			ctx := &BuildContext{
+				wd: wd, target: target, storage: fs, logger: logger, npmrc: &NpmRC{},
+				esmPath: EsmPath{PkgName: "example", PkgVersion: "1.0.0"},
+				pkgJson: &npm.PackageJSON{Name: "example", Version: "1.0.0", Type: "module", Main: "./src/index.js", Types: "./index.d.ts", Dependencies: map[string]string{"dep": "1.0.0"}},
+			}
+			meta, _, err := ctx.buildModule(false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := []string{"/dep@1.0.0/" + target + "/dep.mjs"}
+			if !slices.Equal(meta.Imports, want) {
+				t.Errorf("imports = %v, want %v", meta.Imports, want)
+			}
+			f, _, err := fs.Get(ctx.getSavePath())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer f.Close()
+			output, err := io.ReadAll(f)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(string(output), "42") {
+				t.Error("missing private module value")
+			}
+		})
+	}
+}
