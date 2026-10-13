@@ -6,7 +6,7 @@ for (const target of ["es2022", "deno", "denonext"]) {
     const messages = [{ to: "ExponentPushToken[test-token]", body: "test" }];
     const tickets = [{ status: "ok", id: "test-ticket" }];
     let requests = 0;
-    globalThis.fetch = (input, init) => {
+    globalThis.fetch = (input, init?: RequestInit) => {
       requests++;
       assertEquals(input, "https://exp.host/--/api/v2/push/send");
       assertEquals(init?.method, "post");
@@ -14,7 +14,7 @@ for (const target of ["es2022", "deno", "denonext"]) {
         new Headers(init?.headers).get("content-type"),
         "application/json",
       );
-      assertEquals(JSON.parse(init?.body as string), messages);
+      assertEquals(init?.body, JSON.stringify(messages));
       return Promise.resolve(Response.json({ data: tickets }));
     };
     try {
