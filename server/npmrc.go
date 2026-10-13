@@ -230,7 +230,7 @@ CHECK:
 			version = "latest"
 			goto CHECK
 		}
-		var latest *semver.Version
+		var latest, deprecated *semver.Version
 		includePrerelease := strings.ContainsRune(version, '-')
 		for v := range metadata.Versions {
 			if !includePrerelease && strings.ContainsRune(v, '-') {
@@ -238,8 +238,17 @@ CHECK:
 			}
 			sv, err := semver.NewVersion(v)
 			if err == nil && c.Check(sv) && (latest == nil || sv.GreaterThan(latest)) {
-				latest = sv
+				if message, _ := metadata.Versions[v].Deprecated.(string); message != "" {
+					if deprecated == nil || sv.GreaterThan(deprecated) {
+						deprecated = sv
+					}
+				} else {
+					latest = sv
+				}
 			}
+		}
+		if latest == nil {
+			latest = deprecated
 		}
 		if latest != nil {
 			return latest.Original(), nil
