@@ -1,6 +1,7 @@
 package server
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -13,8 +14,125 @@ import (
 
 	"github.com/esm-dev/esm.sh/internal/npm"
 	"github.com/esm-dev/esm.sh/internal/storage"
+	esbuild "github.com/ije/esbuild-internal/api"
 	"github.com/ije/gox/log"
+	"github.com/ije/gox/set"
 )
+
+func TestBuildModuleBundleNodeRuntime(t *testing.T) {
+	oldConfig := config
+	config = &Config{SourceMap: true}
+	t.Cleanup(func() { config = oldConfig })
+	for _, tt := range []struct {
+		name        string
+		code        string
+		target      string
+		mode        BundleMode
+		external    []string
+		externalAll bool
+		imports     []string
+	}{
+		{name: "globals", code: `export const env = process.env; export const bytes = Buffer.from("hello");`, mode: BundleDeps},
+		{name: "builtins", code: `export { default } from "node:process"; export { Buffer } from "node:buffer"; export { readFile } from "node:fs/promises"; export { inspect } from "sys"; export const value = 1;`, mode: BundleDeps},
+		{name: "require", code: `export const buffer = require("node:buffer");`, mode: BundleDeps},
+		{name: "dynamic import", code: `export const load = () => import("node:buffer");`, mode: BundleDeps},
+		{name: "no polyfills", code: `export const env = process.env.NODE_ENV;`, mode: BundleDeps},
+		{name: "default", code: `export const env = process.env;`, imports: []string{"/node/process.mjs"}},
+		{name: "no bundle", code: `export const env = process.env;`, mode: BundleFalse, imports: []string{"/node/process.mjs"}},
+		{name: "external", code: `export const env = process.env; export { Buffer } from "node:buffer";`, mode: BundleDeps, external: []string{"node:process", "node:buffer"}, imports: []string{"node:buffer", "node:process"}},
+		{name: "mixed external", code: `export const env = process.env; export { Buffer } from "node:buffer";`, mode: BundleDeps, external: []string{"node:buffer"}, imports: []string{"node:buffer"}},
+		{name: "external all", code: `export const env = process.env; export { Buffer } from "node:buffer";`, mode: BundleDeps, externalAll: true, imports: []string{"/node/process.mjs", "node:buffer"}},
+		{name: "peer", code: `export const env = process.env; export { value } from "peer";`, mode: BundleDeps, imports: []string{"/peer@1.0.0/es2022/peer.mjs"}},
+		{name: "node", code: `export { default } from "node:process";`, mode: BundleDeps, target: "node", imports: []string{"node:process"}},
+		{name: "denonext", code: `export const env = process.env;`, mode: BundleDeps, target: "denonext", imports: []string{"node:process"}},
+	} {
+		for _, minify := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/minify=%v", tt.name, minify), func(t *testing.T) {
+				config.Minify = minify
+				wd := t.TempDir()
+				pkgDir := filepath.Join(wd, "node_modules", "example")
+				if err := os.MkdirAll(pkgDir, 0755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(pkgDir, "index.js"), []byte(tt.code), 0644); err != nil {
+					t.Fatal(err)
+				}
+				fs, err := storage.NewFSStorage(filepath.Join(wd, "storage"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				logger, err := log.New("")
+				if err != nil {
+					t.Fatal(err)
+				}
+				logger.SetOutput(io.Discard)
+				target := tt.target
+				if target == "" {
+					target = "es2022"
+				}
+				ctx := &BuildContext{
+					wd: wd, target: target, bundleMode: tt.mode, externalAll: tt.externalAll, storage: fs, logger: logger, npmrc: &NpmRC{},
+					esmPath: EsmPath{PkgName: "example", PkgVersion: "1.0.0"},
+					args:    BuildArgs{External: *set.NewReadOnly(tt.external...)},
+					pkgJson: &npm.PackageJSON{Name: "example", Version: "1.0.0", Type: "module", Main: "./index.js", Types: "./index.d.ts", PeerDependencies: map[string]string{"peer": "1.0.0"}},
+				}
+				meta, _, err := ctx.buildModule(false)
+				if err != nil {
+					t.Fatal(err)
+				}
+				f, _, err := fs.Get(ctx.getSavePath())
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer f.Close()
+				output, err := io.ReadAll(f)
+				if err != nil {
+					t.Fatal(err)
+				}
+				var imports []string
+				result := esbuild.Build(esbuild.BuildOptions{
+					Stdin: &esbuild.StdinOptions{Contents: string(output)}, Bundle: true, Format: esbuild.FormatESModule,
+					Plugins: []esbuild.Plugin{{Name: "imports", Setup: func(build esbuild.PluginBuild) {
+						build.OnResolve(esbuild.OnResolveOptions{Filter: ".*"}, func(args esbuild.OnResolveArgs) (esbuild.OnResolveResult, error) {
+							imports = append(imports, args.Path)
+							return esbuild.OnResolveResult{Path: args.Path, External: true}, nil
+						})
+					}}},
+				})
+				if len(result.Errors) > 0 {
+					t.Fatal(result.Errors)
+				}
+				slices.Sort(imports)
+				if !slices.Equal(imports, tt.imports) {
+					t.Errorf("imports = %v, want %v", imports, tt.imports)
+				}
+				var wantMetaImports []string
+				for _, specifier := range tt.imports {
+					if strings.HasPrefix(specifier, "/") {
+						wantMetaImports = append(wantMetaImports, specifier)
+					}
+				}
+				if !slices.Equal(meta.Imports, wantMetaImports) {
+					t.Errorf("metadata imports = %v, want %v", meta.Imports, wantMetaImports)
+				}
+				f, _, err = fs.Get(ctx.getSavePath() + ".map")
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer f.Close()
+				var sourceMap struct {
+					SourcesContent []string `json:"sourcesContent"`
+				}
+				if err := json.NewDecoder(f).Decode(&sourceMap); err != nil {
+					t.Fatal(err)
+				}
+				if !slices.Contains(sourceMap.SourcesContent, tt.code) {
+					t.Error("source map lost the original module")
+				}
+			})
+		}
+	}
+}
 
 func TestBuildModuleConcurrentResolvers(t *testing.T) {
 	wd := t.TempDir()
