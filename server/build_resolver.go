@@ -133,7 +133,8 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 			} else {
 				for _, name := range pkgJson.Exports.Keys() {
 					conditions, _ := pkgJson.Exports.Get(name)
-					if stripEntryModuleExt(name) == "./"+subPath {
+					name = stripEntryModuleExt(name)
+					if name == "./"+subPath {
 						if s, ok := conditions.(string); ok {
 							/**
 							exports: {
