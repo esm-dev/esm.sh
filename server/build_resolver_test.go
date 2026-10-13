@@ -156,20 +156,34 @@ func TestResolveEntryWildcardSuffix(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	for _, conditions := range []any{
-		"./src/*.js",
-		npm.NewJSONObject([]string{"types", "import"}, map[string]any{"types": "./src/*.d.ts", "import": "./src/*.js"}),
+	for _, tt := range []struct{ pattern, subpath string }{
+		{"./features/*-feature", "features/one-feature"},
+		{"./*.js", "one.js"},
+		{"./features/*.js", "features/one.js"},
+		{"./features/*.mjs", "features/one.mjs"},
+		{"./features/*.cjs", "features/one.cjs"},
+		{"./features/*-feature.js", "features/one-feature.js"},
 	} {
-		esm := EsmPath{PkgName: "example", PkgVersion: "1.0.0", SubPath: "features/one-feature"}
-		ctx := &BuildContext{
-			wd: wd, target: "es2022", esmPath: esm,
-			pkgJson: &npm.PackageJSON{
-				Name: "example", Version: "1.0.0", Type: "module",
-				Exports: npm.NewJSONObject([]string{"./features/*-feature"}, map[string]any{"./features/*-feature": conditions}),
-			},
-		}
-		if entry := ctx.resolveEntry(esm); entry.main != "./src/one.js" || entry.types != "./src/one.d.ts" || !entry.module {
-			t.Fatalf("unexpected entry: %+v", entry)
+		for i, conditions := range []any{
+			"./src/*.js",
+			npm.NewJSONObject([]string{"types", "import"}, map[string]any{"types": "./src/*.d.ts", "import": "./src/*.js"}),
+		} {
+			t.Run(fmt.Sprintf("%s/%d", tt.pattern, i), func(t *testing.T) {
+				esm, _, _, _, _, err := parseEsmPathSyntax("/example@1.0.0/" + tt.subpath)
+				if err != nil {
+					t.Fatal(err)
+				}
+				ctx := &BuildContext{
+					wd: wd, target: "es2022", esmPath: esm,
+					pkgJson: &npm.PackageJSON{
+						Name: "example", Version: "1.0.0", Type: "module",
+						Exports: npm.NewJSONObject([]string{tt.pattern}, map[string]any{tt.pattern: conditions}),
+					},
+				}
+				if entry := ctx.resolveEntry(esm); entry.main != "./src/one.js" || entry.types != "./src/one.d.ts" || !entry.module {
+					t.Fatalf("unexpected entry: %+v", entry)
+				}
+			})
 		}
 	}
 	for _, tt := range []struct {

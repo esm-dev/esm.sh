@@ -8,6 +8,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -346,6 +347,91 @@ func TestPackageNotFoundCache(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestNpmDeprecatedVersions(t *testing.T) {
+	previous := config
+	cfg := *config
+	cfg.WorkDir, cfg.NpmQueryCacheTTL = t.TempDir(), 0
+	config = &cfg
+	t.Cleanup(func() { config = previous })
+	var metadata npm.PackageMetadata
+	if err := json.Unmarshal([]byte(`{
+		"dist-tags": {"latest":"6.65.7", "legacy":"6.65.7", "stable":"6.0.1"},
+		"versions": {
+			"5.65.7": {"name":"codemirror", "version":"5.65.7"},
+			"6.0.1": {"name":"codemirror", "version":"6.0.1"},
+			"6.0.2": {"name":"codemirror", "version":"6.0.2", "deprecated":""},
+			"6.65.6": {"name":"codemirror", "version":"6.65.6", "deprecated":"Use 6.0.2"},
+			"6.65.7": {"name":"codemirror", "version":"6.65.7", "deprecated":"This is an accidentally mis-tagged instance of 5.65.7"},
+			"7.0.0-beta.1": {"name":"codemirror", "version":"7.0.0-beta.1"},
+			"7.0.0-beta.2": {"name":"codemirror", "version":"7.0.0-beta.2", "deprecated":"Use beta.1"}
+		}
+	}`), &metadata); err != nil {
+		t.Fatal(err)
+	}
+	for _, versionRoute := range []bool{false, true} {
+		t.Run(fmt.Sprintf("version route=%v", versionRoute), func(t *testing.T) {
+			registry := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				var data any
+				switch {
+				case r.URL.Path == "/codemirror":
+					data = metadata
+				case versionRoute && r.URL.Path == "/react/19.0.0":
+					data = npm.PackageJSONRaw{Name: "react", Version: "19.0.0"}
+				case versionRoute && strings.HasPrefix(r.URL.Path, "/codemirror/"):
+					version := strings.TrimPrefix(r.URL.Path, "/codemirror/")
+					if tag, ok := metadata.DistTags[version]; ok {
+						version = tag
+					}
+					if raw, ok := metadata.Versions[version]; ok {
+						data = raw
+					}
+				}
+				if data == nil {
+					http.NotFound(w, r)
+					return
+				}
+				if err := json.NewEncoder(w).Encode(data); err != nil {
+					t.Error(err)
+				}
+			}))
+			defer registry.Close()
+			npmrc := &NpmRC{globalRegistry: &NpmRegistry{NpmRegistryConfig: NpmRegistryConfig{Registry: registry.URL + "/"}}}
+			for _, test := range []struct{ version, want string }{
+				{"^6.0.1", "6.0.2"},
+				{"6", "6.0.2"},
+				{"*", "6.65.7"},
+				{">=0", "6.0.2"},
+				{"~6.0.1", "6.0.2"},
+				{"^7.0.0-beta.1", "7.0.0-beta.1"},
+				{">=6.65.6 <7", "6.65.7"},
+				{"^8", ""},
+				{"6.65.7", "6.65.7"},
+				{"=6.65.7", "6.65.7"},
+				{"latest", "6.65.7"},
+				{"legacy", "6.65.7"},
+				{"stable", "6.0.1"},
+			} {
+				t.Run(test.version, func(t *testing.T) {
+					pkg, err := npmrc.getPackageInfo("codemirror", test.version)
+					if test.want == "" {
+						if err == nil || !strings.HasSuffix(err.Error(), " not found") {
+							t.Fatalf("expected a missing version, got %v, %v", pkg, err)
+						}
+						return
+					}
+					if err != nil {
+						t.Fatal(err)
+					}
+					if pkg.Version != test.want {
+						t.Errorf("resolved version = %q, want %q", pkg.Version, test.want)
+					}
+				})
+			}
+		})
+	}
 }
 
 func TestResolveSemverVersion(t *testing.T) {
