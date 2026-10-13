@@ -459,10 +459,16 @@ func TestBuildModuleCJSNamedExports(t *testing.T) {
 				if err := os.MkdirAll(cacheDir, 0755); err != nil {
 					t.Fatal(err)
 				}
-				oldHash := sha1.Sum([]byte(cjsModuleLexerVersion + "./index.js" + ctx.getNodeEnv()))
-				oldCache := filepath.Join(cacheDir, base64.RawURLEncoding.EncodeToString(oldHash[:])+".json")
-				if err := os.WriteFile(oldCache, []byte(`{"exports":["valid"]}`), 0644); err != nil {
-					t.Fatal(err)
+				cacheVersions := []string{cjsModuleLexerVersion}
+				if pkgName == "pako" {
+					cacheVersions = append(cacheVersions, cjsModuleLexerVersion+"-2", "deno-"+denoVersion)
+				}
+				for _, version := range cacheVersions {
+					oldHash := sha1.Sum([]byte(version + "./index.js" + ctx.getNodeEnv()))
+					oldCache := filepath.Join(cacheDir, base64.RawURLEncoding.EncodeToString(oldHash[:])+".json")
+					if err := os.WriteFile(oldCache, []byte(`{"exports":["valid"]}`), 0644); err != nil {
+						t.Fatal(err)
+					}
 				}
 				lexed, err := cjsModuleLexer(ctx, "./index.js")
 				if err != nil {
