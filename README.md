@@ -425,8 +425,8 @@ In case the type definitions provided by the `X-TypeScript-Types` header is inco
 import unescape from "https://esm.sh/lodash/unescape?no-dts";
 ```
 
-This will prevent the `X-TypeScript-Types` header from being included in the network request, and you can manually
-specify the types for the imported module.
+This disables the `X-TypeScript-Types` header for the module. esm.sh also passes this option to generated dependency
+URLs. The `?no-check` query is an alias for `?no-dts`. You can manually specify the types for the imported module.
 
 ## esm.sh Configuration
 

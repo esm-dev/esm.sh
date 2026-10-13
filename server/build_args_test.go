@@ -27,6 +27,7 @@ func TestEncodeBuildArgs(t *testing.T) {
 			ExternalRequire:   true,
 			KeepNames:         true,
 			IgnoreAnnotations: true,
+			NoDts:             true,
 		},
 		false,
 	)
@@ -54,6 +55,12 @@ func TestEncodeBuildArgs(t *testing.T) {
 	}
 	if !args.IgnoreAnnotations {
 		t.Fatal("ignoreAnnotations should be true")
+	}
+	if !args.NoDts {
+		t.Fatal("missing no-dts")
+	}
+	if got := encodeBuildArgs(BuildArgs{NoDts: true}, true); got != "" {
+		t.Fatalf("no-dts changed the declaration path: %q", got)
 	}
 }
 
