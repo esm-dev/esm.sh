@@ -45,7 +45,7 @@ func isCommitish(s string) bool {
 
 // isNodeBuiltinSpecifier checks if the given specifier is a node.js built-in module.
 func isNodeBuiltinSpecifier(specifier string) bool {
-	return strings.HasPrefix(specifier, "node:") && nodeBuiltinModules[specifier[5:]]
+	return strings.HasPrefix(specifier, "node:")
 }
 
 // isJsonModuleSpecifier returns true if the specifier is a json module.

@@ -436,6 +436,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 	browserExclude := map[string]*set.Set[string]{}
 	implicitExternal := set.New[string]()
 	noBundle := !ctx.shouldBundle()
+	nativeResolve := new(bool)
 	esmifyPlugin := esbuild.Plugin{
 		Name: "esmify",
 		Setup: func(build esbuild.PluginBuild) {
@@ -443,6 +444,10 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 			build.OnResolve(
 				esbuild.OnResolveOptions{Filter: ".*"},
 				func(args esbuild.OnResolveArgs) (esbuild.OnResolveResult, error) {
+					if args.PluginData == nativeResolve {
+						return esbuild.OnResolveResult{}, nil
+					}
+
 					// entry point
 					if rootVersion != nil && (args.Path == ctx.pkgJson.Name || strings.HasPrefix(args.Path, ctx.pkgJson.Name+"/")) && !isExternalModule(args.Path, ctx.args.External) {
 						importer, ok := strings.CutPrefix(args.Importer, path.Join(ctx.wd, "node_modules")+"/")
@@ -622,6 +627,22 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 						specifier = strings.TrimPrefix(filename, path.Join(ctx.wd, "node_modules")+"/")
 					} else {
 						filename = path.Join(ctx.wd, "node_modules", specifier)
+						if !ctx.externalAll && !isExternalModule(specifier, ctx.args.External) {
+							pkgDir := ctx.getPkgFullPath("")
+							for dir := args.ResolveDir; dir == pkgDir || strings.HasPrefix(dir, pkgDir+"/"); dir = path.Dir(dir) {
+								if path.Base(dir) != "node_modules" && existsDir(path.Join(dir, "node_modules")) {
+									resolved := build.Resolve(specifier, esbuild.ResolveOptions{
+										Importer: args.Importer, Namespace: args.Namespace, ResolveDir: args.ResolveDir,
+										Kind: args.Kind, With: args.With, PluginData: nativeResolve,
+									})
+									if len(resolved.Errors) == 0 && strings.HasPrefix(resolved.Path, pkgDir+"/") {
+										filename = resolved.Path
+										specifier = strings.TrimPrefix(filename, path.Join(ctx.wd, "node_modules")+"/")
+									}
+									break
+								}
+							}
+						}
 					}
 
 					// check if the filename is within the working directory
@@ -866,6 +887,9 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 						bundleInternalModule := exportAs == "" && !isDynamicImport && ctx.shouldBundleInternalModules()
 						if modulePath == entry.main || exportAs == entrySpecifier || (!isDynamicImport && !noBundle) || bundleInternalModule {
 							if existsFile(resolvedFilename) {
+								if strings.HasSuffix(resolvedFilename, ".css") {
+									return esbuild.OnResolveResult{Path: resolvedFilename}, nil
+								}
 								pkgDir := path.Join(ctx.wd, "node_modules", pkgName)
 								short := strings.TrimPrefix(resolvedFilename, pkgDir)[1:]
 								if analyzeMode && resolvedFilename != entryModuleFilename && strings.HasPrefix(args.Importer, pkgDir) {
@@ -1069,7 +1093,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 					}
 					return esbuild.OnLoadResult{
 						Contents:   &out.Code,
-						ResolveDir: path.Join(ctx.wd, "node_modules", ctx.esmPath.PkgName),
+						ResolveDir: path.Dir(args.Path),
 						Loader:     esbuild.LoaderJS,
 					}, nil
 				},
@@ -1153,11 +1177,10 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 		if ctx.isBrowserTarget() && safeReserveProcessPackages[ctx.esmPath.PkgName] {
 			delete(define, "process")
 		}
-		if ctx.isDenoTarget() {
-			// deno 2 has removed the `window` global object, let's replace it with `globalThis`
-			define["window"] = "globalThis"
-		}
 		for k, v := range define {
+			if k == "process" {
+				continue
+			}
 			define["global."+k] = v
 			define["globalThis."+k] = v
 		}

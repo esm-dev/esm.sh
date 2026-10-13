@@ -133,7 +133,8 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 			} else {
 				for _, name := range pkgJson.Exports.Keys() {
 					conditions, _ := pkgJson.Exports.Get(name)
-					if stripEntryModuleExt(name) == "./"+subPath {
+					name = stripEntryModuleExt(name)
+					if name == "./"+subPath {
 						if s, ok := conditions.(string); ok {
 							/**
 							exports: {
@@ -769,6 +770,8 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 	if isNodeBuiltinSpecifier(specifier) {
 		if ctx.externalAll || ctx.target == "node" || ctx.target == "denonext" || ctx.args.External.Has(specifier) {
 			resolvedPath = specifier
+		} else if !nodeBuiltinModules[specifier[5:]] {
+			resolvedPath = fmt.Sprintf("/error.js?type=unsupported-node-builtin-module&name=%s&importer=%s", specifier, ctx.esmPath.String())
 		} else if ctx.target == "deno" {
 			resolvedPath = fmt.Sprintf("https://deno.land/std@0.177.1/node/%s.ts", specifier[5:])
 		} else {
