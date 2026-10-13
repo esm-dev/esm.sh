@@ -128,6 +128,9 @@ func transform(options *ResolvedTransformOptions) (out *TransformOutput, err err
 				Name: "resolver",
 				Setup: func(build esbuild.PluginBuild) {
 					build.OnResolve(esbuild.OnResolveOptions{Filter: ".*"}, func(args esbuild.OnResolveArgs) (esbuild.OnResolveResult, error) {
+						if args.Path == "solid-js/jsx-runtime" || args.Path == "solid-js/jsx-dev-runtime" {
+							return esbuild.OnResolveResult{}, errors.New("Solid JSX is not supported. Compile it with babel-preset-solid first.")
+						}
 						if importMap != nil {
 							path, ok := importMap.Resolve(args.Path, nil)
 							if ok && isHttpSpecifier(path) {

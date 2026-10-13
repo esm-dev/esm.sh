@@ -437,6 +437,9 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 			build.OnResolve(
 				esbuild.OnResolveOptions{Filter: ".*"},
 				func(args esbuild.OnResolveArgs) (esbuild.OnResolveResult, error) {
+					if args.Path == "solid-js/jsx-runtime" || args.Path == "solid-js/jsx-dev-runtime" {
+						return esbuild.OnResolveResult{}, errors.New("Solid JSX is not supported. Compile it with babel-preset-solid first.")
+					}
 					// entry point
 					if args.Path == entryPoint || args.Path == entrySpecifier {
 						path := args.Path
