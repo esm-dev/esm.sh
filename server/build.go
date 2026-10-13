@@ -710,6 +710,14 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 									} else if m, ok := v.(npm.JSONObject); ok {
 										exportEntry := ctx.resolveConditionExportEntry(m, pkgJson.Type)
 										match = stripModuleExt(exportEntry.main) == stripModuleExt(modulePath)
+										if !match && path.Join(pkgJson.Name, stripModuleExt(exportName)) == entrySpecifier {
+											for _, p := range getExportConditionPaths(m) {
+												if stripModuleExt(p) == stripModuleExt(modulePath) {
+													match = true
+													break
+												}
+											}
+										}
 									}
 									if match {
 										exportAs = path.Join(pkgJson.Name, stripModuleExt(exportName))

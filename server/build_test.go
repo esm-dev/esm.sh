@@ -23,12 +23,15 @@ func TestBuildModuleConditionalExportSplitting(t *testing.T) {
 	for _, tt := range []struct {
 		name    string
 		exports string
+		subPath string
 		split   bool
 	}{
-		{"default", `{"import":"./public.mjs","default":"./internal.cjs"}`, false},
-		{"require", `{"import":"./public.mjs","require":"./internal.cjs"}`, false},
-		{"nested", `{"import":{"default":"./public.mjs"},"require":{"default":"./internal.cjs"}}`, false},
-		{"import", `{"import":"./internal.cjs","default":"./public.mjs"}`, true},
+		{"default", `{"import":"./public.mjs","default":"./internal.cjs"}`, "feature", false},
+		{"require", `{"import":"./public.mjs","require":"./internal.cjs"}`, "feature", false},
+		{"nested", `{"import":{"default":"./public.mjs"},"require":{"default":"./internal.cjs"}}`, "feature", false},
+		{"import", `{"import":"./internal.cjs","default":"./public.mjs"}`, "feature", true},
+		{"root wrapper", `{"import":"./public.mjs","require":"./internal.cjs"}`, "", false},
+		{"subpath wrapper", `{"import":"./public.mjs","require":"./internal.cjs"}`, "core", false},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			wd := t.TempDir()
@@ -46,8 +49,12 @@ func TestBuildModuleConditionalExportSplitting(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
+			exportName := "./core"
+			if tt.subPath == "" {
+				exportName = "."
+			}
 			var raw npm.PackageJSONRaw
-			if err := json.Unmarshal([]byte(`{"name":"example","version":"1.0.0","exports":{"./feature":"./feature.mjs","./core":`+tt.exports+`}}`), &raw); err != nil {
+			if err := json.Unmarshal([]byte(`{"name":"example","version":"1.0.0","types":"./feature.d.ts","exports":{"./feature":"./feature.mjs","`+exportName+`":`+tt.exports+`}}`), &raw); err != nil {
 				t.Fatal(err)
 			}
 			fs, err := storage.NewFSStorage(filepath.Join(wd, "storage"))
@@ -61,8 +68,11 @@ func TestBuildModuleConditionalExportSplitting(t *testing.T) {
 			logger.SetOutput(io.Discard)
 			ctx := &BuildContext{
 				wd: wd, target: "denonext", storage: fs, logger: logger,
-				esmPath: EsmPath{PkgName: "example", PkgVersion: "1.0.0", SubPath: "feature"},
+				esmPath: EsmPath{PkgName: "example", PkgVersion: "1.0.0", SubPath: tt.subPath},
 				pkgJson: raw.ToNpmPackage(),
+			}
+			if tt.subPath != "feature" {
+				ctx.pkgJson.SideEffects = *set.NewReadOnly("./side-effect.js")
 			}
 			meta, _, err := ctx.buildModule(false)
 			if err != nil {
