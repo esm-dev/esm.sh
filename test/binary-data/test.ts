@@ -1,7 +1,9 @@
 import { assert, assertEquals, assertStringIncludes } from "jsr:@std/assert";
+import { Buffer } from "node:buffer";
 import binaryData from "esm.sh/binary-data@0.6.0?target=denonext";
 
 Deno.test("binary-data private modules", () => {
+  Object.assign(globalThis, { Buffer });
   const schema = {
     kind: binaryData.types.uint8,
     value: binaryData.types.uint8,
