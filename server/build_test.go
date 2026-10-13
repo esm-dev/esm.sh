@@ -134,6 +134,61 @@ func TestBuildModuleBundleNodeRuntime(t *testing.T) {
 	}
 }
 
+func TestBuildModuleDenoWindow(t *testing.T) {
+	oldConfig := config
+	config = &Config{}
+	t.Cleanup(func() { config = oldConfig })
+	for _, target := range []string{"deno", "denonext"} {
+		for _, minify := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/minify=%v", target, minify), func(t *testing.T) {
+				config.Minify = minify
+				wd := t.TempDir()
+				pkgDir := filepath.Join(wd, "node_modules", "example")
+				if err := os.MkdirAll(pkgDir, 0755); err != nil {
+					t.Fatal(err)
+				}
+				const code = `export const windowType = typeof window;
+export const globalWindowType = typeof globalThis.window;
+export const browser = typeof window !== "undefined" && window.document;`
+				if err := os.WriteFile(filepath.Join(pkgDir, "index.js"), []byte(code), 0644); err != nil {
+					t.Fatal(err)
+				}
+				fs, err := storage.NewFSStorage(filepath.Join(wd, "storage"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				logger, err := log.New("")
+				if err != nil {
+					t.Fatal(err)
+				}
+				logger.SetOutput(io.Discard)
+				ctx := &BuildContext{
+					wd: wd, target: target, storage: fs, logger: logger, npmrc: &NpmRC{},
+					esmPath: EsmPath{PkgName: "example", PkgVersion: "1.0.0"},
+					pkgJson: &npm.PackageJSON{Name: "example", Version: "1.0.0", Type: "module", Main: "./index.js", Types: "./index.d.ts"},
+				}
+				if _, _, err := ctx.buildModule(false); err != nil {
+					t.Fatal(err)
+				}
+				f, _, err := fs.Get(ctx.getSavePath())
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer f.Close()
+				output, err := io.ReadAll(f)
+				if err != nil {
+					t.Fatal(err)
+				}
+				for _, expr := range []string{"typeof window", "typeof globalThis.window", "window.document"} {
+					if !strings.Contains(string(output), expr) {
+						t.Errorf("missing %q in output:\n%s", expr, output)
+					}
+				}
+			})
+		}
+	}
+}
+
 func TestBuildModuleConcurrentResolvers(t *testing.T) {
 	wd := t.TempDir()
 	pkgDir := filepath.Join(wd, "node_modules", "example")
