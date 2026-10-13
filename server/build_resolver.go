@@ -311,8 +311,12 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 			entry.types = normalizeEntryPath(pkgJson.Types)
 		}
 		if len(pkgJson.Browser) > 0 && ctx.isBrowserTarget() {
-			if path, ok := pkgJson.Browser["."]; ok && ctx.existsPkgFile(path) {
-				entry.update(path, pkgJson.Type == "module")
+			if path, ok := pkgJson.Browser["."]; ok {
+				browserEntry := BuildEntry{main: path, module: pkgJson.Type == "module"}
+				ctx.finalizeBuildEntry(&browserEntry)
+				if browserEntry.main != "" {
+					entry.update(browserEntry.main, browserEntry.module)
+				}
 			}
 		}
 
@@ -422,8 +426,12 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 	// resolve entry main from `browser` field if it's defined
 	if len(pkgJson.Browser) > 0 && ctx.isBrowserTarget() {
 		if entry.main != "" {
-			if path, ok := pkgJson.Browser[entry.main]; ok && ctx.existsPkgFile(path) {
-				entry.update(path, pkgJson.Type == "module")
+			if path, ok := pkgJson.Browser[entry.main]; ok {
+				browserEntry := BuildEntry{main: path, module: pkgJson.Type == "module"}
+				ctx.finalizeBuildEntry(&browserEntry)
+				if browserEntry.main != "" {
+					entry.update(browserEntry.main, browserEntry.module)
+				}
 			}
 		}
 	}
