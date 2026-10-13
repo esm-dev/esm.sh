@@ -11,15 +11,6 @@ import (
 	"github.com/ije/gox/valid"
 )
 
-// isJsReservedWord returns true if the given string is a reserved word in JavaScript.
-func isJsReservedWord(word string) bool {
-	switch word {
-	case "abstract", "arguments", "await", "boolean", "break", "byte", "case", "catch", "char", "class", "const", "continue", "debugger", "default", "delete", "do", "double", "else", "enum", "eval", "export", "extends", "false", "final", "finally", "float", "for", "function", "goto", "if", "implements", "import", "in", "instanceof", "int", "interface", "let", "long", "native", "new", "null", "package", "private", "protected", "public", "return", "short", "static", "super", "switch", "synchronized", "this", "throw", "throws", "transient", "true", "try", "typeof", "var", "void", "volatile", "while", "with", "yield":
-		return true
-	}
-	return false
-}
-
 // isJsIdentifier returns true if the given string is a valid JavaScript identifier.
 func isJsIdentifier(s string) bool {
 	if len(s) == 0 {

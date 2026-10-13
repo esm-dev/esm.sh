@@ -418,7 +418,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 		buf := &bytes.Buffer{}
 		fmt.Fprintf(buf, `import * as cjsm from "%s";`, entrySpecifier)
 		if len(cjsExports) > 0 {
-			fmt.Fprintf(buf, `export const { %s } = cjsm;`, strings.Join(cjsExports, ","))
+			fmt.Fprintf(buf, `export { %s } from "%s";`, strings.Join(cjsExports, ","), entrySpecifier)
 		}
 		buf.WriteString("export default cjsm.default ?? cjsm;")
 		stdin = esbuild.StdinOptions{
