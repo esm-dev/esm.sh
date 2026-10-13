@@ -442,3 +442,92 @@ func TestBuildExternalWildcard(t *testing.T) {
 		})
 	}
 }
+
+func TestResolveEntryModulePath(t *testing.T) {
+	for _, subPath := range []string{"", "sub"} {
+		for _, tt := range []struct {
+			name   string
+			module string
+			file   string
+		}{
+			{"explicit", "./es/index.js", "es/index.js"},
+			{"extensionless js", "./es/index", "es/index.js"},
+			{"extensionless mjs", "./es/index", "es/index.mjs"},
+			{"directory js", "./es", "es/index.js"},
+			{"directory mjs", "./es", "es/index.mjs"},
+			{"missing", "./missing", ""},
+		} {
+			t.Run(subPath+"/"+tt.name, func(t *testing.T) {
+				wd := t.TempDir()
+				pkgDir := filepath.Join(wd, "node_modules", "example", subPath)
+				files := map[string]string{"main.cjs": "module.exports = {};"}
+				if tt.file != "" {
+					files[tt.file] = "export const blue = [];"
+				}
+				pkg := &npm.PackageJSON{Name: "example", Version: "1.0.0", Main: "./main.cjs", Module: tt.module}
+				if subPath != "" {
+					files["package.json"] = fmt.Sprintf(`{"main":"./main.cjs","module":%q}`, tt.module)
+					pkg.Main, pkg.Module = "", ""
+				}
+				for name, content := range files {
+					filename := filepath.Join(pkgDir, name)
+					if err := os.MkdirAll(filepath.Dir(filename), 0755); err != nil {
+						t.Fatal(err)
+					}
+					if err := os.WriteFile(filename, []byte(content), 0644); err != nil {
+						t.Fatal(err)
+					}
+				}
+				ctx := &BuildContext{
+					wd: wd, target: "es2022", pkgJson: pkg,
+					esmPath: EsmPath{PkgName: "example", PkgVersion: "1.0.0", SubPath: subPath},
+				}
+				entry := ctx.resolveEntry(ctx.esmPath)
+				want := tt.file
+				if want == "" {
+					want = "main.cjs"
+				}
+				want = "./" + filepath.ToSlash(filepath.Join(subPath, want))
+				if entry.main != want || entry.module != (tt.file != "") {
+					t.Fatalf("entry = %+v, want main %q, module %v", entry, want, tt.file != "")
+				}
+			})
+		}
+	}
+}
+
+func TestResolveEntryBrowserPath(t *testing.T) {
+	wd := t.TempDir()
+	pkgDir := filepath.Join(wd, "node_modules", "example")
+	if err := os.MkdirAll(filepath.Join(pkgDir, "browser"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	for name, code := range map[string]string{
+		"main.cjs":         "module.exports = {};",
+		"browser/index.js": "export const value = 1;",
+	} {
+		if err := os.WriteFile(filepath.Join(pkgDir, name), []byte(code), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, key := range []string{".", "./main.cjs"} {
+		for _, browser := range []string{"./browser/index.js", "./browser/index", "./browser", "./missing", ""} {
+			for _, target := range []string{"es2022", "node"} {
+				t.Run(key+"/"+browser+"/"+target, func(t *testing.T) {
+					ctx := &BuildContext{
+						wd: wd, target: target, esmPath: EsmPath{PkgName: "example", PkgVersion: "1.0.0"},
+						pkgJson: &npm.PackageJSON{Name: "example", Main: "./main.cjs", Browser: map[string]string{key: browser}},
+					}
+					entry := ctx.resolveEntry(ctx.esmPath)
+					want, module := "./main.cjs", false
+					if target == "es2022" && browser != "./missing" && browser != "" {
+						want, module = "./browser/index.js", true
+					}
+					if entry.main != want || entry.module != module {
+						t.Fatalf("entry = %+v, want main %q, module %v", entry, want, module)
+					}
+				})
+			}
+		}
+	}
+}

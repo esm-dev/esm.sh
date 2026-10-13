@@ -219,9 +219,11 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 		if utils.ParseJSONFile(path.Join(ctx.wd, "node_modules", ctx.esmPath.PkgName, subPath, "package.json"), &rawInfo) == nil {
 			p := rawInfo.ToNpmPackage()
 			if entry.main == "" {
-				if p.Module != "" && ctx.existsPkgFile(subPath, p.Module) {
+				if p.Module != "" {
 					entry.update("./"+path.Join(subPath, p.Module), true)
-				} else if p.Main != "" && ctx.existsPkgFile(subPath, p.Main) {
+					ctx.finalizeBuildEntry(&entry)
+				}
+				if entry.main == "" && p.Main != "" && ctx.existsPkgFile(subPath, p.Main) {
 					entry.update("./"+path.Join(subPath, p.Main), p.Type == "module")
 				}
 			}
@@ -299,17 +301,23 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 			}
 		}
 	} else {
-		if pkgJson.Module != "" && ctx.existsPkgFile(pkgJson.Module) {
+		if pkgJson.Module != "" {
 			entry.update(pkgJson.Module, true)
-		} else if pkgJson.Main != "" {
+			ctx.finalizeBuildEntry(&entry)
+		}
+		if entry.main == "" && pkgJson.Main != "" {
 			entry.update(pkgJson.Main, pkgJson.Type == "module")
 		}
 		if pkgJson.Types != "" {
 			entry.types = normalizeEntryPath(pkgJson.Types)
 		}
 		if len(pkgJson.Browser) > 0 && ctx.isBrowserTarget() {
-			if path, ok := pkgJson.Browser["."]; ok && ctx.existsPkgFile(path) {
-				entry.update(path, pkgJson.Type == "module")
+			if path, ok := pkgJson.Browser["."]; ok {
+				browserEntry := BuildEntry{main: path, module: pkgJson.Type == "module"}
+				ctx.finalizeBuildEntry(&browserEntry)
+				if browserEntry.main != "" {
+					entry.update(browserEntry.main, browserEntry.module)
+				}
 			}
 		}
 
@@ -419,8 +427,12 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 	// resolve entry main from `browser` field if it's defined
 	if len(pkgJson.Browser) > 0 && ctx.isBrowserTarget() {
 		if entry.main != "" {
-			if path, ok := pkgJson.Browser[entry.main]; ok && ctx.existsPkgFile(path) {
-				entry.update(path, pkgJson.Type == "module")
+			if path, ok := pkgJson.Browser[entry.main]; ok {
+				browserEntry := BuildEntry{main: path, module: pkgJson.Type == "module"}
+				ctx.finalizeBuildEntry(&browserEntry)
+				if browserEntry.main != "" {
+					entry.update(browserEntry.main, browserEntry.module)
+				}
 			}
 		}
 	}
