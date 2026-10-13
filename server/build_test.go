@@ -1404,3 +1404,86 @@ func TestBuildModuleOptionalPeers(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildModuleTargetResolution(t *testing.T) {
+	oldConfig := config
+	config = &Config{}
+	t.Cleanup(func() { config = oldConfig })
+	for _, target := range []string{"deno", "denonext", "node", "es2022"} {
+		for _, mode := range []BundleMode{BundleDefault, BundleDeps} {
+			t.Run(fmt.Sprintf("%s/bundle=%d", target, mode), func(t *testing.T) {
+				wd := t.TempDir()
+				imports := `export { condition } from "conditional"; export { field } from "legacy"; export { main } from "main-only";`
+				files := map[string]string{
+					"example/package.json":     `{"name":"example","version":"1.0.0","main":"./index.js","module":"./index.mjs","types":"./index.d.ts","browser":{"./index.js":"./browser/index.js","./index.mjs":"./browser/index.js"},"dependencies":{"conditional":"1.0.0","legacy":"1.0.0","main-only":"1.0.0"}}`,
+					"example/index.mjs":        `import mod from "./index.js"; export const value = mod.value;` + imports,
+					"example/index.js":         `exports.value = "server";`,
+					"example/browser/index.js": `export const value = "browser";` + imports,
+					"conditional/package.json": `{"type":"module","exports":{"browser":"./browser.js","deno":"./deno.js","default":"./default.js"}}`,
+					"conditional/browser.js":   `export const condition = "browser condition";`,
+					"conditional/deno.js":      `export const condition = "deno condition";`,
+					"conditional/default.js":   `export const condition = "default condition";`,
+					"legacy/package.json":      `{"type":"module","main":"./main.js","module":"./module.js","browser":"./browser.js"}`,
+					"legacy/main.js":           `export const field = "main field";`,
+					"legacy/module.js":         `export const field = "module field";`,
+					"legacy/browser.js":        `export const field = "browser field";`,
+					"main-only/package.json":   `{"type":"module","main":"./main.js"}`,
+					"main-only/main.js":        `export const main = "main fallback";`,
+				}
+				for name, content := range files {
+					filename := filepath.Join(wd, "node_modules", name)
+					if err := os.MkdirAll(filepath.Dir(filename), 0755); err != nil {
+						t.Fatal(err)
+					}
+					if err := os.WriteFile(filename, []byte(content), 0644); err != nil {
+						t.Fatal(err)
+					}
+				}
+				var pkg npm.PackageJSON
+				if err := json.Unmarshal([]byte(files["example/package.json"]), &pkg); err != nil {
+					t.Fatal(err)
+				}
+				fs, err := storage.NewFSStorage(filepath.Join(wd, "storage"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				logger, err := log.New("")
+				if err != nil {
+					t.Fatal(err)
+				}
+				logger.SetOutput(io.Discard)
+				ctx := &BuildContext{
+					wd: wd, target: target, bundleMode: mode, storage: fs, logger: logger, npmrc: &NpmRC{},
+					esmPath: EsmPath{PkgName: "example", PkgVersion: "1.0.0"}, pkgJson: &pkg,
+				}
+				if _, _, err := ctx.buildModule(false); err != nil {
+					t.Fatal(err)
+				}
+				f, _, err := fs.Get(ctx.getSavePath())
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer f.Close()
+				output, err := io.ReadAll(f)
+				if err != nil {
+					t.Fatal(err)
+				}
+				value, condition, field := "server", "deno condition", "module field"
+				if target == "es2022" {
+					value, condition, field = "browser", "browser condition", "browser field"
+				} else if target == "node" {
+					condition, field = "default condition", "main field"
+				}
+				want := []string{value}
+				if mode == BundleDeps {
+					want = append(want, condition, field, "main fallback")
+				}
+				for _, value := range want {
+					if !strings.Contains(string(output), fmt.Sprintf("%q", value)) {
+						t.Errorf("expected %q in output:\n%s", value, output)
+					}
+				}
+			})
+		}
+	}
+}
