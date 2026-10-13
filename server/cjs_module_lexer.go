@@ -160,7 +160,7 @@ RETRY:
 				if strings.HasPrefix(formattedMessage, "failed to resolve reexport: NotFound(") && !retried {
 					retried = true
 					// install dependencies and retry
-					err = b.npmrc.installDependenciesContext(b.Context(), b.wd, b.pkgJson, true, nil)
+					err = b.npmrc.installDependenciesContext(b.Context(), b.wd, b.pkgJson, true, b.args.Deps, nil)
 					if err != nil {
 						return
 					}

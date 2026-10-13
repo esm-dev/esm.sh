@@ -393,3 +393,56 @@ func TestBuildTypesArgs(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildInstallDependencyOverrides(t *testing.T) {
+	oldConfig, transport := config, http.DefaultTransport
+	config = &Config{WorkDir: t.TempDir()}
+	t.Cleanup(func() { config, http.DefaultTransport = oldConfig, transport })
+	npmrc := &NpmRC{globalRegistry: &NpmRegistry{NpmRegistryConfig: NpmRegistryConfig{Registry: npmRegistry}}}
+	http.DefaultTransport = ghTestTransport(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(strings.NewReader("{}"))}, nil
+	})
+	for name, contents := range map[string]string{
+		"install-root@1.0.0":   `{"name":"install-root","version":"1.0.0","dependencies":{"install-direct":"0.0.0"}}`,
+		"install-direct@1.0.0": `{"name":"install-direct","version":"1.0.0","dependencies":{"install-leaf":"0.0.0"}}`,
+		"install-direct@2.0.0": `{"name":"install-direct","version":"2.0.0","dependencies":{"install-leaf":"0.0.0"}}`,
+		"install-leaf@1.0.0":   `{"name":"install-leaf","version":"1.0.0"}`,
+		"install-leaf@2.0.0":   `{"name":"install-leaf","version":"2.0.0"}`,
+	} {
+		pkgDir := filepath.Join(npmrc.StoreDir(), name, "node_modules", strings.Split(name, "@")[0])
+		if err := os.MkdirAll(pkgDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(pkgDir, "package.json"), []byte(contents), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var builds []*BuildContext
+	for _, version := range []string{"1.0.0", "2.0.0", "1.0.0"} {
+		ctx := &BuildContext{
+			npmrc: npmrc, bundleMode: BundleDeps,
+			esmPath: EsmPath{PkgName: "install-root", PkgVersion: "1.0.0"},
+			args:    BuildArgs{Deps: map[string]string{"install-direct": version, "install-leaf": version}},
+		}
+		if err := ctx.install(); err != nil {
+			t.Errorf("version=%s: %v", version, err)
+			continue
+		}
+		builds = append(builds, ctx)
+	}
+	for _, ctx := range builds {
+		for name, version := range ctx.args.Deps {
+			data, err := os.ReadFile(filepath.Join(ctx.wd, "node_modules", name, "package.json"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var pkg npm.PackageJSON
+			if err := json.Unmarshal(data, &pkg); err != nil {
+				t.Fatal(err)
+			}
+			if pkg.Version != version {
+				t.Errorf("%s version = %s, want %s", name, pkg.Version, version)
+			}
+		}
+	}
+}

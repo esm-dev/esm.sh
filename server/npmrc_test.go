@@ -199,7 +199,7 @@ func TestInstallDependenciesAliases(t *testing.T) {
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			if err := npmrc.installDependenciesContext(ctx, wd, root, npmMode, nil); err != nil {
+			if err := npmrc.installDependenciesContext(ctx, wd, root, npmMode, nil, nil); err != nil {
 				t.Fatal(err)
 			}
 			linked := 0

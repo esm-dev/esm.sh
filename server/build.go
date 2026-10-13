@@ -1729,6 +1729,17 @@ func (ctx *BuildContext) install() (err error) {
 		}
 
 		ctx.wd = path.Join(ctx.npmrc.StoreDir(), ctx.esmPath.PackageId())
+		if len(ctx.args.Deps) > 0 {
+			pkgDir := path.Join(ctx.wd, "node_modules", ctx.esmPath.PkgName)
+			ctx.wd = path.Join(ctx.wd, fmt.Sprintf("deps-%x", sha512.Sum512_256([]byte(encodeBuildArgs(BuildArgs{Deps: ctx.args.Deps}, false)))))
+			linkDir := path.Join(ctx.wd, "node_modules", ctx.esmPath.PkgName)
+			if err := ensureDir(path.Dir(linkDir)); err != nil {
+				return err
+			}
+			if err := os.Symlink(pkgDir, linkDir); err != nil && !os.IsExist(err) {
+				return err
+			}
+		}
 		ctx.pkgJson = p
 	}
 
@@ -1736,14 +1747,14 @@ func (ctx *BuildContext) install() (err error) {
 	// - install '@babel/runtime' and '@swc/helpers' if they are present in the dependencies in `BundleDefault` mode
 	switch ctx.bundleMode {
 	case BundleDeps:
-		err = ctx.npmrc.installDependenciesContext(ctx.Context(), ctx.wd, ctx.pkgJson, false, nil)
+		err = ctx.npmrc.installDependenciesContext(ctx.Context(), ctx.wd, ctx.pkgJson, false, ctx.args.Deps, nil)
 	case BundleDefault:
 		if v, ok := ctx.pkgJson.Dependencies["@babel/runtime"]; ok {
-			err = ctx.npmrc.installDependenciesContext(ctx.Context(), ctx.wd, &npm.PackageJSON{Dependencies: map[string]string{"@babel/runtime": v}}, false, nil)
+			err = ctx.npmrc.installDependenciesContext(ctx.Context(), ctx.wd, &npm.PackageJSON{Dependencies: map[string]string{"@babel/runtime": v}}, false, ctx.args.Deps, nil)
 		}
 		if err == nil {
 			if v, ok := ctx.pkgJson.Dependencies["@swc/helpers"]; ok {
-				err = ctx.npmrc.installDependenciesContext(ctx.Context(), ctx.wd, &npm.PackageJSON{Dependencies: map[string]string{"@swc/helpers": v}}, false, nil)
+				err = ctx.npmrc.installDependenciesContext(ctx.Context(), ctx.wd, &npm.PackageJSON{Dependencies: map[string]string{"@swc/helpers": v}}, false, ctx.args.Deps, nil)
 			}
 		}
 	}
