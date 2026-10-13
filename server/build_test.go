@@ -397,16 +397,25 @@ func TestBuildTypesArgs(t *testing.T) {
 
 func TestBuildModuleExportStars(t *testing.T) {
 	for _, tt := range []struct {
-		name   string
-		barrel string
-		deps   map[string]string
+		name        string
+		barrel      string
+		target      string
+		deps        map[string]string
+		conditional bool
 	}{
+		{name: "conditional entry", conditional: true, barrel: `export { custom } from "./leaf.js"; export const local = 1;`},
+		{name: "denonext", target: "denonext", barrel: `export * from "./leaf.js"; export const local = 1;`},
+		{name: "deno", target: "deno", barrel: `export * from "./leaf.js"; export const local = 1;`},
 		{name: "no dependencies", barrel: `export * from "./leaf.js"; export const local = 1;`},
 		{name: "large barrel", barrel: strings.Repeat("/* padding */\n", 50) + `export * from "./leaf.js"; export const local = 1;`, deps: map[string]string{"peer": "1.0.0"}},
 		{name: "multiline", barrel: "export/* comment */*\nfrom './leaf.js';export const local=1;"},
 		{name: "cyclic dependency", barrel: `export * from "peer"; export { local } from "./child.js";`, deps: map[string]string{"peer": "1.0.0"}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
+			target := tt.target
+			if target == "" {
+				target = "es2022"
+			}
 			wd := t.TempDir()
 			pkgDir := filepath.Join(wd, "node_modules", "example")
 			if err := os.MkdirAll(pkgDir, 0755); err != nil {
@@ -432,15 +441,23 @@ func TestBuildModuleExportStars(t *testing.T) {
 				t.Fatal(err)
 			}
 			logger.SetOutput(io.Discard)
-			outputs := map[string]string{"/peer@1.0.0/es2022/peer.mjs": `export const custom = () => 42;`}
+			outputs := map[string]string{"/peer@1.0.0/" + target + "/peer.mjs": `export const custom = () => 42;`}
 			for _, subPath := range []string{"", "nested", "barrel", "leaf", "child"} {
 				ctx := &BuildContext{
-					wd: wd, target: "es2022", storage: fs, logger: logger, npmrc: &NpmRC{},
+					wd: wd, target: target, storage: fs, logger: logger, npmrc: &NpmRC{},
 					esmPath: EsmPath{PkgName: "example", PkgVersion: "1.0.0", SubPath: subPath},
 					pkgJson: &npm.PackageJSON{
 						Name: "example", Version: "1.0.0", Type: "module", Main: "./index.js", Types: "./index.d.ts", Dependencies: tt.deps,
 						Exports: npm.NewJSONObject([]string{".", "./leaf"}, map[string]any{".": "./index.js", "./leaf": "./leaf.js"}),
 					},
+				}
+				if tt.conditional {
+					ctx.pkgJson.Exports = npm.NewJSONObject([]string{".", "./leaf"}, map[string]any{
+						".": npm.NewJSONObject([]string{"browser", "worker", "node"}, map[string]any{
+							"browser": "./index.js", "worker": "./nested.js", "node": "./barrel.js",
+						}),
+						"./leaf": "./leaf.js",
+					})
 				}
 				if _, _, err := ctx.buildModule(false); err != nil {
 					t.Fatal(err)
@@ -457,7 +474,7 @@ func TestBuildModuleExportStars(t *testing.T) {
 				outputs[ctx.Path()] = string(output)
 			}
 			result := esbuild.Build(esbuild.BuildOptions{
-				Stdin:  &esbuild.StdinOptions{Contents: `export { custom, local, ns } from "/example@1.0.0/es2022/example.mjs";`},
+				Stdin:  &esbuild.StdinOptions{Contents: fmt.Sprintf(`export { custom, local, ns } from "/example@1.0.0/%s/example.mjs";`, target)},
 				Bundle: true, Format: esbuild.FormatESModule,
 				Plugins: []esbuild.Plugin{{Name: "built-modules", Setup: func(build esbuild.PluginBuild) {
 					build.OnResolve(esbuild.OnResolveOptions{Filter: ".*"}, func(args esbuild.OnResolveArgs) (esbuild.OnResolveResult, error) {

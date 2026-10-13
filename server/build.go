@@ -769,25 +769,16 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 						}
 
 						// Bundled export stars lose names when their source is external.
-						if entry.module && args.Kind == esbuild.ResolveJSImportStatement && slices.Contains(moduleExts, path.Ext(resolvedFilename)) {
+						if entry.module && exportAs == "" && args.Kind == esbuild.ResolveJSImportStatement && slices.Contains(moduleExts, path.Ext(resolvedFilename)) {
 							data, readErr := os.ReadFile(resolvedFilename)
 							if readErr == nil && bytes.Contains(data, []byte("export")) && bytes.ContainsRune(data, '*') {
 								ast, parseErr := parseJS(resolvedFilename, data)
 								if parseErr == nil && len(ast.ExportStarImportRecords) > 0 {
-									externalize := !ctx.isDenoTarget()
-									for _, record := range ast.ExportStarImportRecords {
-										if !isRelPathSpecifier(ast.ImportRecords[record].Path.Text) {
-											externalize = true
-											break
-										}
+									externalPath, sideEffects, err := ctx.resolveExternalModule(specifier, args.Kind, withTypeJSON, analyzeMode)
+									if err != nil {
+										return esbuild.OnResolveResult{}, err
 									}
-									if externalize {
-										externalPath, sideEffects, err := ctx.resolveExternalModule(specifier, args.Kind, withTypeJSON, analyzeMode)
-										if err != nil {
-											return esbuild.OnResolveResult{}, err
-										}
-										return esbuild.OnResolveResult{Path: externalPath, SideEffects: sideEffects, External: true}, nil
-									}
+									return esbuild.OnResolveResult{Path: externalPath, SideEffects: sideEffects, External: true}, nil
 								}
 							}
 						}
