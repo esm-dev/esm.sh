@@ -488,9 +488,21 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 					specifier := normalizeImportSpecifier(args.Path)
 					withTypeJSON := len(args.With) > 0 && args.With["type"] == "json"
 
-					// it's implicit external
-					if implicitExternal.Has(args.Path) {
-						externalPath, sideEffects, err := ctx.resolveExternalModule(args.Path, args.Kind, withTypeJSON, analyzeMode)
+					aliased := false
+					if len(ctx.args.Alias) > 0 && !isRelPathSpecifier(specifier) {
+						pkgName, _, subPath := splitEsmPath(specifier)
+						if name, ok := ctx.args.Alias[pkgName]; ok {
+							specifier = name
+							if len(subPath) > 0 {
+								specifier += "/" + subPath
+							}
+							aliased = true
+						}
+					}
+
+					// Do not let esbuild resolve the original package after an alias.
+					if aliased || implicitExternal.Has(args.Path) {
+						externalPath, sideEffects, err := ctx.resolveExternalModule(specifier, args.Kind, withTypeJSON, analyzeMode)
 						if err != nil {
 							return esbuild.OnResolveResult{}, err
 						}
@@ -499,17 +511,6 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 							SideEffects: sideEffects,
 							External:    true,
 						}, nil
-					}
-
-					// check `?alias` option
-					if len(ctx.args.Alias) > 0 && !isRelPathSpecifier(specifier) {
-						pkgName, _, subPath := splitEsmPath(specifier)
-						if name, ok := ctx.args.Alias[pkgName]; ok {
-							specifier = name
-							if len(subPath) > 0 {
-								specifier += "/" + subPath
-							}
-						}
 					}
 
 					// resolve specifier using the `imports` field of package.json/deno.json
