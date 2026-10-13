@@ -53,6 +53,16 @@ func TestBuildModuleBundleNodeRuntime(t *testing.T) {
 		{name: "peer", code: `export const env = process.env; export { value } from "peer";`, mode: BundleDeps, imports: []string{"/peer@1.0.0/es2022/peer.mjs"}},
 		{name: "node", code: `export { default } from "node:process";`, mode: BundleDeps, target: "node", imports: []string{"node:process"}},
 		{name: "denonext", code: `export const env = process.env;`, mode: BundleDeps, target: "denonext", imports: []string{"node:process"}},
+		{name: "sqlite node", code: `export { DatabaseSync } from "node:sqlite";`, target: "node", imports: []string{"node:sqlite"}},
+		{name: "sqlite denonext", code: `export { DatabaseSync } from "node:sqlite";`, target: "denonext", imports: []string{"node:sqlite"}},
+		{name: "sqlite require", code: `export const sqlite = require("node:sqlite");`, target: "denonext", imports: []string{"node:sqlite"}},
+		{name: "sqlite dynamic", code: `export const load = () => import("node:sqlite");`, mode: BundleDeps, target: "denonext", imports: []string{"node:sqlite"}},
+		{name: "sqlite browser", code: `export { DatabaseSync } from "node:sqlite";`, imports: []string{"/error.js?type=unsupported-node-builtin-module&name=node:sqlite&importer=example@1.0.0"}},
+		{name: "sqlite browser bundle", code: `export const sqlite = require("node:sqlite");`, mode: BundleDeps, imports: []string{"/error.js?type=unsupported-node-builtin-module&name=node:sqlite&importer=example@1.0.0"}},
+		{name: "sqlite deno", code: `export { DatabaseSync } from "node:sqlite";`, target: "deno", imports: []string{"/error.js?type=unsupported-node-builtin-module&name=node:sqlite&importer=example@1.0.0"}},
+		{name: "sqlite external", code: `export { DatabaseSync } from "node:sqlite";`, mode: BundleDeps, external: []string{"node:sqlite"}, imports: []string{"node:sqlite"}},
+		{name: "sqlite package", code: `export { open } from "sqlite";`, mode: BundleDeps, imports: []string{"/sqlite@1.0.0/es2022/sqlite.mjs"}},
+		{name: "prefix builtin", code: `export { default } from "node:test";`, mode: BundleDeps, target: "denonext", imports: []string{"node:test"}},
 	} {
 		for _, minify := range []bool{false, true} {
 			t.Run(fmt.Sprintf("%s/minify=%v", tt.name, minify), func(t *testing.T) {
@@ -82,7 +92,7 @@ func TestBuildModuleBundleNodeRuntime(t *testing.T) {
 					wd: wd, target: target, bundleMode: tt.mode, externalAll: tt.externalAll, storage: fs, logger: logger, npmrc: &NpmRC{},
 					esmPath: EsmPath{PkgName: "example", PkgVersion: "1.0.0"},
 					args:    BuildArgs{External: *set.NewReadOnly(tt.external...)},
-					pkgJson: &npm.PackageJSON{Name: "example", Version: "1.0.0", Type: "module", Main: "./index.js", Types: "./index.d.ts", PeerDependencies: map[string]string{"peer": "1.0.0"}},
+					pkgJson: &npm.PackageJSON{Name: "example", Version: "1.0.0", Type: "module", Main: "./index.js", Types: "./index.d.ts", PeerDependencies: map[string]string{"peer": "1.0.0", "sqlite": "1.0.0"}},
 				}
 				meta, _, err := ctx.buildModule(false)
 				if err != nil {

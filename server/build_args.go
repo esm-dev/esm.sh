@@ -224,10 +224,8 @@ func resolveBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esm EsmP
 		if args.External.Len() > 0 {
 			external := make([]string, 0, args.External.Len())
 			for _, name := range args.External.Values() {
-				if strings.HasPrefix(name, "node:") {
-					if nodeBuiltinModules[name[5:]] {
-						external = append(external, name)
-					}
+				if isNodeBuiltinSpecifier(name) {
+					external = append(external, name)
 					continue
 				}
 				// Check if this is a namespace pattern (e.g., @radix-ui)
