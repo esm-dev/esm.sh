@@ -22,6 +22,76 @@ import (
 	"github.com/ije/gox/set"
 )
 
+func TestBuildModuleConditionalExportSplitting(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		exports string
+		subPath string
+		split   bool
+	}{
+		{"default", `{"import":"./public.mjs","default":"./internal.cjs"}`, "feature", false},
+		{"require", `{"import":"./public.mjs","require":"./internal.cjs"}`, "feature", false},
+		{"nested", `{"import":{"default":"./public.mjs"},"require":{"default":"./internal.cjs"}}`, "feature", false},
+		{"import", `{"import":"./internal.cjs","default":"./public.mjs"}`, "feature", true},
+		{"root wrapper", `{"import":"./public.mjs","require":"./internal.cjs"}`, "", false},
+		{"subpath wrapper", `{"import":"./public.mjs","require":"./internal.cjs"}`, "core", false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			wd := t.TempDir()
+			pkgDir := filepath.Join(wd, "node_modules", "example")
+			if err := os.MkdirAll(pkgDir, 0755); err != nil {
+				t.Fatal(err)
+			}
+			for name, code := range map[string]string{
+				"feature.mjs":  `import core from "./internal.cjs"; export const answer = core.hidden.answer;`,
+				"feature.d.ts": `export declare const answer: number;`,
+				"internal.cjs": `module.exports = { hidden: { answer: 42 } };`,
+				"public.mjs":   `import core from "./internal.cjs"; export const answer = core.hidden.answer;`,
+			} {
+				if err := os.WriteFile(filepath.Join(pkgDir, name), []byte(code), 0644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			exportName := "./core"
+			if tt.subPath == "" {
+				exportName = "."
+			}
+			var raw npm.PackageJSONRaw
+			if err := json.Unmarshal([]byte(`{"name":"example","version":"1.0.0","types":"./feature.d.ts","exports":{"./feature":"./feature.mjs","`+exportName+`":`+tt.exports+`}}`), &raw); err != nil {
+				t.Fatal(err)
+			}
+			fs, err := storage.NewFSStorage(filepath.Join(wd, "storage"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			logger, err := log.New("")
+			if err != nil {
+				t.Fatal(err)
+			}
+			logger.SetOutput(io.Discard)
+			ctx := &BuildContext{
+				wd: wd, target: "denonext", storage: fs, logger: logger,
+				esmPath: EsmPath{PkgName: "example", PkgVersion: "1.0.0", SubPath: tt.subPath},
+				pkgJson: raw.ToNpmPackage(),
+			}
+			if tt.subPath != "feature" {
+				ctx.pkgJson.SideEffects = *set.NewReadOnly("./side-effect.js")
+			}
+			meta, _, err := ctx.buildModule(false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var wantImports []string
+			if tt.split {
+				wantImports = []string{"/example@1.0.0/denonext/core.mjs"}
+			}
+			if !slices.Equal(meta.Imports, wantImports) {
+				t.Fatalf("imports = %v, want %v", meta.Imports, wantImports)
+			}
+		})
+	}
+}
+
 func TestBuildModuleBundleNodeRuntime(t *testing.T) {
 	oldConfig := config
 	config = &Config{SourceMap: true}
@@ -40,6 +110,15 @@ func TestBuildModuleBundleNodeRuntime(t *testing.T) {
 		{name: "require", code: `export const buffer = require("node:buffer");`, mode: BundleDeps},
 		{name: "dynamic import", code: `export const load = () => import("node:buffer");`, mode: BundleDeps},
 		{name: "no polyfills", code: `export const env = process.env.NODE_ENV;`, mode: BundleDeps},
+		{name: "globalThis process assignment", code: `if (!globalThis.process) globalThis.process = { getuid: () => -1 }; export const process = globalThis.process;`},
+		{name: "global process assignment", code: `if (!global.process) global.process = { getuid: () => -1 }; export const process = global.process;`},
+		{name: "bundled globalThis process assignment", code: `if (!globalThis.process) globalThis.process = { getuid: () => -1 }; export const process = globalThis.process;`, mode: BundleDeps},
+		{name: "bundled global process assignment", code: `if (!global.process) global.process = { getuid: () => -1 }; export const process = global.process;`, mode: BundleDeps},
+		{name: "deno globalThis process assignment", code: `if (!globalThis.process) globalThis.process = { getuid: () => -1 }; export const process = globalThis.process;`, target: "deno"},
+		{name: "deno global process assignment", code: `if (!global.process) global.process = { getuid: () => -1 }; export const process = global.process;`, target: "deno"},
+		{name: "denonext globalThis process assignment", code: `if (!globalThis.process) globalThis.process = { getuid: () => -1 }; export const process = globalThis.process;`, target: "denonext"},
+		{name: "denonext global process assignment", code: `if (!global.process) global.process = { getuid: () => -1 }; export const process = global.process;`, target: "denonext"},
+		{name: "global process env", code: `export const env = [process.env.NODE_ENV, global.process.env.NODE_ENV, globalThis.process.env.NODE_ENV];`},
 		{name: "default", code: `export const env = process.env;`, imports: []string{"/node/process.mjs"}},
 		{name: "no bundle", code: `export const env = process.env;`, mode: BundleFalse, imports: []string{"/node/process.mjs"}},
 		{name: "external", code: `export const env = process.env; export { Buffer } from "node:buffer";`, mode: BundleDeps, external: []string{"node:process", "node:buffer"}, imports: []string{"node:buffer", "node:process"}},
@@ -48,6 +127,16 @@ func TestBuildModuleBundleNodeRuntime(t *testing.T) {
 		{name: "peer", code: `export const env = process.env; export { value } from "peer";`, mode: BundleDeps, imports: []string{"/peer@1.0.0/es2022/peer.mjs"}},
 		{name: "node", code: `export { default } from "node:process";`, mode: BundleDeps, target: "node", imports: []string{"node:process"}},
 		{name: "denonext", code: `export const env = process.env;`, mode: BundleDeps, target: "denonext", imports: []string{"node:process"}},
+		{name: "sqlite node", code: `export { DatabaseSync } from "node:sqlite";`, target: "node", imports: []string{"node:sqlite"}},
+		{name: "sqlite denonext", code: `export { DatabaseSync } from "node:sqlite";`, target: "denonext", imports: []string{"node:sqlite"}},
+		{name: "sqlite require", code: `export const sqlite = require("node:sqlite");`, target: "denonext", imports: []string{"node:sqlite"}},
+		{name: "sqlite dynamic", code: `export const load = () => import("node:sqlite");`, mode: BundleDeps, target: "denonext", imports: []string{"node:sqlite"}},
+		{name: "sqlite browser", code: `export { DatabaseSync } from "node:sqlite";`, imports: []string{"/error.js?type=unsupported-node-builtin-module&name=node:sqlite&importer=example@1.0.0"}},
+		{name: "sqlite browser bundle", code: `export const sqlite = require("node:sqlite");`, mode: BundleDeps, imports: []string{"/error.js?type=unsupported-node-builtin-module&name=node:sqlite&importer=example@1.0.0"}},
+		{name: "sqlite deno", code: `export { DatabaseSync } from "node:sqlite";`, target: "deno", imports: []string{"/error.js?type=unsupported-node-builtin-module&name=node:sqlite&importer=example@1.0.0"}},
+		{name: "sqlite external", code: `export { DatabaseSync } from "node:sqlite";`, mode: BundleDeps, external: []string{"node:sqlite"}, imports: []string{"node:sqlite"}},
+		{name: "sqlite package", code: `export { open } from "sqlite";`, mode: BundleDeps, imports: []string{"/sqlite@1.0.0/es2022/sqlite.mjs"}},
+		{name: "prefix builtin", code: `export { default } from "node:test";`, mode: BundleDeps, target: "denonext", imports: []string{"node:test"}},
 	} {
 		for _, minify := range []bool{false, true} {
 			t.Run(fmt.Sprintf("%s/minify=%v", tt.name, minify), func(t *testing.T) {
@@ -77,7 +166,7 @@ func TestBuildModuleBundleNodeRuntime(t *testing.T) {
 					wd: wd, target: target, bundleMode: tt.mode, externalAll: tt.externalAll, storage: fs, logger: logger, npmrc: &NpmRC{},
 					esmPath: EsmPath{PkgName: "example", PkgVersion: "1.0.0"},
 					args:    BuildArgs{External: *set.NewReadOnly(tt.external...)},
-					pkgJson: &npm.PackageJSON{Name: "example", Version: "1.0.0", Type: "module", Main: "./index.js", Types: "./index.d.ts", PeerDependencies: map[string]string{"peer": "1.0.0"}},
+					pkgJson: &npm.PackageJSON{Name: "example", Version: "1.0.0", Type: "module", Main: "./index.js", Types: "./index.d.ts", PeerDependencies: map[string]string{"peer": "1.0.0", "sqlite": "1.0.0"}},
 				}
 				meta, _, err := ctx.buildModule(false)
 				if err != nil {
@@ -131,6 +220,61 @@ func TestBuildModuleBundleNodeRuntime(t *testing.T) {
 				}
 				if !slices.Contains(sourceMap.SourcesContent, tt.code) {
 					t.Error("source map lost the original module")
+				}
+			})
+		}
+	}
+}
+
+func TestBuildModuleDenoWindow(t *testing.T) {
+	oldConfig := config
+	config = &Config{}
+	t.Cleanup(func() { config = oldConfig })
+	for _, target := range []string{"deno", "denonext"} {
+		for _, minify := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/minify=%v", target, minify), func(t *testing.T) {
+				config.Minify = minify
+				wd := t.TempDir()
+				pkgDir := filepath.Join(wd, "node_modules", "example")
+				if err := os.MkdirAll(pkgDir, 0755); err != nil {
+					t.Fatal(err)
+				}
+				const code = `export const windowType = typeof window;
+export const globalWindowType = typeof globalThis.window;
+export const browser = typeof window !== "undefined" && window.document;`
+				if err := os.WriteFile(filepath.Join(pkgDir, "index.js"), []byte(code), 0644); err != nil {
+					t.Fatal(err)
+				}
+				fs, err := storage.NewFSStorage(filepath.Join(wd, "storage"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				logger, err := log.New("")
+				if err != nil {
+					t.Fatal(err)
+				}
+				logger.SetOutput(io.Discard)
+				ctx := &BuildContext{
+					wd: wd, target: target, storage: fs, logger: logger, npmrc: &NpmRC{},
+					esmPath: EsmPath{PkgName: "example", PkgVersion: "1.0.0"},
+					pkgJson: &npm.PackageJSON{Name: "example", Version: "1.0.0", Type: "module", Main: "./index.js", Types: "./index.d.ts"},
+				}
+				if _, _, err := ctx.buildModule(false); err != nil {
+					t.Fatal(err)
+				}
+				f, _, err := fs.Get(ctx.getSavePath())
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer f.Close()
+				output, err := io.ReadAll(f)
+				if err != nil {
+					t.Fatal(err)
+				}
+				for _, expr := range []string{"typeof window", "typeof globalThis.window", "window.document"} {
+					if !strings.Contains(string(output), expr) {
+						t.Errorf("missing %q in output:\n%s", expr, output)
+					}
 				}
 			})
 		}
@@ -394,6 +538,322 @@ func TestBuildTypesArgs(t *testing.T) {
 				t.Errorf("types-only module metadata = %q, want %q", meta.Dts, want)
 			}
 		})
+	}
+}
+
+func TestBuildModuleSharedCSS(t *testing.T) {
+	for _, target := range []string{"es2022", "denonext"} {
+		for _, cached := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/cached=%v", target, cached), func(t *testing.T) {
+				wd := t.TempDir()
+				pkgDir := filepath.Join(wd, "node_modules", "example")
+				if err := os.MkdirAll(pkgDir, 0755); err != nil {
+					t.Fatal(err)
+				}
+				for name, code := range map[string]string{
+					"a.js":       `import "./shared.css"; export { value } from "./shared.js";`,
+					"b.js":       `import "./shared.css"; export { value } from "./shared.js";`,
+					"shared.js":  `export const value = 1;`,
+					"shared.css": `.shared { color: red; }`,
+				} {
+					if err := os.WriteFile(filepath.Join(pkgDir, name), []byte(code), 0644); err != nil {
+						t.Fatal(err)
+					}
+				}
+				if cached {
+					if err := os.WriteFile(filepath.Join(wd, "splitting.txt"), []byte("2\nshared.js\nshared.css"), 0644); err != nil {
+						t.Fatal(err)
+					}
+				}
+				fs, err := storage.NewFSStorage(filepath.Join(wd, "storage"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				logger, err := log.New("")
+				if err != nil {
+					t.Fatal(err)
+				}
+				logger.SetOutput(io.Discard)
+				ctx := &BuildContext{
+					wd: wd, target: target, storage: fs, logger: logger, npmrc: &NpmRC{},
+					esmPath: EsmPath{PkgName: "example", PkgVersion: "1.0.0", SubPath: "a"},
+					pkgJson: &npm.PackageJSON{
+						Name: "example", Version: "1.0.0", Type: "module", Types: "./index.d.ts",
+						SideEffects: *set.NewReadOnly("*.css"),
+						Exports:     npm.NewJSONObject([]string{"./a", "./b"}, map[string]any{"./a": "./a.js", "./b": "./b.js"}),
+					},
+				}
+				ctx.analyzeSplitting()
+				meta, _, err := ctx.buildModule(false)
+				if err != nil {
+					t.Fatal(err)
+				}
+				f, _, err := fs.Get(ctx.getSavePath())
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer f.Close()
+				output, err := io.ReadAll(f)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if strings.Contains(string(output), ".css") {
+					t.Errorf("JavaScript imports CSS: %s", output)
+				}
+				wantImports := []string{"/example@1.0.0/" + target + "/shared.mjs"}
+				if !slices.Equal(meta.Imports, wantImports) {
+					t.Errorf("imports = %v, want %v", meta.Imports, wantImports)
+				}
+				if !meta.CSSInJS {
+					t.Fatal("missing CSS output metadata")
+				}
+				f, _, err = fs.Get(strings.TrimSuffix(ctx.getSavePath(), ".mjs") + ".css")
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer f.Close()
+				css, err := io.ReadAll(f)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !strings.Contains(string(css), ".shared") || !strings.Contains(string(css), "red") {
+					t.Errorf("missing shared styles: %s", css)
+				}
+			})
+		}
+	}
+}
+
+func TestBuildModulePrivateNodeModules(t *testing.T) {
+	wd := t.TempDir()
+	pkgDir := filepath.Join(wd, "node_modules")
+	for name, content := range map[string]string{
+		"example/src/index.js":                      `export { value } from "lib/value"; export const commonjs = require("lib/value").default;`,
+		"example/src/node_modules/lib/value.js":     `import { number } from "types/numbers"; import { dep } from "dep"; export const value = number + dep; export default value;`,
+		"example/src/node_modules/types/numbers.js": `export { number } from "number";`,
+		"example/src/node_modules/number.js":        `export const number = 42;`,
+		"dep/package.json":                          `{ "name": "dep", "version": "1.0.0", "type": "module" }`,
+		"dep/index.js":                              `export const dep = 1;`,
+	} {
+		filename := filepath.Join(pkgDir, name)
+		if err := os.MkdirAll(filepath.Dir(filename), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filename, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	fs, err := storage.NewFSStorage(filepath.Join(wd, "storage"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	logger, err := log.New("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	logger.SetOutput(io.Discard)
+	for _, target := range []string{"es2022", "denonext"} {
+		t.Run(target, func(t *testing.T) {
+			ctx := &BuildContext{
+				wd: wd, target: target, storage: fs, logger: logger, npmrc: &NpmRC{},
+				esmPath: EsmPath{PkgName: "example", PkgVersion: "1.0.0"},
+				pkgJson: &npm.PackageJSON{Name: "example", Version: "1.0.0", Type: "module", Main: "./src/index.js", Types: "./index.d.ts", Dependencies: map[string]string{"dep": "1.0.0"}},
+			}
+			meta, _, err := ctx.buildModule(false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := []string{"/dep@1.0.0/" + target + "/dep.mjs"}
+			if !slices.Equal(meta.Imports, want) {
+				t.Errorf("imports = %v, want %v", meta.Imports, want)
+			}
+			f, _, err := fs.Get(ctx.getSavePath())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer f.Close()
+			output, err := io.ReadAll(f)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(string(output), "42") {
+				t.Error("missing private module value")
+			}
+		})
+	}
+}
+
+func TestBuildModulePrivateNodeModulesExternal(t *testing.T) {
+	wd := t.TempDir()
+	for name, content := range map[string]string{
+		"index.js":                         `export { value } from "lib/value"; export { value as scoped } from "@scope/lib/value";`,
+		"node_modules/lib/value.js":        `export const value = 42;`,
+		"node_modules/@scope/lib/value.js": `export const value = 99;`,
+	} {
+		filename := filepath.Join(wd, "node_modules", "example", name)
+		if err := os.MkdirAll(filepath.Dir(filename), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filename, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	fs, err := storage.NewFSStorage(filepath.Join(wd, "storage"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	logger, err := log.New("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	logger.SetOutput(io.Discard)
+	for _, tt := range []struct {
+		name     string
+		external []string
+		all      bool
+		mode     BundleMode
+		imports  []string
+	}{
+		{name: "default"},
+		{name: "package", external: []string{"lib"}, imports: []string{"lib/value"}},
+		{name: "package with bundle", mode: BundleDeps, external: []string{"lib"}, imports: []string{"lib/value"}},
+		{name: "exact subpath", external: []string{"lib/value"}, imports: []string{"lib/value"}},
+		{name: "subpath wildcard", external: []string{"lib/*"}, imports: []string{"lib/value"}},
+		{name: "subpath wildcard with bundle", mode: BundleDeps, external: []string{"lib/*"}, imports: []string{"lib/value"}},
+		{name: "scoped subpath wildcard", external: []string{"@scope/lib/*"}, imports: []string{"@scope/lib/value"}},
+		{name: "scoped subpath wildcard with bundle", mode: BundleDeps, external: []string{"@scope/lib/*"}, imports: []string{"@scope/lib/value"}},
+		{name: "subpath wildcard boundary", external: []string{"lib/value/*", "@scope/lib/value/*"}},
+		{name: "scoped package", external: []string{"@scope/lib"}, imports: []string{"@scope/lib/value"}},
+		{name: "namespace", external: []string{"@scope"}, imports: []string{"@scope/lib/value"}},
+		{name: "namespace with bundle", mode: BundleDeps, external: []string{"@scope"}, imports: []string{"@scope/lib/value"}},
+		{name: "unrelated namespace", external: []string{"@sc"}},
+		{name: "all", all: true, imports: []string{"@scope/lib/value", "lib/value"}},
+		{name: "all with explicit package", all: true, external: []string{"lib"}, imports: []string{"@scope/lib/value", "lib/value"}},
+		{name: "all without bundle", all: true, mode: BundleFalse, imports: []string{"@scope/lib/value", "lib/value"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := &BuildContext{
+				wd: wd, target: "es2022", storage: fs, logger: logger, npmrc: &NpmRC{}, bundleMode: tt.mode, externalAll: tt.all,
+				esmPath: EsmPath{PkgName: "example", PkgVersion: "1.0.0"},
+				args:    BuildArgs{External: *set.NewReadOnly(tt.external...)},
+				pkgJson: &npm.PackageJSON{Name: "example", Version: "1.0.0", Type: "module", Main: "./index.js", Types: "./index.d.ts", Dependencies: map[string]string{"lib": "1.0.0", "@scope/lib": "1.0.0"}},
+			}
+			if _, _, err := ctx.buildModule(false); err != nil {
+				t.Fatal(err)
+			}
+			f, _, err := fs.Get(ctx.getSavePath())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer f.Close()
+			output, err := io.ReadAll(f)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var imports []string
+			result := esbuild.Build(esbuild.BuildOptions{
+				Stdin: &esbuild.StdinOptions{Contents: string(output)}, Bundle: true, Format: esbuild.FormatESModule,
+				Plugins: []esbuild.Plugin{{Name: "imports", Setup: func(build esbuild.PluginBuild) {
+					build.OnResolve(esbuild.OnResolveOptions{Filter: ".*"}, func(args esbuild.OnResolveArgs) (esbuild.OnResolveResult, error) {
+						imports = append(imports, args.Path)
+						return esbuild.OnResolveResult{Path: args.Path, External: true}, nil
+					})
+				}}},
+			})
+			if len(result.Errors) > 0 {
+				t.Fatal(result.Errors)
+			}
+			slices.Sort(imports)
+			if !slices.Equal(imports, tt.imports) {
+				t.Errorf("imports = %v, want %v", imports, tt.imports)
+			}
+		})
+	}
+}
+
+func TestBuildModuleDependencyRootVersion(t *testing.T) {
+	for _, name := range []string{"example", "@scope/example"} {
+		for _, tt := range []struct {
+			version, subpath, external string
+		}{
+			{version: "2.0.0"},
+			{version: "2.0.0", subpath: "/component"},
+			{version: "^2.0.0", subpath: "/component"},
+			{version: "^1.0.0", subpath: "/component"},
+			{version: "2.0.0", subpath: "/component", external: name},
+			{version: "2.0.0", subpath: "/component", external: name + "/*"},
+			{version: "2.0.0", subpath: "/component", external: name + "/component"},
+		} {
+			t.Run(fmt.Sprintf("%s%s@%s/external=%v", name, tt.subpath, tt.version, tt.external), func(t *testing.T) {
+				wd := t.TempDir()
+				for filename, content := range map[string]string{
+					name + "/package.json": `{"name":"` + name + `","version":"1.0.0","type":"module","main":"index.js"}`,
+					name + "/index.js":     `export { value } from "shim";`,
+					name + "/component.js": `export const value = 42;`,
+					"shim/package.json":    `{"name":"shim","version":"1.0.0","type":"module","main":"index.js","dependencies":{"` + name + `":"` + tt.version + `"}}`,
+					"shim/index.js":        `export { value } from "` + name + tt.subpath + `";`,
+				} {
+					if tt.external != "" && filename == name+"/component.js" {
+						continue
+					}
+					filename = filepath.Join(wd, "node_modules", filename)
+					if err := os.MkdirAll(filepath.Dir(filename), 0755); err != nil {
+						t.Fatal(err)
+					}
+					if err := os.WriteFile(filename, []byte(content), 0644); err != nil {
+						t.Fatal(err)
+					}
+				}
+				fs, err := storage.NewFSStorage(filepath.Join(wd, "storage"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				logger, err := log.New("")
+				if err != nil {
+					t.Fatal(err)
+				}
+				logger.SetOutput(io.Discard)
+				ctx := &BuildContext{
+					wd: wd, target: "es2022", bundleMode: BundleDeps, storage: fs, logger: logger, npmrc: &NpmRC{},
+					esmPath: EsmPath{PkgName: name, PkgVersion: "1.0.0"},
+					pkgJson: &npm.PackageJSON{Name: name, Version: "1.0.0", Type: "module", Main: "./index.js", Types: "./index.d.ts", Dependencies: map[string]string{"shim": "1.0.0"}},
+				}
+				if tt.external != "" {
+					ctx.args.External = *set.NewReadOnly(tt.external)
+				}
+				meta, _, err := ctx.buildModule(false)
+				if err != nil {
+					t.Fatal(err)
+				}
+				f, _, err := fs.Get(ctx.getSavePath())
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer f.Close()
+				output, err := io.ReadAll(f)
+				if err != nil {
+					t.Fatal(err)
+				}
+				entry := "example"
+				if tt.subpath != "" {
+					entry = "component"
+				}
+				want := "/" + name + "@2.0.0/es2022/" + entry + ".mjs"
+				wantImports := []string{want}
+				switch {
+				case tt.external != "":
+					want, wantImports = name+tt.subpath, nil
+				case tt.version == "^2.0.0":
+					want = "/" + name + "@^2.0.0/component?target=es2022"
+					wantImports = []string{want}
+				case tt.version == "^1.0.0":
+					want, wantImports = "42", nil
+				}
+				if !slices.Equal(meta.Imports, wantImports) || !strings.Contains(string(output), want) {
+					t.Fatalf("expected %s with imports %v, got %v:\n%s", want, wantImports, meta.Imports, output)
+				}
+			})
+		}
 	}
 }
 
