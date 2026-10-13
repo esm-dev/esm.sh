@@ -791,7 +791,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 									if match {
 										exportAs = path.Join(pkgJson.Name, stripModuleExt(exportName))
 										if exportAs != entrySpecifier && exportAs != entrySpecifier+"/index" {
-											externalPath, sideEffects, err := ctx.resolveExternalModule(exportAs, args.Kind, withTypeJSON, analyzeMode)
+											externalPath, sideEffects, err := ctx.resolveExternalModule(path.Join(pkgJson.Name, exportName), args.Kind, withTypeJSON, analyzeMode)
 											if err != nil {
 												return esbuild.OnResolveResult{}, err
 											}

@@ -1487,3 +1487,82 @@ func TestBuildModuleTargetResolution(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildModulePublicExportNames(t *testing.T) {
+	oldConfig := config
+	config = &Config{}
+	t.Cleanup(func() { config = oldConfig })
+	for _, exportName := range []string{"./css-tag.js", "./css-tag.mjs", "./css-tag.cjs", "./css-tag"} {
+		for _, conditions := range []string{`"./css-tag.js"`, `{"browser":{"default":"./css-tag.js"},"default":"./css-tag.js"}`} {
+			for _, external := range []string{"*", "@lit/reactive-element", "@lit", ""} {
+				t.Run(exportName+"/"+conditions+"/external="+external, func(t *testing.T) {
+					wd := t.TempDir()
+					pkgDir := filepath.Join(wd, "node_modules", "@lit", "reactive-element")
+					if err := os.MkdirAll(pkgDir, 0755); err != nil {
+						t.Fatal(err)
+					}
+					manifest := fmt.Sprintf(`{"name":"@lit/reactive-element","version":"1.6.3","type":"module","types":"./index.d.ts","exports":{".":"./reactive-element.js",%q:%s}}`, exportName, conditions)
+					for filename, contents := range map[string]string{
+						"package.json":        manifest,
+						"reactive-element.js": `export { css } from "./css-tag.js";`,
+						"css-tag.js":          `export const css = () => "color: red";`,
+					} {
+						if err := os.WriteFile(filepath.Join(pkgDir, filename), []byte(contents), 0644); err != nil {
+							t.Fatal(err)
+						}
+					}
+					var raw npm.PackageJSONRaw
+					if err := json.Unmarshal([]byte(manifest), &raw); err != nil {
+						t.Fatal(err)
+					}
+					fs, err := storage.NewFSStorage(filepath.Join(wd, "storage"))
+					if err != nil {
+						t.Fatal(err)
+					}
+					logger, err := log.New("")
+					if err != nil {
+						t.Fatal(err)
+					}
+					logger.SetOutput(io.Discard)
+					ctx := &BuildContext{
+						wd: wd, target: "es2022", storage: fs, logger: logger, npmrc: &NpmRC{},
+						esmPath: EsmPath{PkgName: raw.Name, PkgVersion: raw.Version}, pkgJson: raw.ToNpmPackage(),
+						externalAll: external == "*",
+					}
+					if external != "" && external != "*" {
+						ctx.args.External = *set.NewReadOnly(external)
+					}
+					_, _, err = ctx.buildModule(false)
+					if err != nil {
+						t.Fatal(err)
+					}
+					f, _, err := fs.Get(ctx.getSavePath())
+					if err != nil {
+						t.Fatal(err)
+					}
+					defer f.Close()
+					output, err := io.ReadAll(f)
+					if err != nil {
+						t.Fatal(err)
+					}
+					want := raw.Name + "/" + strings.TrimPrefix(exportName, "./")
+					if external == "" {
+						want = "./css-tag.mjs"
+					}
+					if !strings.Contains(string(output), fmt.Sprintf("%q", want)) {
+						t.Errorf("missing import %q:\n%s", want, output)
+					}
+					if external != "" {
+						result := esbuild.Build(esbuild.BuildOptions{
+							Stdin:  &esbuild.StdinOptions{Contents: string(output), ResolveDir: wd},
+							Bundle: true, Format: esbuild.FormatESModule,
+						})
+						if len(result.Errors) > 0 {
+							t.Fatalf("generated imports do not resolve through package exports: %v", result.Errors)
+						}
+					}
+				})
+			}
+		}
+	}
+}
