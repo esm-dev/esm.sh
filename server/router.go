@@ -24,6 +24,12 @@ import (
 	"github.com/esm-dev/esm.sh/internal/importmap"
 	"github.com/esm-dev/esm.sh/internal/storage"
 	esbuild "github.com/ije/esbuild-internal/api"
+	"github.com/ije/esbuild-internal/ast"
+	"github.com/ije/esbuild-internal/cache"
+	esbuild_config "github.com/ije/esbuild-internal/config"
+	"github.com/ije/esbuild-internal/fs"
+	esbuild_logger "github.com/ije/esbuild-internal/logger"
+	"github.com/ije/esbuild-internal/resolver"
 	"github.com/ije/esbuild-internal/xxhash"
 	"github.com/ije/gox/log"
 	"github.com/ije/gox/set"
@@ -1116,7 +1122,29 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 							writePackageError(w, err)
 							return
 						}
-						entry := b.resolveEntry(esmPath)
+						var entry BuildEntry
+						if ext := path.Ext(esmPath.SubPath); len(ext) > 1 && assetExts[ext[1:]] && b.pkgJson.Exports.Len() > 0 {
+							fsys, err := fs.RealFS(fs.RealFSOptions{AbsWorkingDir: b.wd})
+							if err != nil {
+								writeStatus(w, 500, err.Error())
+								return
+							}
+							pkgDir := fsys.Join(b.wd, "node_modules", esmPath.PkgName)
+							pkgName := b.pkgJson.Name
+							if b.pkgJson.PkgName != "" {
+								pkgName = b.pkgJson.PkgName
+							}
+							res := resolver.NewResolver(esbuild_config.BuildCall, fsys, esbuild_logger.NewDeferLog(esbuild_logger.DeferLogNoVerboseOrDebug, nil), cache.MakeCacheSet(), &esbuild_config.Options{
+								Platform: esbuild_config.PlatformNeutral, PreserveSymlinks: true, TSConfigRaw: "{}",
+							})
+							if resolved, _ := res.Resolve(pkgDir, pkgName+"/"+esmPath.SubPath, ast.ImportStmt); resolved != nil {
+								if subpath, ok := fsys.Rel(pkgDir, resolved.PathPair.Primary.Text); ok && subpath != ".." && !strings.HasPrefix(subpath, "../") {
+									entry.main = "./" + subpath
+								}
+							}
+						} else {
+							entry = b.resolveEntry(esmPath)
+						}
 						if entry.main != "" && entry.main != "./"+esmPath.SubPath {
 							query := ""
 							if rawQuery != "" {
