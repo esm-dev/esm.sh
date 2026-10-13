@@ -39,6 +39,8 @@ type PackageJSONRaw struct {
 	Esmsh            any             `json:"esm.sh"`
 	Dist             json.RawMessage `json:"dist"`
 	Deprecated       any             `json:"deprecated"`
+
+	PeerDependenciesMeta any `json:"peerDependenciesMeta"`
 }
 
 // NpmPackageDist defines the dist field of a NPM package
@@ -60,6 +62,7 @@ type PackageJSON struct {
 	Browser          map[string]string
 	Dependencies     map[string]string
 	PeerDependencies map[string]string
+	OptionalPeers    set.ReadOnlySet[string]
 	Imports          JSONObject
 	TypesVersions    map[string]any
 	Exports          JSONObject
@@ -103,12 +106,17 @@ func (a *PackageJSONRaw) ToNpmPackage() *PackageJSON {
 	}
 
 	var peerDependencies map[string]string
+	optionalPeers := set.New[string]()
+	peerDependenciesMeta := asMap(a.PeerDependenciesMeta)
 	if m, ok := a.PeerDependencies.(map[string]any); ok {
 		peerDependencies = make(map[string]string)
 		for k, v := range m {
 			if s, ok := v.(string); ok {
 				if s != "" && ValidatePackageName(k) {
 					peerDependencies[k] = s
+					if meta := asMap(peerDependenciesMeta[k]); meta["optional"] == true {
+						optionalPeers.Add(k)
+					}
 				}
 			}
 		}
@@ -183,6 +191,7 @@ func (a *PackageJSONRaw) ToNpmPackage() *PackageJSON {
 		SideEffects:      *sideEffects.ReadOnly(),
 		Dependencies:     dependencies,
 		PeerDependencies: peerDependencies,
+		OptionalPeers:    *optionalPeers.ReadOnly(),
 		Imports:          imports,
 		TypesVersions:    asMap(a.TypesVersions),
 		Exports:          exports,
