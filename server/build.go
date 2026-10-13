@@ -18,6 +18,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/esm-dev/esm.sh/internal/npm"
 	"github.com/esm-dev/esm.sh/internal/npm_replacements"
 	"github.com/esm-dev/esm.sh/internal/storage"
@@ -427,6 +428,11 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 		}
 	}
 
+	var dependencyRootVersions sync.Map
+	var rootVersion *semver.Version
+	if ctx.bundleMode == BundleDeps && !ctx.externalAll && ctx.args.Alias[ctx.pkgJson.Name] == "" {
+		rootVersion, _ = semver.NewVersion(ctx.pkgJson.Version)
+	}
 	browserExclude := map[string]*set.Set[string]{}
 	implicitExternal := set.New[string]()
 	noBundle := !ctx.shouldBundle()
@@ -443,6 +449,37 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 					}
 
 					// entry point
+					if rootVersion != nil && (args.Path == ctx.pkgJson.Name || strings.HasPrefix(args.Path, ctx.pkgJson.Name+"/")) && !isExternalModule(args.Path, ctx.args.External) {
+						importer, ok := strings.CutPrefix(args.Importer, path.Join(ctx.wd, "node_modules")+"/")
+						importerName := toPackageName(importer)
+						if ok && importerName != ctx.pkgJson.Name {
+							cached, ok := dependencyRootVersions.Load(importerName)
+							if !ok {
+								var raw npm.PackageJSONRaw
+								if err := utils.ParseJSONFile(path.Join(ctx.wd, "node_modules", importerName, "package.json"), &raw); err != nil {
+									return esbuild.OnResolveResult{}, err
+								}
+								pkg := raw.ToNpmPackage()
+								version := pkg.Dependencies[ctx.pkgJson.Name]
+								if version == "" {
+									version = pkg.PeerDependencies[ctx.pkgJson.Name]
+								}
+								if override := ctx.args.Deps[ctx.pkgJson.Name]; override != "" {
+									version = override
+								}
+								if constraint, err := semver.NewConstraint(version); err != nil || constraint.Check(rootVersion) {
+									version = ""
+								}
+								cached, _ = dependencyRootVersions.LoadOrStore(importerName, version)
+							}
+							if version := cached.(string); version != "" {
+								specifier := ctx.pkgJson.Name + "@" + version + strings.TrimPrefix(args.Path, ctx.pkgJson.Name)
+								externalPath, sideEffects, err := ctx.resolveExternalModule(specifier, args.Kind, args.With["type"] == "json", analyzeMode)
+								return esbuild.OnResolveResult{Path: externalPath, SideEffects: sideEffects, External: true}, err
+							}
+						}
+					}
+
 					if args.Path == entryPoint || args.Path == entrySpecifier {
 						path := args.Path
 						if path == entrySpecifier {

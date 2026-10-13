@@ -697,3 +697,89 @@ func TestBuildModulePrivateNodeModulesExternal(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildModuleDependencyRootVersion(t *testing.T) {
+	for _, name := range []string{"example", "@scope/example"} {
+		for _, tt := range []struct {
+			version, subpath, external string
+		}{
+			{version: "2.0.0"},
+			{version: "2.0.0", subpath: "/component"},
+			{version: "^2.0.0", subpath: "/component"},
+			{version: "^1.0.0", subpath: "/component"},
+			{version: "2.0.0", subpath: "/component", external: name},
+			{version: "2.0.0", subpath: "/component", external: name + "/*"},
+			{version: "2.0.0", subpath: "/component", external: name + "/component"},
+		} {
+			t.Run(fmt.Sprintf("%s%s@%s/external=%v", name, tt.subpath, tt.version, tt.external), func(t *testing.T) {
+				wd := t.TempDir()
+				for filename, content := range map[string]string{
+					name + "/package.json": `{"name":"` + name + `","version":"1.0.0","type":"module","main":"index.js"}`,
+					name + "/index.js":     `export { value } from "shim";`,
+					name + "/component.js": `export const value = 42;`,
+					"shim/package.json":    `{"name":"shim","version":"1.0.0","type":"module","main":"index.js","dependencies":{"` + name + `":"` + tt.version + `"}}`,
+					"shim/index.js":        `export { value } from "` + name + tt.subpath + `";`,
+				} {
+					if tt.external != "" && filename == name+"/component.js" {
+						continue
+					}
+					filename = filepath.Join(wd, "node_modules", filename)
+					if err := os.MkdirAll(filepath.Dir(filename), 0755); err != nil {
+						t.Fatal(err)
+					}
+					if err := os.WriteFile(filename, []byte(content), 0644); err != nil {
+						t.Fatal(err)
+					}
+				}
+				fs, err := storage.NewFSStorage(filepath.Join(wd, "storage"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				logger, err := log.New("")
+				if err != nil {
+					t.Fatal(err)
+				}
+				logger.SetOutput(io.Discard)
+				ctx := &BuildContext{
+					wd: wd, target: "es2022", bundleMode: BundleDeps, storage: fs, logger: logger, npmrc: &NpmRC{},
+					esmPath: EsmPath{PkgName: name, PkgVersion: "1.0.0"},
+					pkgJson: &npm.PackageJSON{Name: name, Version: "1.0.0", Type: "module", Main: "./index.js", Types: "./index.d.ts", Dependencies: map[string]string{"shim": "1.0.0"}},
+				}
+				if tt.external != "" {
+					ctx.args.External = *set.NewReadOnly(tt.external)
+				}
+				meta, _, err := ctx.buildModule(false)
+				if err != nil {
+					t.Fatal(err)
+				}
+				f, _, err := fs.Get(ctx.getSavePath())
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer f.Close()
+				output, err := io.ReadAll(f)
+				if err != nil {
+					t.Fatal(err)
+				}
+				entry := "example"
+				if tt.subpath != "" {
+					entry = "component"
+				}
+				want := "/" + name + "@2.0.0/es2022/" + entry + ".mjs"
+				wantImports := []string{want}
+				switch {
+				case tt.external != "":
+					want, wantImports = name+tt.subpath, nil
+				case tt.version == "^2.0.0":
+					want = "/" + name + "@^2.0.0/component?target=es2022"
+					wantImports = []string{want}
+				case tt.version == "^1.0.0":
+					want, wantImports = "42", nil
+				}
+				if !slices.Equal(meta.Imports, wantImports) || !strings.Contains(string(output), want) {
+					t.Fatalf("expected %s with imports %v, got %v:\n%s", want, wantImports, meta.Imports, output)
+				}
+			})
+		}
+	}
+}
