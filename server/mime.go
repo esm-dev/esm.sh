@@ -76,5 +76,17 @@ func getContentType(filename string) string {
 	if extname == ".gz" && strings.HasSuffix(filename, ".tar.gz") {
 		extname = ".tar.gz"
 	}
-	return mimeTypes[extname]
+	contentType := mimeTypes[extname]
+	if contentType == "" && isLicenseFile(filename) {
+		return "text/plain; charset=utf-8"
+	}
+	return contentType
+}
+
+func isLicenseFile(filename string) bool {
+	switch strings.ToUpper(path.Base(filename)) {
+	case "LICENSE", "LICENCE", "COPYING", "COPYING.LESSER", "COPYRIGHT", "NOTICE", "UNLICENSE":
+		return true
+	}
+	return false
 }

@@ -907,7 +907,7 @@ func extractPackageTarContext(ctx context.Context, installDir string, pkgName st
 		}
 		savepath := filepath.Join("node_modules", pkgName, filename)
 		extname := filepath.Ext(savepath)
-		if !(extname != "" && (assetExts[extname[1:]] || slices.Contains(moduleExts, extname) || extname == ".map" || extname == ".css" || extname == ".svelte" || extname == ".vue")) {
+		if !(extname != "" && (assetExts[extname[1:]] || slices.Contains(moduleExts, extname) || extname == ".map" || extname == ".css" || extname == ".svelte" || extname == ".vue")) && !isLicenseFile(filename) {
 			// ignore unsupported formats
 			continue
 		}
