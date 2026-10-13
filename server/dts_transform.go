@@ -163,6 +163,10 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, transfo
 		specifier = normalizeImportSpecifier(specifier)
 
 		if isRelPathSpecifier(specifier) {
+			specifier = path.Clean(specifier)
+			if !isRelPathSpecifier(specifier) {
+				specifier = "./" + specifier
+			}
 			dtsDir := path.Dir(dtsFilename)
 			specifier = strings.TrimSuffix(specifier, ".d")
 			if !endsWith(specifier, ".d.ts", ".d.mts", ".d.cts") {
