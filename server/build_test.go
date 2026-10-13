@@ -4,6 +4,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/esm-dev/esm.sh/internal/npm"
+	"github.com/esm-dev/esm.sh/internal/storage"
+	esbuild "github.com/ije/esbuild-internal/api"
+	"github.com/ije/gox/log"
+	"github.com/ije/gox/set"
 	"io"
 	"net/http"
 	"os"
@@ -11,12 +16,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-
-	"github.com/esm-dev/esm.sh/internal/npm"
-	"github.com/esm-dev/esm.sh/internal/storage"
-	esbuild "github.com/ije/esbuild-internal/api"
-	"github.com/ije/gox/log"
-	"github.com/ije/gox/set"
 )
 
 func TestBuildModuleBundleNodeRuntime(t *testing.T) {
@@ -37,6 +36,15 @@ func TestBuildModuleBundleNodeRuntime(t *testing.T) {
 		{name: "require", code: `export const buffer = require("node:buffer");`, mode: BundleDeps},
 		{name: "dynamic import", code: `export const load = () => import("node:buffer");`, mode: BundleDeps},
 		{name: "no polyfills", code: `export const env = process.env.NODE_ENV;`, mode: BundleDeps},
+		{name: "globalThis process assignment", code: `if (!globalThis.process) globalThis.process = { getuid: () => -1 }; export const process = globalThis.process;`},
+		{name: "global process assignment", code: `if (!global.process) global.process = { getuid: () => -1 }; export const process = global.process;`},
+		{name: "bundled globalThis process assignment", code: `if (!globalThis.process) globalThis.process = { getuid: () => -1 }; export const process = globalThis.process;`, mode: BundleDeps},
+		{name: "bundled global process assignment", code: `if (!global.process) global.process = { getuid: () => -1 }; export const process = global.process;`, mode: BundleDeps},
+		{name: "deno globalThis process assignment", code: `if (!globalThis.process) globalThis.process = { getuid: () => -1 }; export const process = globalThis.process;`, target: "deno"},
+		{name: "deno global process assignment", code: `if (!global.process) global.process = { getuid: () => -1 }; export const process = global.process;`, target: "deno"},
+		{name: "denonext globalThis process assignment", code: `if (!globalThis.process) globalThis.process = { getuid: () => -1 }; export const process = globalThis.process;`, target: "denonext"},
+		{name: "denonext global process assignment", code: `if (!global.process) global.process = { getuid: () => -1 }; export const process = global.process;`, target: "denonext"},
+		{name: "global process env", code: `export const env = [process.env.NODE_ENV, global.process.env.NODE_ENV, globalThis.process.env.NODE_ENV];`},
 		{name: "default", code: `export const env = process.env;`, imports: []string{"/node/process.mjs"}},
 		{name: "no bundle", code: `export const env = process.env;`, mode: BundleFalse, imports: []string{"/node/process.mjs"}},
 		{name: "external", code: `export const env = process.env; export { Buffer } from "node:buffer";`, mode: BundleDeps, external: []string{"node:process", "node:buffer"}, imports: []string{"node:buffer", "node:process"}},
@@ -134,29 +142,24 @@ func TestBuildModuleBundleNodeRuntime(t *testing.T) {
 	}
 }
 
-func TestBuildModuleSharedCSS(t *testing.T) {
-	for _, target := range []string{"es2022", "denonext"} {
-		for _, cached := range []bool{false, true} {
-			t.Run(fmt.Sprintf("%s/cached=%v", target, cached), func(t *testing.T) {
+func TestBuildModuleDenoWindow(t *testing.T) {
+	oldConfig := config
+	config = &Config{}
+	t.Cleanup(func() { config = oldConfig })
+	for _, target := range []string{"deno", "denonext"} {
+		for _, minify := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/minify=%v", target, minify), func(t *testing.T) {
+				config.Minify = minify
 				wd := t.TempDir()
 				pkgDir := filepath.Join(wd, "node_modules", "example")
 				if err := os.MkdirAll(pkgDir, 0755); err != nil {
 					t.Fatal(err)
 				}
-				for name, code := range map[string]string{
-					"a.js":       `import "./shared.css"; export { value } from "./shared.js";`,
-					"b.js":       `import "./shared.css"; export { value } from "./shared.js";`,
-					"shared.js":  `export const value = 1;`,
-					"shared.css": `.shared { color: red; }`,
-				} {
-					if err := os.WriteFile(filepath.Join(pkgDir, name), []byte(code), 0644); err != nil {
-						t.Fatal(err)
-					}
-				}
-				if cached {
-					if err := os.WriteFile(filepath.Join(wd, "splitting.txt"), []byte("2\nshared.js\nshared.css"), 0644); err != nil {
-						t.Fatal(err)
-					}
+				const code = `export const windowType = typeof window;
+export const globalWindowType = typeof globalThis.window;
+export const browser = typeof window !== "undefined" && window.document;`
+				if err := os.WriteFile(filepath.Join(pkgDir, "index.js"), []byte(code), 0644); err != nil {
+					t.Fatal(err)
 				}
 				fs, err := storage.NewFSStorage(filepath.Join(wd, "storage"))
 				if err != nil {
@@ -169,16 +172,10 @@ func TestBuildModuleSharedCSS(t *testing.T) {
 				logger.SetOutput(io.Discard)
 				ctx := &BuildContext{
 					wd: wd, target: target, storage: fs, logger: logger, npmrc: &NpmRC{},
-					esmPath: EsmPath{PkgName: "example", PkgVersion: "1.0.0", SubPath: "a"},
-					pkgJson: &npm.PackageJSON{
-						Name: "example", Version: "1.0.0", Type: "module", Types: "./index.d.ts",
-						SideEffects: *set.NewReadOnly("*.css"),
-						Exports:     npm.NewJSONObject([]string{"./a", "./b"}, map[string]any{"./a": "./a.js", "./b": "./b.js"}),
-					},
+					esmPath: EsmPath{PkgName: "example", PkgVersion: "1.0.0"},
+					pkgJson: &npm.PackageJSON{Name: "example", Version: "1.0.0", Type: "module", Main: "./index.js", Types: "./index.d.ts"},
 				}
-				ctx.analyzeSplitting()
-				meta, _, err := ctx.buildModule(false)
-				if err != nil {
+				if _, _, err := ctx.buildModule(false); err != nil {
 					t.Fatal(err)
 				}
 				f, _, err := fs.Get(ctx.getSavePath())
@@ -190,27 +187,10 @@ func TestBuildModuleSharedCSS(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if strings.Contains(string(output), ".css") {
-					t.Errorf("JavaScript imports CSS: %s", output)
-				}
-				wantImports := []string{"/example@1.0.0/" + target + "/shared.mjs"}
-				if !slices.Equal(meta.Imports, wantImports) {
-					t.Errorf("imports = %v, want %v", meta.Imports, wantImports)
-				}
-				if !meta.CSSInJS {
-					t.Fatal("missing CSS output metadata")
-				}
-				f, _, err = fs.Get(strings.TrimSuffix(ctx.getSavePath(), ".mjs") + ".css")
-				if err != nil {
-					t.Fatal(err)
-				}
-				defer f.Close()
-				css, err := io.ReadAll(f)
-				if err != nil {
-					t.Fatal(err)
-				}
-				if !strings.Contains(string(css), ".shared") || !strings.Contains(string(css), "red") {
-					t.Errorf("missing shared styles: %s", css)
+				for _, expr := range []string{"typeof window", "typeof globalThis.window", "window.document"} {
+					if !strings.Contains(string(output), expr) {
+						t.Errorf("missing %q in output:\n%s", expr, output)
+					}
 				}
 			})
 		}
@@ -474,5 +454,88 @@ func TestBuildTypesArgs(t *testing.T) {
 				t.Errorf("types-only module metadata = %q, want %q", meta.Dts, want)
 			}
 		})
+	}
+}
+
+func TestBuildModuleSharedCSS(t *testing.T) {
+	for _, target := range []string{"es2022", "denonext"} {
+		for _, cached := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/cached=%v", target, cached), func(t *testing.T) {
+				wd := t.TempDir()
+				pkgDir := filepath.Join(wd, "node_modules", "example")
+				if err := os.MkdirAll(pkgDir, 0755); err != nil {
+					t.Fatal(err)
+				}
+				for name, code := range map[string]string{
+					"a.js":       `import "./shared.css"; export { value } from "./shared.js";`,
+					"b.js":       `import "./shared.css"; export { value } from "./shared.js";`,
+					"shared.js":  `export const value = 1;`,
+					"shared.css": `.shared { color: red; }`,
+				} {
+					if err := os.WriteFile(filepath.Join(pkgDir, name), []byte(code), 0644); err != nil {
+						t.Fatal(err)
+					}
+				}
+				if cached {
+					if err := os.WriteFile(filepath.Join(wd, "splitting.txt"), []byte("2\nshared.js\nshared.css"), 0644); err != nil {
+						t.Fatal(err)
+					}
+				}
+				fs, err := storage.NewFSStorage(filepath.Join(wd, "storage"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				logger, err := log.New("")
+				if err != nil {
+					t.Fatal(err)
+				}
+				logger.SetOutput(io.Discard)
+				ctx := &BuildContext{
+					wd: wd, target: target, storage: fs, logger: logger, npmrc: &NpmRC{},
+					esmPath: EsmPath{PkgName: "example", PkgVersion: "1.0.0", SubPath: "a"},
+					pkgJson: &npm.PackageJSON{
+						Name: "example", Version: "1.0.0", Type: "module", Types: "./index.d.ts",
+						SideEffects: *set.NewReadOnly("*.css"),
+						Exports:     npm.NewJSONObject([]string{"./a", "./b"}, map[string]any{"./a": "./a.js", "./b": "./b.js"}),
+					},
+				}
+				ctx.analyzeSplitting()
+				meta, _, err := ctx.buildModule(false)
+				if err != nil {
+					t.Fatal(err)
+				}
+				f, _, err := fs.Get(ctx.getSavePath())
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer f.Close()
+				output, err := io.ReadAll(f)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if strings.Contains(string(output), ".css") {
+					t.Errorf("JavaScript imports CSS: %s", output)
+				}
+				wantImports := []string{"/example@1.0.0/" + target + "/shared.mjs"}
+				if !slices.Equal(meta.Imports, wantImports) {
+					t.Errorf("imports = %v, want %v", meta.Imports, wantImports)
+				}
+				if !meta.CSSInJS {
+					t.Fatal("missing CSS output metadata")
+				}
+				f, _, err = fs.Get(strings.TrimSuffix(ctx.getSavePath(), ".mjs") + ".css")
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer f.Close()
+				css, err := io.ReadAll(f)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !strings.Contains(string(css), ".shared") || !strings.Contains(string(css), "red") {
+					t.Errorf("missing shared styles: %s", css)
+				}
+			})
+		}
 	}
 }
