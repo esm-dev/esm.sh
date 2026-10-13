@@ -1,6 +1,8 @@
 package server
 
 import (
+	"crypto/sha1"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -8,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -848,6 +851,111 @@ func TestBuildModuleDependencyRootVersion(t *testing.T) {
 				}
 				if !slices.Equal(meta.Imports, wantImports) || !strings.Contains(string(output), want) {
 					t.Fatalf("expected %s with imports %v, got %v:\n%s", want, wantImports, meta.Imports, output)
+				}
+			})
+		}
+	}
+}
+
+func TestBuildModuleCJSNamedExports(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("requires shell scripts")
+	}
+	oldConfig := config
+	config = &Config{WorkDir: t.TempDir()}
+	t.Cleanup(func() {
+		config = oldConfig
+		onceMap.Delete("install-cjs-module-lexer")
+		onceMap.Delete("check-deno")
+	})
+	binDir := filepath.Join(config.WorkDir, "bin")
+	if err := os.MkdirAll(binDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	names := []string{"eval", "arguments", "class", "await", "cjsm", "valid", "__esModule", "default", "not-an-identifier"}
+	encoded, err := json.Marshal(names)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for filename, script := range map[string]string{
+		"cjs-module-lexer-" + cjsModuleLexerVersion: "#!/bin/sh\ncat <<'EOF'\n" + strings.Join(names, "\n") + "\nEOF\n",
+		"deno": "#!/bin/sh\nif [ \"$1\" = eval ]; then echo " + denoVersion + "; else echo '" + string(encoded) + "'; fi\n",
+	} {
+		if err := os.WriteFile(filepath.Join(binDir, filename), []byte(script), 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, pkgName := range []string{"example", "pako"} {
+		for _, minify := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/minify=%v", pkgName, minify), func(t *testing.T) {
+				config.Minify = minify
+				wd := t.TempDir()
+				pkgDir := filepath.Join(wd, "node_modules", pkgName)
+				if err := os.MkdirAll(pkgDir, 0755); err != nil {
+					t.Fatal(err)
+				}
+				var code strings.Builder
+				for i, name := range names {
+					fmt.Fprintf(&code, "exports[%q] = %d;\n", name, i+1)
+				}
+				if err := os.WriteFile(filepath.Join(pkgDir, "index.js"), []byte(code.String()), 0644); err != nil {
+					t.Fatal(err)
+				}
+				fs, err := storage.NewFSStorage(filepath.Join(wd, "storage"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				logger, err := log.New("")
+				if err != nil {
+					t.Fatal(err)
+				}
+				logger.SetOutput(io.Discard)
+				ctx := &BuildContext{
+					wd: wd, target: "es2022", storage: fs, logger: logger, npmrc: &NpmRC{},
+					esmPath: EsmPath{PkgName: pkgName, PkgVersion: "1.0.0"},
+					pkgJson: &npm.PackageJSON{Name: pkgName, Version: "1.0.0", Main: "./index.js", Types: "./index.d.ts"},
+				}
+				cacheDir := filepath.Join(wd, ".cjs-module-lexer")
+				if err := os.MkdirAll(cacheDir, 0755); err != nil {
+					t.Fatal(err)
+				}
+				oldHash := sha1.Sum([]byte(cjsModuleLexerVersion + "./index.js" + ctx.getNodeEnv()))
+				oldCache := filepath.Join(cacheDir, base64.RawURLEncoding.EncodeToString(oldHash[:])+".json")
+				if err := os.WriteFile(oldCache, []byte(`{"exports":["valid"]}`), 0644); err != nil {
+					t.Fatal(err)
+				}
+				lexed, err := cjsModuleLexer(ctx, "./index.js")
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !slices.Equal(lexed.Exports, names[:7]) {
+					t.Fatalf("lexer exports = %v, want %v", lexed.Exports, names[:7])
+				}
+				if _, _, err := ctx.buildModule(false); err != nil {
+					t.Fatal(err)
+				}
+				f, _, err := fs.Get(ctx.getSavePath())
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer f.Close()
+				output, err := io.ReadAll(f)
+				if err != nil {
+					t.Fatal(err)
+				}
+				filename := filepath.Join(wd, "output.mjs")
+				if err := os.WriteFile(filename, output, 0644); err != nil {
+					t.Fatal(err)
+				}
+				_, exports, err := validateJSFile(filename)
+				if err != nil {
+					t.Fatal(err)
+				}
+				want := slices.Clone(names[:8])
+				slices.Sort(want)
+				slices.Sort(exports)
+				if !slices.Equal(exports, want) {
+					t.Fatalf("module exports = %v, want %v", exports, want)
 				}
 			})
 		}

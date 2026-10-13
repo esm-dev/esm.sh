@@ -50,7 +50,7 @@ type cjsModuleLexerResult struct {
 
 func cjsModuleLexer(b *BuildContext, cjsEntry string) (ret cjsModuleLexerResult, err error) {
 	h := sha1.New()
-	h.Write([]byte(cjsModuleLexerVersion))
+	h.Write([]byte(cjsModuleLexerVersion + "-2"))
 	h.Write([]byte(cjsEntry))
 	h.Write([]byte(b.getNodeEnv()))
 	cacheFileName := path.Join(b.wd, ".cjs-module-lexer", base64.RawURLEncoding.EncodeToString(h.Sum(nil))+".json")
@@ -121,8 +121,7 @@ func cjsModuleLexer(b *BuildContext, cjsEntry string) (ret cjsModuleLexerResult,
 			return
 		}
 		for _, name := range namedExports {
-			// These names are spliced into `export const { ... }` by buildModule.
-			if isJsIdentifier(name) && !isJsReservedWord(name) {
+			if isJsIdentifier(name) && name != "default" {
 				ret.Exports = append(ret.Exports, name)
 			}
 		}
@@ -186,7 +185,7 @@ RETRY:
 		if strings.HasPrefix(line, "@") {
 			ret.Reexport = line[1:]
 			break
-		} else if isJsIdentifier(line) && !isJsReservedWord(line) {
+		} else if isJsIdentifier(line) && line != "default" {
 			ret.Exports = append(ret.Exports, line)
 		}
 	}
