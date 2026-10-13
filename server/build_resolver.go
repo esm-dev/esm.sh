@@ -958,6 +958,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 		Deps:       ctx.args.Deps,
 		External:   ctx.args.External,
 		Conditions: ctx.args.Conditions,
+		NoDts:      ctx.args.NoDts,
 	}
 	err = resolveBuildArgs(ctx.npmrc, ctx.wd, &args, dep)
 	if err != nil {
@@ -1023,6 +1024,9 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 	}
 	if ctx.dev {
 		params = append(params, "dev")
+	}
+	if args.NoDts {
+		params = append(params, "no-dts")
 	}
 	resolvedPath += "?" + strings.Join(params, "&")
 	return
