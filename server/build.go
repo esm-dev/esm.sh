@@ -850,6 +850,9 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 						bundleInternalModule := exportAs == "" && !isDynamicImport && ctx.shouldBundleInternalModules()
 						if modulePath == entry.main || exportAs == entrySpecifier || (!isDynamicImport && !noBundle) || bundleInternalModule {
 							if existsFile(resolvedFilename) {
+								if strings.HasSuffix(resolvedFilename, ".css") {
+									return esbuild.OnResolveResult{Path: resolvedFilename}, nil
+								}
 								pkgDir := path.Join(ctx.wd, "node_modules", pkgName)
 								short := strings.TrimPrefix(resolvedFilename, pkgDir)[1:]
 								if analyzeMode && resolvedFilename != entryModuleFilename && strings.HasPrefix(args.Importer, pkgDir) {
@@ -1053,7 +1056,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 					}
 					return esbuild.OnLoadResult{
 						Contents:   &out.Code,
-						ResolveDir: path.Join(ctx.wd, "node_modules", ctx.esmPath.PkgName),
+						ResolveDir: path.Dir(args.Path),
 						Loader:     esbuild.LoaderJS,
 					}, nil
 				},
@@ -1137,11 +1140,10 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 		if ctx.isBrowserTarget() && safeReserveProcessPackages[ctx.esmPath.PkgName] {
 			delete(define, "process")
 		}
-		if ctx.isDenoTarget() {
-			// deno 2 has removed the `window` global object, let's replace it with `globalThis`
-			define["window"] = "globalThis"
-		}
 		for k, v := range define {
+			if k == "process" {
+				continue
+			}
 			define["global."+k] = v
 			define["globalThis."+k] = v
 		}
