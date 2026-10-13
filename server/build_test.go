@@ -393,3 +393,58 @@ func TestBuildTypesArgs(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildModuleWasm(t *testing.T) {
+	oldConfig := config
+	config = &Config{}
+	t.Cleanup(func() { config = oldConfig })
+	for _, target := range []string{"es2022", "denonext"} {
+		t.Run(target, func(t *testing.T) {
+			wd := t.TempDir()
+			pkgDir := filepath.Join(wd, "node_modules", "example")
+			if err := os.MkdirAll(pkgDir, 0755); err != nil {
+				t.Fatal(err)
+			}
+			for name, data := range map[string][]byte{
+				"index.js":    []byte(`export { default as bytes } from "./module.wasm"; export { default as module } from "./module.wasm?module";`),
+				"module.wasm": {0, 97, 115, 109, 1, 0, 0, 0},
+			} {
+				if err := os.WriteFile(filepath.Join(pkgDir, name), data, 0644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			fs, err := storage.NewFSStorage(filepath.Join(wd, "storage"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			logger, err := log.New("")
+			if err != nil {
+				t.Fatal(err)
+			}
+			logger.SetOutput(io.Discard)
+			ctx := &BuildContext{
+				wd: wd, target: target, storage: fs, logger: logger, npmrc: &NpmRC{},
+				esmPath: EsmPath{PkgName: "example", PkgVersion: "1.0.0"},
+				pkgJson: &npm.PackageJSON{Name: "example", Version: "1.0.0", Type: "module", Main: "./index.js", Types: "./index.d.ts"},
+			}
+			if _, _, err := ctx.buildModule(false); err != nil {
+				t.Fatal(err)
+			}
+			f, _, err := fs.Get(ctx.getSavePath())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer f.Close()
+			output, err := io.ReadAll(f)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Count(string(output), "new WebAssembly.Module(") != 1 {
+				t.Fatalf("expected one compiled WASM module: %s", output)
+			}
+			if strings.Count(string(output), "AGFzbQEAAAA=") != 2 {
+				t.Fatalf("expected separate byte and module imports: %s", output)
+			}
+		})
+	}
+}
