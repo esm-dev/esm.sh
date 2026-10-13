@@ -1035,6 +1035,20 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 				},
 			)
 
+			build.OnLoad(
+				esbuild.OnLoadOptions{Filter: `/node_modules/benchmark/benchmark\.js$`, Namespace: "file"},
+				func(args esbuild.OnLoadArgs) (esbuild.OnLoadResult, error) {
+					code, err := os.ReadFile(args.Path)
+					if err != nil {
+						return esbuild.OnLoadResult{}, err
+					}
+					contents := strings.Replace(string(code),
+						"var freeRequire = typeof require == 'function' && require;",
+						"var freeRequire = id => id === 'lodash' ? require('lodash') : id === 'platform' ? require('platform') : undefined;", 1)
+					return esbuild.OnLoadResult{Contents: &contents, ResolveDir: path.Dir(args.Path), Loader: esbuild.LoaderJS}, nil
+				},
+			)
+
 			// npm replacement loader
 			build.OnLoad(
 				esbuild.OnLoadOptions{Filter: ".*", Namespace: "npm-replacement"},
