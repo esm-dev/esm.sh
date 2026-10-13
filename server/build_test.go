@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -1261,5 +1262,145 @@ func TestBuildModuleStaticDynamicImports(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestBuildModuleOptionalPeers(t *testing.T) {
+	oldConfig := config
+	config = &Config{Minify: true}
+	t.Cleanup(func() { config = oldConfig })
+	registry := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/@scope/peer" && r.URL.Path != "/@scope/peer/2.0.0" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		pkg := `{"name":"@scope/peer","version":"2.0.0","type":"module"}`
+		if strings.HasSuffix(r.URL.Path, "/2.0.0") {
+			fmt.Fprint(w, pkg)
+		} else {
+			fmt.Fprintf(w, `{"name":"@scope/peer","dist-tags":{"latest":"2.0.0"},"versions":{"2.0.0":%s}}`, pkg)
+		}
+	}))
+	t.Cleanup(registry.Close)
+	rc := &NpmRC{globalRegistry: &NpmRegistry{NpmRegistryConfig: NpmRegistryConfig{Registry: registry.URL + "/"}}}
+	for _, tt := range []struct {
+		name        string
+		mode        BundleMode
+		args        BuildArgs
+		required    bool
+		dependency  bool
+		externalAll bool
+		esm         bool
+		other       bool
+		wantImport  string
+	}{
+		{name: "optional"},
+		{name: "bundle", mode: BundleDeps},
+		{name: "no bundle", mode: BundleFalse},
+		{name: "required peer", required: true, wantImport: "/@scope/peer@1.0.0/es2022/subpath.mjs"},
+		{name: "dependency", dependency: true, wantImport: "/@scope/peer@1.0.0/es2022/subpath.mjs"},
+		{name: "deps override", args: BuildArgs{Deps: map[string]string{"@scope/peer": "2.0.0"}}, wantImport: "/@scope/peer@2.0.0/es2022/subpath.mjs"},
+		{name: "alias", args: BuildArgs{Alias: map[string]string{"@scope/peer": "@scope/provided"}}, wantImport: "/@scope/provided@1.0.0/es2022/subpath.mjs"},
+		{name: "external", args: BuildArgs{External: *set.NewReadOnly("@scope/peer")}, wantImport: "@scope/peer/subpath"},
+		{name: "external namespace", args: BuildArgs{External: *set.NewReadOnly("@scope")}, wantImport: "@scope/peer/subpath"},
+		{name: "external subpath", args: BuildArgs{External: *set.NewReadOnly("@scope/peer/subpath")}, wantImport: "@scope/peer/subpath"},
+		{name: "external wildcard", args: BuildArgs{External: *set.NewReadOnly("@scope/peer/*")}, wantImport: "@scope/peer/subpath"},
+		{name: "external all", externalAll: true, wantImport: "@scope/peer/subpath"},
+		{name: "esm", esm: true, wantImport: "/@scope/peer@1.0.0/es2022/subpath.mjs"},
+		{name: "required by bundled dependency", other: true, mode: BundleDeps, wantImport: "/@scope/peer@1.0.0/es2022/subpath.mjs"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			wd := t.TempDir()
+			code := `export const load = () => require("@scope/peer/subpath").default;`
+			if tt.esm {
+				code = `export { default } from "@scope/peer/subpath";`
+			}
+			if tt.other {
+				code += `import { value } from "example-other"; export const other = value;`
+			}
+			for name, content := range map[string]string{
+				"example/index.js":             code,
+				"example-other/package.json":   `{"name":"example-other","version":"1.0.0","main":"index.js","type":"module"}`,
+				"example-other/index.js":       `export const value = require("@scope/peer/subpath").default;`,
+				"@scope/peer/package.json":     `{"name":"@scope/peer","version":"1.0.0","type":"module"}`,
+				"@scope/provided/package.json": `{"name":"@scope/provided","version":"1.0.0","type":"module"}`,
+			} {
+				filename := filepath.Join(wd, "node_modules", name)
+				if err := os.MkdirAll(filepath.Dir(filename), 0755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filename, []byte(content), 0644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			fs, err := storage.NewFSStorage(filepath.Join(wd, "storage"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			logger, err := log.New("")
+			if err != nil {
+				t.Fatal(err)
+			}
+			logger.SetOutput(io.Discard)
+			pkg := &npm.PackageJSON{
+				Name: "example", Version: "1.0.0", Type: "module", Main: "./index.js", Types: "./index.d.ts",
+				Dependencies:     map[string]string{"@scope/provided": "1.0.0"},
+				PeerDependencies: map[string]string{"@scope/peer": "1.0.0"},
+			}
+			if !tt.required {
+				pkg.OptionalPeers = *set.NewReadOnly("@scope/peer")
+			}
+			if tt.dependency {
+				pkg.Dependencies["@scope/peer"] = "1.0.0"
+			}
+			ctx := &BuildContext{
+				wd: wd, target: "es2022", bundleMode: tt.mode, args: tt.args, externalAll: tt.externalAll,
+				storage: fs, logger: logger, npmrc: rc, pkgJson: pkg,
+				esmPath: EsmPath{PkgName: "example", PkgVersion: "1.0.0"},
+			}
+			meta, _, err := ctx.buildModule(false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			f, _, err := fs.Get(ctx.getSavePath())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer f.Close()
+			output, err := io.ReadAll(f)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var imports []string
+			result := esbuild.Build(esbuild.BuildOptions{
+				Stdin: &esbuild.StdinOptions{Contents: string(output)}, Bundle: true, Format: esbuild.FormatESModule,
+				Plugins: []esbuild.Plugin{{Name: "imports", Setup: func(build esbuild.PluginBuild) {
+					build.OnResolve(esbuild.OnResolveOptions{Filter: ".*"}, func(args esbuild.OnResolveArgs) (esbuild.OnResolveResult, error) {
+						imports = append(imports, args.Path)
+						return esbuild.OnResolveResult{Path: args.Path, External: true}, nil
+					})
+				}}},
+			})
+			if len(result.Errors) > 0 {
+				t.Fatal(result.Errors)
+			}
+			var wantImports []string
+			if tt.wantImport != "" {
+				wantImports = []string{tt.wantImport}
+			}
+			if !slices.Equal(imports, wantImports) {
+				t.Fatalf("imports = %v, want %v", imports, wantImports)
+			}
+			if !strings.HasPrefix(tt.wantImport, "/") {
+				wantImports = nil
+			}
+			if !slices.Equal(meta.Imports, wantImports) {
+				t.Fatalf("metadata imports = %v, want %v", meta.Imports, wantImports)
+			}
+			if (tt.wantImport == "" || tt.other) && !strings.Contains(string(output), "MODULE_NOT_FOUND") {
+				t.Fatal("missing runtime error for the optional peer")
+			}
+		})
 	}
 }

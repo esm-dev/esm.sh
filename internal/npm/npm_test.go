@@ -1,10 +1,25 @@
 package npm
 
 import (
+	"encoding/json"
 	"reflect"
 	"testing"
 	"time"
 )
+
+func TestOptionalPeers(t *testing.T) {
+	var pkg PackageJSON
+	err := json.Unmarshal([]byte(`{
+		"peerDependencies": {"native": "1.0.0", "required": "1.0.0", "invalid": "1.0.0", "../escape": "1.0.0"},
+		"peerDependenciesMeta": {"native": {"optional": true}, "required": {"optional": false}, "invalid": {"optional": "true"}, "../escape": {"optional": true}, "undeclared": {"optional": true}}
+	}`), &pkg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pkg.OptionalPeers.Len() != 1 || !pkg.OptionalPeers.Has("native") {
+		t.Fatalf("optional peers = %v, want [native]", pkg.OptionalPeers.Values())
+	}
+}
 
 func TestValidatePackageName(t *testing.T) {
 	for _, name := range []string{"react", "lodash.merge", "@scope/package"} {

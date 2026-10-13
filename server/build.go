@@ -608,6 +608,13 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 						}
 					}
 
+					if args.Kind == esbuild.ResolveJSRequireCall && !ctx.externalAll && pkgJson.OptionalPeers.Len() > 0 && strings.HasPrefix(args.Importer, ctx.getPkgFullPath("")+"/") {
+						pkgName := toPackageName(specifier)
+						if pkgJson.OptionalPeers.Has(pkgName) && pkgJson.Dependencies[pkgName] == "" && ctx.args.Deps[pkgName] == "" && !isExternalModule(specifier, ctx.args.External) {
+							return esbuild.OnResolveResult{Path: specifier, Namespace: "optional-peer"}, nil
+						}
+					}
+
 					// nodejs builtin module
 					if isNodeBuiltinSpecifier(specifier) {
 						externalPath, sideEffects, err := ctx.resolveExternalModule(specifier, args.Kind, withTypeJSON, analyzeMode)
@@ -1054,6 +1061,14 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 				esbuild.OnLoadOptions{Filter: ".*", Namespace: "npm-replacement"},
 				func(args esbuild.OnLoadArgs) (ret esbuild.OnLoadResult, err error) {
 					contents := string(args.PluginData.([]byte))
+					return esbuild.OnLoadResult{Contents: &contents, Loader: esbuild.LoaderJS}, nil
+				},
+			)
+
+			build.OnLoad(
+				esbuild.OnLoadOptions{Filter: ".*", Namespace: "optional-peer"},
+				func(args esbuild.OnLoadArgs) (esbuild.OnLoadResult, error) {
+					contents := fmt.Sprintf(`throw Object.assign(new Error(%q), { code: "MODULE_NOT_FOUND" });`, "Cannot find module '"+args.Path+"'")
 					return esbuild.OnLoadResult{Contents: &contents, Loader: esbuild.LoaderJS}, nil
 				},
 			)
