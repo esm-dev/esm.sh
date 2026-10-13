@@ -5,10 +5,12 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -19,6 +21,88 @@ import (
 	esbuild "github.com/ije/esbuild-internal/api"
 	"github.com/ije/gox/log"
 )
+
+func TestRawFileExports(t *testing.T) {
+	useNegativeCache(t)
+	previousConfig, previousNpmRC, transport := config, defaultNpmRC, http.DefaultTransport
+	testConfig := *config
+	testConfig.WorkDir = t.TempDir()
+	config, defaultNpmRC = &testConfig, nil
+	t.Cleanup(func() {
+		config, defaultNpmRC, http.DefaultTransport = previousConfig, previousNpmRC, transport
+	})
+	fs, err := storage.NewFSStorage(filepath.Join(config.WorkDir, "storage"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	logger := new(log.Logger)
+	logger.SetOutput(io.Discard)
+	handler := esmRouter(fs, logger)
+	http.DefaultTransport = ghTestTransport(func(r *http.Request) (*http.Response, error) {
+		t.Errorf("unexpected request: %s", r.URL)
+		return &http.Response{StatusCode: 500, Body: http.NoBody}, nil
+	})
+	for i, test := range []struct{ name, exports, subpath, resolved string }{
+		{"wildcard array", `{"./*":["./icons/*"]}`, "outline/plus.svg", "icons/outline/plus.svg"},
+		{"wildcard string", `{"./*":"./icons/*"}`, "outline/plus.svg", "icons/outline/plus.svg"},
+		{"exact array", `{"./plus.svg":["./icons/outline/plus.svg"]}`, "plus.svg", "icons/outline/plus.svg"},
+		{"nested conditions", `{"./*":[{"import":["./icons/*"]}]}`, "outline/plus.svg", "icons/outline/plus.svg"},
+		{"literal file", `{"./*":"./missing/*"}`, "icons/outline/plus.svg", "icons/outline/plus.svg"},
+		{"exact before wildcard", `{"./*":"./missing/*","./plus.svg":"./icons/outline/plus.svg"}`, "plus.svg", "icons/outline/plus.svg"},
+		{"specific wildcard", `{"./*":"./missing/*","./outline/*":"./icons/outline/*"}`, "outline/plus.svg", "icons/outline/plus.svg"},
+		{"wildcard suffix", `{"./*.svg":"./missing/*","./*-icon.svg":"./icons/outline/*.svg"}`, "plus-icon.svg", "icons/outline/plus.svg"},
+		{"exact null", `{"./*":"./icons/*","./outline/plus.svg":null}`, "outline/plus.svg", ""},
+		{"wildcard null", `{"./*":"./icons/*","./outline/*":null}`, "outline/plus.svg", ""},
+		{"empty array", `{"./*":[]}`, "outline/plus.svg", ""},
+		{"missing first target", `{"./*":["./missing/*","./icons/*"]}`, "outline/plus.svg", ""},
+		{"missing specific target", `{"./*":"./icons/*","./outline/*":"./missing/*"}`, "outline/plus.svg", ""},
+		{"invalid target", `{"./*":"../icons/*"}`, "outline/plus.svg", ""},
+		{"invalid array target", `{"./*":["../invalid/*","./icons/*"]}`, "outline/plus.svg", "icons/outline/plus.svg"},
+		{"directory", `{"./*":"./icons/*"}`, "outline.svg", ""},
+		{"no extension guessing", `{"./*":"./icons/*"}`, "missing.svg", ""},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			name := fmt.Sprintf("@raw-exports/test-%d", i)
+			dir := filepath.Join(config.WorkDir, "npm", name+"@1.0.0", "node_modules", name)
+			for filename, content := range map[string]string{
+				"package.json":           `{"name":"` + name + `","version":"1.0.0","exports":` + test.exports + `}`,
+				"icons/outline/plus.svg": "<svg/>\n",
+				"icons/outline.svg/a":    "directory",
+				"icons/missing.svg.js":   "export {};",
+			} {
+				if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, filename)), 0755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(dir, filename), []byte(content), 0644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			for _, prefix := range []string{"/", "/*"} {
+				const query = "?target=esnext&lp=node_modules%252F%2540tabler%252Ficons"
+				base := "http://localhost/" + name + "@1.0.0/"
+				res := httptest.NewRecorder()
+				handler.ServeHTTP(res, httptest.NewRequest("GET", "http://localhost"+prefix+name+"@1.0.0/"+test.subpath+query, nil))
+				if test.resolved == "" {
+					if res.Code != 404 {
+						t.Fatalf("expected 404, got %d: %s", res.Code, res.Body.String())
+					}
+					continue
+				}
+				if test.resolved != test.subpath {
+					if res.Code != 301 || res.Header().Get("Location") != base+test.resolved+query {
+						t.Fatalf("expected redirect to %s, got %d: %v", test.resolved, res.Code, res.Header())
+					}
+					location := res.Header().Get("Location")
+					res = httptest.NewRecorder()
+					handler.ServeHTTP(res, httptest.NewRequest("GET", location, nil))
+				}
+				if res.Code != 200 || res.Header().Get("Content-Type") != "image/svg+xml; charset=utf-8" || res.Body.String() != "<svg/>\n" {
+					t.Fatalf("expected SVG, got %d: %v %s", res.Code, res.Header(), res.Body.String())
+				}
+			}
+		})
+	}
+}
 
 func TestRouterModuleResponses(t *testing.T) {
 	previousConfig, previousNpmRC, transport := config, defaultNpmRC, http.DefaultTransport
@@ -87,6 +171,60 @@ func TestRouterModuleResponses(t *testing.T) {
 			}
 			if downloads != wantDownloads {
 				t.Fatalf("%s: got %d downloads, want %d", state, downloads, wantDownloads)
+			}
+		}
+	})
+
+	t.Run("published pnpm files", func(t *testing.T) {
+		const pkg = "@scope/pnpm-files-test"
+		const subpath = "dist/node_modules/.pnpm/@scope_utils@1.1.2/node_modules/@scope/utils/index"
+		dir := filepath.Join(config.WorkDir, "npm", pkg+"@1.0.0", "node_modules", pkg)
+		for name, content := range map[string]string{
+			"package.json":    `{"name":"` + pkg + `","version":"1.0.0","type":"module","types":"./index.d.ts"}`,
+			"index.d.ts":      "export declare const answer: number;",
+			subpath + ".js":   "export const answer = 42;",
+			subpath + ".d.ts": "export declare const answer: number;",
+		} {
+			filename := filepath.Join(dir, name)
+			if err := os.MkdirAll(filepath.Dir(filename), 0755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filename, []byte(content), 0644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		http.DefaultTransport = ghTestTransport(func(r *http.Request) (*http.Response, error) {
+			t.Errorf("unexpected request: %s", r.URL)
+			return &http.Response{StatusCode: 500, Body: http.NoBody}, nil
+		})
+		defer deleteCacheItemsWithPrefix("npm:" + pkg + "@")
+		defer cacheLRU.Remove("/" + pkg + "@1.0.0/es2022/" + subpath + ".mjs")
+		for _, test := range []struct{ path, contentType, content string }{
+			{subpath + ".js?raw", ctJavaScript, "answer = 42"},
+			{"es2022/" + subpath + ".mjs", ctJavaScript, "42"},
+			{"es2022/" + subpath + ".mjs", ctJavaScript, "42"},
+			{"es2022/" + subpath + ".mjs.map", ctJSON, "sources"},
+			{subpath + ".d.ts", ctTypeScript, "answer"},
+		} {
+			res := httptest.NewRecorder()
+			handler.ServeHTTP(res, httptest.NewRequest("GET", "/"+pkg+"@1.0.0/"+test.path, nil))
+			if res.Code != 200 || res.Header().Get("Content-Type") != test.contentType || !strings.Contains(res.Body.String(), test.content) {
+				t.Errorf("%s: HTTP %d: %s", test.path, res.Code, res.Body.String())
+			}
+		}
+		for _, subpath := range []string{
+			".env", "config.env", "index.php", ".git/config", "dist/.hidden/index.mjs",
+			"dist/.pnpm/index.mjs", "dist/node_modules/.pnpm-hidden/index.mjs",
+			"dist/node_modules/.pnpm/.hidden/index.mjs",
+			"dist/.hidden/node_modules/.pnpm/index.mjs",
+			"dist/node_modules/.pnpm/../index.mjs",
+			"dist/node_modules/.pnpm/%2e%2e/index.mjs",
+			"dist/node_modules/.pnpm/pkg/node_modules/.git/config",
+		} {
+			res := httptest.NewRecorder()
+			handler.ServeHTTP(res, httptest.NewRequest("GET", "/"+pkg+"@1.0.0/"+subpath, nil))
+			if res.Code != 404 || res.Body.String() != "not found" {
+				t.Errorf("%s: HTTP %d: %s", subpath, res.Code, res.Body.String())
 			}
 		}
 	})
@@ -177,6 +315,42 @@ func TestRouterCacheRegressions(t *testing.T) {
 	http.DefaultTransport = ghTestTransport(func(r *http.Request) (*http.Response, error) {
 		t.Errorf("unexpected request: %s", r.URL)
 		return &http.Response{StatusCode: 500, Body: http.NoBody}, nil
+	})
+
+	t.Run("declaration path redirects", func(t *testing.T) {
+		for _, test := range []struct{ request, canonical string }{
+			{"/@babylonjs/core@8.2.0//Meshes/subMesh.d.ts", "/@babylonjs/core@8.2.0/Meshes/subMesh.d.ts"},
+			{"/@babylonjs/core@8.2.0///Meshes//subMesh.d.ts", "/@babylonjs/core@8.2.0/Meshes/subMesh.d.ts"},
+			{"/pkg@1.0.0//types.d.mts?key=a%2Bb&external=foo", "/pkg@1.0.0/types.d.mts?key=a%2Bb&external=foo"},
+			{"/pkg@1.0.0//types.d.cts", "/pkg@1.0.0/types.d.cts"},
+			{"/pkg@1.0.0//space%20%231.d.ts", "/pkg@1.0.0/space%20%231.d.ts"},
+			{"/pkg@1.0.0//%74ypes.d.ts?", "/pkg@1.0.0/%74ypes.d.ts?"},
+			{"/pkg@1.0.0/%2Ftypes.d.ts", "/pkg@1.0.0/types.d.ts"},
+			{"/pkg@1.0.0//nested%2Ftypes.d.ts", "/pkg@1.0.0/nested%2Ftypes.d.ts"},
+			{"/*pkg@1.0.0//types.d.ts", "/*pkg@1.0.0/types.d.ts"},
+			{"/gh/owner/repo@abcdef0//types.d.ts", "/gh/owner/repo@abcdef0/types.d.ts"},
+			{"//pkg@1.0.0//types.d.ts", "/pkg@1.0.0/types.d.ts"},
+		} {
+			canonical := httptest.NewRequest("GET", "http://localhost"+test.canonical, nil)
+			if err := fs.Put(normalizeSavePath(path.Join("types", canonical.URL.Path)), strings.NewReader("export {};")); err != nil {
+				t.Fatal(err)
+			}
+			for _, method := range []string{"GET", "HEAD"} {
+				res := httptest.NewRecorder()
+				handler.ServeHTTP(res, httptest.NewRequest(method, "http://localhost"+test.request, nil))
+				if res.Code != 301 || res.Header().Get("Location") != test.canonical {
+					t.Errorf("%s %s: HTTP %d, location=%q, want %q", method, test.request, res.Code, res.Header().Get("Location"), test.canonical)
+				}
+				if res.Header().Get("Cache-Control") != ccImmutable {
+					t.Errorf("%s: unexpected cache policy: %s", test.request, res.Header().Get("Cache-Control"))
+				}
+			}
+			res := httptest.NewRecorder()
+			handler.ServeHTTP(res, canonical)
+			if res.Code != 200 || res.Body.String() != "export {};" {
+				t.Errorf("%s: HTTP %d: %s", test.canonical, res.Code, res.Body.String())
+			}
+		}
 	})
 
 	t.Run("transform field boundaries", func(t *testing.T) {

@@ -42,7 +42,7 @@ func compileSvelteLoader(ctx context.Context, npmrc *NpmRC, svelteVersion string
 	if err != nil {
 		return
 	}
-	err = npmrc.installDependenciesContext(ctx, wd, p, false, nil)
+	err = npmrc.installDependenciesContext(ctx, wd, p, false, nil, nil)
 	if err != nil {
 		return
 	}
@@ -95,11 +95,11 @@ func compileVueLoader(ctx context.Context, npmrc *NpmRC, vueVersion string, load
 	if err != nil {
 		return
 	}
-	err = npmrc.installDependenciesContext(ctx, wd, pkgJson, false, nil)
+	err = npmrc.installDependenciesContext(ctx, wd, pkgJson, false, nil, nil)
 	if err != nil {
 		return
 	}
-	err = npmrc.installDependenciesContext(ctx, wd, &npm.PackageJSON{Dependencies: map[string]string{"@esm.sh/vue-compiler": loaderVersion}}, false, nil)
+	err = npmrc.installDependenciesContext(ctx, wd, &npm.PackageJSON{Dependencies: map[string]string{"@esm.sh/vue-compiler": loaderVersion}}, false, nil, nil)
 	if err != nil {
 		return
 	}
