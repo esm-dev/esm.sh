@@ -590,7 +590,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 						specifier = strings.TrimPrefix(filename, path.Join(ctx.wd, "node_modules")+"/")
 					} else {
 						filename = path.Join(ctx.wd, "node_modules", specifier)
-						if pkgName := toPackageName(specifier); !ctx.externalAll && !ctx.args.External.Has(pkgName) && !isPackageInExternalNamespace(pkgName, ctx.args.External) {
+						if !ctx.externalAll && !isExternalModule(specifier, ctx.args.External) {
 							pkgDir := ctx.getPkgFullPath("")
 							for dir := args.ResolveDir; dir == pkgDir || strings.HasPrefix(dir, pkgDir+"/"); dir = path.Dir(dir) {
 								if path.Base(dir) != "node_modules" && existsDir(path.Join(dir, "node_modules")) {
@@ -653,7 +653,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 					// bundles all dependencies in `bundle` mode, apart from peerDependencies and `?external` flag
 					if !isRelPathSpecifier(specifier) {
 						pkgName := toPackageName(specifier)
-						if ctx.bundleMode == BundleDeps && !ctx.args.External.Has(pkgName) && !isPackageInExternalNamespace(pkgName, ctx.args.External) && !implicitExternal.Has(specifier) {
+						if ctx.bundleMode == BundleDeps && !isExternalModule(specifier, ctx.args.External) && !implicitExternal.Has(specifier) {
 							_, ok := pkgJson.PeerDependencies[pkgName]
 							if !ok {
 								return esbuild.OnResolveResult{}, nil
