@@ -21,6 +21,7 @@ type BuildArgs struct {
 	KeepNames         bool
 	IgnoreAnnotations bool
 	ExternalRequire   bool
+	NoDts             bool
 }
 
 func decodeBuildArgs(argsString string) (args BuildArgs, err error) {
@@ -57,7 +58,8 @@ func decodeBuildArgs(argsString string) (args BuildArgs, err error) {
 					args.KeepNames = true
 				case "i":
 					args.IgnoreAnnotations = true
-
+				case "n":
+					args.NoDts = true
 				}
 			}
 		}
@@ -117,6 +119,9 @@ func encodeBuildArgs(args BuildArgs, isDts bool) string {
 		if args.IgnoreAnnotations {
 			lines = append(lines, "i")
 		}
+		if args.NoDts {
+			lines = append(lines, "n")
+		}
 	}
 	if len(lines) > 0 {
 		return btoaUrl(strings.Join(lines, "\n"))
@@ -131,7 +136,7 @@ func resolveBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esm EsmP
 		deps, ok, err := func() (deps *set.Set[string], ok bool, err error) {
 			var p *npm.PackageJSON
 			pkgJsonPath := path.Join(installDir, "node_modules", esm.PkgName, "package.json")
-			if existsFile(pkgJsonPath) {
+			if _, overridden := args.Deps[esm.PkgName]; !overridden && existsFile(pkgJsonPath) {
 				var raw npm.PackageJSONRaw
 				err = utils.ParseJSONFile(pkgJsonPath, &raw)
 				if err == nil {
@@ -168,10 +173,11 @@ func resolveBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esm EsmP
 			}
 			if args.External.Len() > 0 {
 				for _, name := range args.External.Values() {
-					if strings.HasPrefix(name, "node:") || (name == esm.PkgName && esm.SubPath != "") {
+					pkgName := toPackageName(name)
+					if strings.HasPrefix(name, "node:") || (pkgName == esm.PkgName && esm.SubPath != "") {
 						continue
 					}
-					if !deps.Has(name) {
+					if !deps.Has(pkgName) {
 						return nil, false, nil
 					}
 				}
@@ -183,7 +189,7 @@ func resolveBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esm EsmP
 		}
 		if !ok {
 			deps = set.New[string]()
-			err = walkDeps(npmrc, installDir, esm.Package(), deps)
+			err = walkDeps(npmrc, installDir, esm.Package(), args.Deps, deps)
 			if err != nil {
 				return err
 			}
@@ -224,18 +230,16 @@ func resolveBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esm EsmP
 		if args.External.Len() > 0 {
 			external := make([]string, 0, args.External.Len())
 			for _, name := range args.External.Values() {
-				if strings.HasPrefix(name, "node:") {
-					if nodeBuiltinModules[name[5:]] {
-						external = append(external, name)
-					}
+				if isNodeBuiltinSpecifier(name) {
+					external = append(external, name)
 					continue
 				}
-				// Check if this is a namespace pattern (e.g., @radix-ui)
-				isNamespace := strings.HasPrefix(name, "@") && !strings.Contains(name[1:], "/")
+				namespace := strings.TrimSuffix(name, "/*")
+				isNamespace := strings.HasPrefix(namespace, "@") && !strings.Contains(namespace[1:], "/")
 				if isNamespace {
 					// Add all packages from this namespace that are in deps
 					for _, dep := range deps.Values() {
-						if strings.HasPrefix(dep, name+"/") {
+						if strings.HasPrefix(dep, namespace+"/") {
 							external = append(external, dep)
 						}
 					}
@@ -243,12 +247,12 @@ func resolveBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esm EsmP
 					external = append(external, name)
 					continue
 				}
-				// if the subModule externalizes the package entry
-				if name == esm.PkgName && esm.SubPath != "" {
+				pkgName := toPackageName(name)
+				if pkgName == esm.PkgName && esm.SubPath != "" {
 					external = append(external, name)
 					continue
 				}
-				if name != esm.PkgName && deps.Has(name) {
+				if pkgName != esm.PkgName && deps.Has(pkgName) {
 					external = append(external, name)
 				}
 			}
@@ -258,14 +262,14 @@ func resolveBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esm EsmP
 	return nil
 }
 
-func walkDeps(npmrc *NpmRC, installDir string, pkg npm.Package, mark *set.Set[string]) (err error) {
+func walkDeps(npmrc *NpmRC, installDir string, pkg npm.Package, overrides map[string]string, mark *set.Set[string]) (err error) {
 	if mark.Has(pkg.Name) {
 		return
 	}
 	mark.Add(pkg.Name)
 	var p *npm.PackageJSON
 	pkgJsonPath := path.Join(installDir, "node_modules", pkg.Name, "package.json")
-	if existsFile(pkgJsonPath) {
+	if _, overridden := overrides[pkg.Name]; !overridden && existsFile(pkgJsonPath) {
 		var raw npm.PackageJSONRaw
 		err = utils.ParseJSONFile(pkgJsonPath, &raw)
 		if err == nil {
@@ -283,12 +287,15 @@ func walkDeps(npmrc *NpmRC, installDir string, pkg npm.Package, mark *set.Set[st
 	maps.Copy(pkgDeps, p.Dependencies)
 	maps.Copy(pkgDeps, p.PeerDependencies)
 	for name, version := range pkgDeps {
+		if override, ok := overrides[name]; ok {
+			version = override
+		}
 		depPkg := npm.Package{Name: name, Version: version}
 		p, e := npm.ResolveDependencyVersion(version)
 		if e == nil && p.Name != "" {
 			depPkg = p
 		}
-		err := walkDeps(npmrc, installDir, depPkg, mark)
+		err := walkDeps(npmrc, installDir, depPkg, overrides, mark)
 		if err != nil {
 			return err
 		}

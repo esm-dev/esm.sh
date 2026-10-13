@@ -230,7 +230,7 @@ CHECK:
 			version = "latest"
 			goto CHECK
 		}
-		var latest *semver.Version
+		var latest, deprecated *semver.Version
 		includePrerelease := strings.ContainsRune(version, '-')
 		for v := range metadata.Versions {
 			if !includePrerelease && strings.ContainsRune(v, '-') {
@@ -238,8 +238,17 @@ CHECK:
 			}
 			sv, err := semver.NewVersion(v)
 			if err == nil && c.Check(sv) && (latest == nil || sv.GreaterThan(latest)) {
-				latest = sv
+				if message, _ := metadata.Versions[v].Deprecated.(string); message != "" {
+					if deprecated == nil || sv.GreaterThan(deprecated) {
+						deprecated = sv
+					}
+				} else {
+					latest = sv
+				}
 			}
+		}
+		if latest == nil {
+			latest = deprecated
 		}
 		if latest != nil {
 			return latest.Original(), nil
@@ -531,10 +540,10 @@ func (npmrc *NpmRC) installPackageContext(ctx context.Context, pkg npm.Package) 
 }
 
 func (npmrc *NpmRC) installDependencies(wd string, pkgJson *npm.PackageJSON, npmMode bool, mark *set.Set[string]) error {
-	return npmrc.installDependenciesContext(context.Background(), wd, pkgJson, npmMode, mark)
+	return npmrc.installDependenciesContext(context.Background(), wd, pkgJson, npmMode, nil, mark)
 }
 
-func (npmrc *NpmRC) installDependenciesContext(ctx context.Context, wd string, pkgJson *npm.PackageJSON, npmMode bool, mark *set.Set[string]) error {
+func (npmrc *NpmRC) installDependenciesContext(ctx context.Context, wd string, pkgJson *npm.PackageJSON, npmMode bool, overrides map[string]string, mark *set.Set[string]) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -567,6 +576,9 @@ func (npmrc *NpmRC) installDependenciesContext(ctx context.Context, wd string, p
 		return firstErr
 	}
 	for name, version := range dependencies {
+		if override, ok := overrides[name]; ok {
+			version = override
+		}
 		if ctx.Err() != nil || getFirstErr() != nil {
 			break
 		}
@@ -629,7 +641,7 @@ func (npmrc *NpmRC) installDependenciesContext(ctx context.Context, wd string, p
 			}
 			// install dependencies recursively
 			if len(installed.Dependencies) > 0 || (len(installed.PeerDependencies) > 0 && npmMode) {
-				if err := npmrc.installDependenciesContext(ctx, wd, installed, npmMode, mark); err != nil {
+				if err := npmrc.installDependenciesContext(ctx, wd, installed, npmMode, overrides, mark); err != nil {
 					setErr(err)
 				}
 			}
@@ -895,7 +907,7 @@ func extractPackageTarContext(ctx context.Context, installDir string, pkgName st
 		}
 		savepath := filepath.Join("node_modules", pkgName, filename)
 		extname := filepath.Ext(savepath)
-		if !(extname != "" && (assetExts[extname[1:]] || slices.Contains(moduleExts, extname) || extname == ".map" || extname == ".css" || extname == ".svelte" || extname == ".vue")) {
+		if !(extname != "" && (assetExts[extname[1:]] || slices.Contains(moduleExts, extname) || extname == ".map" || extname == ".css" || extname == ".svelte" || extname == ".vue")) && !isLicenseFile(filename) {
 			// ignore unsupported formats
 			continue
 		}
