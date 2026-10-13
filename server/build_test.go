@@ -393,3 +393,79 @@ func TestBuildTypesArgs(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildModuleStaticDynamicImports(t *testing.T) {
+	oldConfig := config
+	config = &Config{}
+	t.Cleanup(func() { config = oldConfig })
+	for _, tt := range []struct {
+		name     string
+		mode     BundleMode
+		split    bool
+		external bool
+	}{
+		{name: "bundled"},
+		{name: "unbundled", mode: BundleFalse, external: true},
+		{name: "shared", split: true, external: true},
+	} {
+		for _, minify := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/minify=%v", tt.name, minify), func(t *testing.T) {
+				config.Minify = minify
+				wd := t.TempDir()
+				pkgDir := filepath.Join(wd, "node_modules", "example")
+				if err := os.MkdirAll(pkgDir, 0755); err != nil {
+					t.Fatal(err)
+				}
+				for name, code := range map[string]string{
+					"index.js":   `export { Device } from "./device.js"; export { create } from "./adapter.js"; export const lazy = () => import("./lazy.js");`,
+					"adapter.js": `export async function create() { const { Device } = await import("./device"); return new Device(); }`,
+					"device.js":  `export class Device {}`,
+					"lazy.js":    `export const value = 1;`,
+				} {
+					if err := os.WriteFile(filepath.Join(pkgDir, name), []byte(code), 0644); err != nil {
+						t.Fatal(err)
+					}
+				}
+				fs, err := storage.NewFSStorage(filepath.Join(wd, "storage"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				logger, err := log.New("")
+				if err != nil {
+					t.Fatal(err)
+				}
+				logger.SetOutput(io.Discard)
+				ctx := &BuildContext{
+					wd: wd, target: "es2022", bundleMode: tt.mode, storage: fs, logger: logger, npmrc: &NpmRC{},
+					esmPath: EsmPath{PkgName: "example", PkgVersion: "1.0.0"},
+					pkgJson: &npm.PackageJSON{Name: "example", Version: "1.0.0", Type: "module", Main: "./index.js", Types: "./index.d.ts"},
+				}
+				if tt.split {
+					ctx.splitting = set.NewReadOnly("device.js")
+				}
+				if _, _, err := ctx.buildModule(false); err != nil {
+					t.Fatal(err)
+				}
+				f, _, err := fs.Get(ctx.getSavePath())
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer f.Close()
+				output, err := io.ReadAll(f)
+				if err != nil {
+					t.Fatal(err)
+				}
+				suffix := ".mjs"
+				if tt.mode == BundleFalse {
+					suffix = ".nobundle.mjs"
+				}
+				if external := strings.Contains(string(output), `"./device`+suffix+`"`); external != tt.external {
+					t.Errorf("external device = %v, want %v:\n%s", external, tt.external, output)
+				}
+				if !strings.Contains(string(output), `import("./lazy`+suffix+`")`) {
+					t.Errorf("dynamic-only module was not kept separate:\n%s", output)
+				}
+			})
+		}
+	}
+}

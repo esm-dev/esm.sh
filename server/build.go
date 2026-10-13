@@ -429,6 +429,9 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 
 	browserExclude := map[string]*set.Set[string]{}
 	implicitExternal := set.New[string]()
+	bundledModules := set.New[string]()
+	dynamicImports := set.New[string]()
+	bundledDynamicImports := set.New[string]()
 	noBundle := !ctx.shouldBundle()
 	esmifyPlugin := esbuild.Plugin{
 		Name: "esmify",
@@ -825,7 +828,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 						// - it's not a conditional export
 						// - it's not a dynamic import and the `?bundle=false` flag is not present
 						// - it's not in the `splitting` list
-						isDynamicImport := args.Kind == esbuild.ResolveJSDynamicImport
+						isDynamicImport := args.Kind == esbuild.ResolveJSDynamicImport && !bundledDynamicImports.Has(resolvedFilename)
 						bundleInternalModule := exportAs == "" && !isDynamicImport && ctx.shouldBundleInternalModules()
 						if modulePath == entry.main || exportAs == entrySpecifier || (!isDynamicImport && !noBundle) || bundleInternalModule {
 							if existsFile(resolvedFilename) {
@@ -848,6 +851,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 										External:    true,
 									}, nil
 								}
+								bundledModules.Add(resolvedFilename)
 								// embed wasm as WebAssembly.Module
 								if strings.HasSuffix(resolvedFilename, ".wasm") {
 									return esbuild.OnResolveResult{
@@ -873,6 +877,9 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 							}
 							// otherwise, let esbuild to handle it
 							return esbuild.OnResolveResult{}, nil
+						}
+						if isDynamicImport {
+							dynamicImports.Add(resolvedFilename)
 						}
 					}
 
@@ -1210,6 +1217,9 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 	defer esbCtx.Dispose()
 
 REBUILD:
+	includes = nil
+	ctx.esmImports = nil
+	ctx.cjsRequires = nil
 	res := esbCtx.Rebuild()
 	if len(res.Errors) > 0 {
 		// mark the missing module as external to exclude it from the bundle
@@ -1256,6 +1266,18 @@ REBUILD:
 		}
 		err = errors.New("esbuild: " + msg)
 		return
+	}
+
+	// A separate dynamic build duplicates modules already bundled by static imports.
+	rebuild := false
+	for _, filename := range dynamicImports.Values() {
+		if bundledModules.Has(filename) && !bundledDynamicImports.Has(filename) {
+			bundledDynamicImports.Add(filename)
+			rebuild = true
+		}
+	}
+	if rebuild {
+		goto REBUILD
 	}
 
 	if analyzeMode {
