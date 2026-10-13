@@ -1,7 +1,9 @@
 import { assert, assertEquals } from "jsr:@std/assert";
-import { ImageResponse } from "esm.sh/@vercel/og@0.6.2?conditions=edge";
 
 Deno.test("@vercel/og renders a PNG with WASM modules", async () => {
+  const { ImageResponse } = await import(
+    "esm.sh/@vercel/og@0.6.2?conditions=edge"
+  );
   const response = new ImageResponse(
     { type: "div", key: null, props: { children: "Hello" } },
     { width: 100, height: 100 },
