@@ -54,6 +54,15 @@ func (ctx *BuildContext) rewriteDTS(filename string, buf *bytes.Buffer) *bytes.B
 				))
 			}
 		}
+	case "@thebeyondgroup/shopify-rich-text-renderer":
+		if filename == "./index.d.ts" {
+			prefix := "declare module '{ESM_CDN_ORIGIN}/" + ctx.esmPath.PackageId() + "/" + ctx.getBuildArgsPrefix(true) + "index.d.ts' {"
+			if body, ok := bytes.CutPrefix(bytes.TrimSpace(buf.Bytes()), []byte(prefix)); ok {
+				if body, ok := bytes.CutSuffix(body, []byte("}")); ok {
+					return bytes.NewBuffer(body)
+				}
+			}
+		}
 	case "@rollup/plugin-commonjs":
 		dts := buf.Bytes()
 		// see https://github.com/denoland/deno/issues/27492
