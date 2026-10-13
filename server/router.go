@@ -50,7 +50,7 @@ const (
 	ccMustRevalidate = "public, max-age=0, must-revalidate"
 	ccTenMinutes     = "public, max-age=600, stale-if-error=86400"
 	ccOneDay         = "public, max-age=86400, stale-if-error=86400"
-	ccNpmQuery       = "public, max-age=%d, stale-while-revalidate=%d, stale-if-error=86400"
+	ccNpmQuery       = "public, max-age=%d, stale-while-revalidate=86400, stale-if-error=86400"
 	ccImmutable      = "public, max-age=31536000, immutable"
 	ctHTML           = "text/html; charset=utf-8"
 	ctCSS            = "text/css; charset=utf-8"
@@ -1610,7 +1610,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 			if isExactVersion {
 				header.Set("Cache-Control", ccImmutable)
 			} else {
-				header.Set("Cache-Control", fmt.Sprintf(ccNpmQuery, config.NpmQueryCacheTTL, min(config.NpmQueryCacheTTL, 86400)))
+				header.Set("Cache-Control", fmt.Sprintf(ccNpmQuery, config.NpmQueryCacheTTL))
 			}
 			if r.Method == http.MethodHead {
 				writeBody(w, []byte{})
@@ -1723,7 +1723,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 			if isExactVersion {
 				header.Set("Cache-Control", ccImmutable)
 			} else {
-				header.Set("Cache-Control", fmt.Sprintf(ccNpmQuery, config.NpmQueryCacheTTL, min(config.NpmQueryCacheTTL, 86400)))
+				header.Set("Cache-Control", fmt.Sprintf(ccNpmQuery, config.NpmQueryCacheTTL))
 			}
 			writeJSON(w, 200, metaJson)
 			return
@@ -1889,7 +1889,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 		if isExactVersion {
 			header.Set("Cache-Control", ccImmutable)
 		} else {
-			header.Set("Cache-Control", fmt.Sprintf(ccNpmQuery, config.NpmQueryCacheTTL, min(config.NpmQueryCacheTTL, 86400)))
+			header.Set("Cache-Control", fmt.Sprintf(ccNpmQuery, config.NpmQueryCacheTTL))
 		}
 		header.Set("Content-Type", ctJavaScript)
 		if r.Method == http.MethodHead {
@@ -1925,7 +1925,7 @@ func redirect(w http.ResponseWriter, url string, isMovedPermanently bool) {
 		code = http.StatusMovedPermanently
 		h.Set("Cache-Control", ccImmutable)
 	} else {
-		h.Set("Cache-Control", fmt.Sprintf(ccNpmQuery, config.NpmQueryCacheTTL, min(config.NpmQueryCacheTTL, 86400)))
+		h.Set("Cache-Control", fmt.Sprintf(ccNpmQuery, config.NpmQueryCacheTTL))
 	}
 	h.Set("Location", url)
 	w.WriteHeader(code)

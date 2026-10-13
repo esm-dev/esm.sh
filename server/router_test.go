@@ -244,7 +244,7 @@ func TestRouterCacheRegressions(t *testing.T) {
 				if res.Code != 302 || res.Header().Get("Location") != want {
 					t.Errorf("%s%s: HTTP %d, location=%q, want %q", test.prefix, test.name+suffix, res.Code, res.Header().Get("Location"), want)
 				}
-				if got := res.Header().Get("Cache-Control"); got != "public, max-age=120, stale-while-revalidate=120, stale-if-error=86400" {
+				if got := res.Header().Get("Cache-Control"); got != "public, max-age=120, stale-while-revalidate=86400, stale-if-error=86400" {
 					t.Errorf("unexpected cache policy: %s", got)
 				}
 			}
@@ -282,7 +282,7 @@ func TestRouterCacheRegressions(t *testing.T) {
 				if res.Code != 200 || res.Header().Get("X-TypeScript-Types") != "http://localhost"+dts {
 					t.Fatalf("%s %s: HTTP %d, headers=%v, body=%s", method, version, res.Code, res.Header(), res.Body.String())
 				}
-				want := "public, max-age=120, stale-while-revalidate=120, stale-if-error=86400"
+				want := "public, max-age=120, stale-while-revalidate=86400, stale-if-error=86400"
 				if version == "@1.0.0" {
 					want = ccImmutable
 				}
@@ -320,32 +320,13 @@ func TestRouterCacheRegressions(t *testing.T) {
 					if res.Code != status {
 						t.Fatalf("%s %s%s: HTTP %d, want %d: %s", method, version, query, res.Code, status, res.Body.String())
 					}
-					want := "public, max-age=120, stale-while-revalidate=120, stale-if-error=86400"
+					want := "public, max-age=120, stale-while-revalidate=86400, stale-if-error=86400"
 					if version == "@1.0.0" {
 						want = ccImmutable
 					}
 					if got := res.Header().Get("Cache-Control"); got != want {
 						t.Errorf("%s %s%s: cache policy=%q, want %q", method, version, query, got, want)
 					}
-				}
-			}
-		}
-		ttl := config.NpmQueryCacheTTL
-		t.Cleanup(func() { config.NpmQueryCacheTTL = ttl })
-		for _, test := range []struct {
-			ttl  uint32
-			want string
-		}{
-			{30, "public, max-age=30, stale-while-revalidate=30, stale-if-error=86400"},
-			{86400, "public, max-age=86400, stale-while-revalidate=86400, stale-if-error=86400"},
-			{86401, "public, max-age=86401, stale-while-revalidate=86400, stale-if-error=86400"},
-		} {
-			config.NpmQueryCacheTTL = test.ttl
-			for _, query := range []string{"", "&meta", "&css"} {
-				res := httptest.NewRecorder()
-				handler.ServeHTTP(res, httptest.NewRequest("GET", "http://localhost/"+name+"@latest?target=es2022"+query, nil))
-				if got := res.Header().Get("Cache-Control"); got != test.want {
-					t.Errorf("ttl=%d query=%q: cache policy=%q, want %q", test.ttl, query, got, test.want)
 				}
 			}
 		}

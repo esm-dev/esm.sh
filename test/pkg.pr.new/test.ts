@@ -16,7 +16,7 @@ Deno.test("resolve branch to commit hash", async () => {
   assert(!res.redirected);
   assertEquals(res.status, 200);
   assertEquals(res.headers.get("content-type"), "application/javascript; charset=utf-8");
-  assertEquals(res.headers.get("cache-control"), "public, max-age=600, stale-while-revalidate=600, stale-if-error=86400");
+  assertEquals(res.headers.get("cache-control"), "public, max-age=600, stale-while-revalidate=86400, stale-if-error=86400");
   const code = await res.text();
   assert(/sveltejs\/svelte@[\da-f]{7}/.test(code));
 });
