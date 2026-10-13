@@ -4,6 +4,10 @@ import process, {
   versions,
 } from "http://localhost:8080/node/process.mjs";
 
+// Browser builds must not see Deno's Node-compatible process.
+Reflect.set(globalThis, "process", process);
+Reflect.set(globalThis, "window", globalThis);
+
 Deno.test("browser process does not identify as Node.js", () => {
   assertEquals(process.version, "");
   assertEquals(version, "");
