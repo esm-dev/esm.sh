@@ -73,7 +73,11 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 		header := w.Header()
 
 		// ban malicious requests
-		if strings.HasSuffix(pathname, ".env") || strings.HasSuffix(pathname, ".php") || strings.Contains(pathname, "/.") {
+		hasDotPath := strings.Contains(pathname, "/.")
+		if hasDotPath {
+			hasDotPath = strings.Contains(strings.ReplaceAll(pathname, "/node_modules/.pnpm/", "/node_modules/"), "/.")
+		}
+		if strings.HasSuffix(pathname, ".env") || strings.HasSuffix(pathname, ".php") || hasDotPath {
 			header.Set("Cache-Control", ccImmutable)
 			writeStatus(w, 404, "not found")
 			return
