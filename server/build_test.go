@@ -19,6 +19,76 @@ import (
 	"github.com/ije/gox/set"
 )
 
+func TestBuildModuleConditionalExportSplitting(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		exports string
+		subPath string
+		split   bool
+	}{
+		{"default", `{"import":"./public.mjs","default":"./internal.cjs"}`, "feature", false},
+		{"require", `{"import":"./public.mjs","require":"./internal.cjs"}`, "feature", false},
+		{"nested", `{"import":{"default":"./public.mjs"},"require":{"default":"./internal.cjs"}}`, "feature", false},
+		{"import", `{"import":"./internal.cjs","default":"./public.mjs"}`, "feature", true},
+		{"root wrapper", `{"import":"./public.mjs","require":"./internal.cjs"}`, "", false},
+		{"subpath wrapper", `{"import":"./public.mjs","require":"./internal.cjs"}`, "core", false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			wd := t.TempDir()
+			pkgDir := filepath.Join(wd, "node_modules", "example")
+			if err := os.MkdirAll(pkgDir, 0755); err != nil {
+				t.Fatal(err)
+			}
+			for name, code := range map[string]string{
+				"feature.mjs":  `import core from "./internal.cjs"; export const answer = core.hidden.answer;`,
+				"feature.d.ts": `export declare const answer: number;`,
+				"internal.cjs": `module.exports = { hidden: { answer: 42 } };`,
+				"public.mjs":   `import core from "./internal.cjs"; export const answer = core.hidden.answer;`,
+			} {
+				if err := os.WriteFile(filepath.Join(pkgDir, name), []byte(code), 0644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			exportName := "./core"
+			if tt.subPath == "" {
+				exportName = "."
+			}
+			var raw npm.PackageJSONRaw
+			if err := json.Unmarshal([]byte(`{"name":"example","version":"1.0.0","types":"./feature.d.ts","exports":{"./feature":"./feature.mjs","`+exportName+`":`+tt.exports+`}}`), &raw); err != nil {
+				t.Fatal(err)
+			}
+			fs, err := storage.NewFSStorage(filepath.Join(wd, "storage"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			logger, err := log.New("")
+			if err != nil {
+				t.Fatal(err)
+			}
+			logger.SetOutput(io.Discard)
+			ctx := &BuildContext{
+				wd: wd, target: "denonext", storage: fs, logger: logger,
+				esmPath: EsmPath{PkgName: "example", PkgVersion: "1.0.0", SubPath: tt.subPath},
+				pkgJson: raw.ToNpmPackage(),
+			}
+			if tt.subPath != "feature" {
+				ctx.pkgJson.SideEffects = *set.NewReadOnly("./side-effect.js")
+			}
+			meta, _, err := ctx.buildModule(false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var wantImports []string
+			if tt.split {
+				wantImports = []string{"/example@1.0.0/denonext/core.mjs"}
+			}
+			if !slices.Equal(meta.Imports, wantImports) {
+				t.Fatalf("imports = %v, want %v", meta.Imports, wantImports)
+			}
+		})
+	}
+}
+
 func TestBuildModuleBundleNodeRuntime(t *testing.T) {
 	oldConfig := config
 	config = &Config{SourceMap: true}
