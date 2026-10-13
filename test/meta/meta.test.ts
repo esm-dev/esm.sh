@@ -4,7 +4,7 @@ Deno.test("?meta query", async () => {
   {
     const res = await fetch("http://localhost:8080/react@19?meta", { headers: { "User-Agent": "i'm a browser" } });
     assertEquals(res.status, 200);
-    assertEquals(res.headers.get("cache-control"), "public, max-age=600, stale-while-revalidate=60, stale-if-error=86400");
+    assertEquals(res.headers.get("cache-control"), "public, max-age=600, stale-while-revalidate=86400, stale-if-error=86400");
     assertEquals(res.headers.get("content-type"), "application/json; charset=utf-8");
     const meta = await res.json();
     assertEquals(meta.name, "react");

@@ -244,7 +244,7 @@ func TestRouterCacheRegressions(t *testing.T) {
 				if res.Code != 302 || res.Header().Get("Location") != want {
 					t.Errorf("%s%s: HTTP %d, location=%q, want %q", test.prefix, test.name+suffix, res.Code, res.Header().Get("Location"), want)
 				}
-				if got := res.Header().Get("Cache-Control"); got != "public, max-age=120, stale-while-revalidate=60, stale-if-error=86400" {
+				if got := res.Header().Get("Cache-Control"); got != "public, max-age=120, stale-while-revalidate=86400, stale-if-error=86400" {
 					t.Errorf("unexpected cache policy: %s", got)
 				}
 			}
@@ -282,7 +282,7 @@ func TestRouterCacheRegressions(t *testing.T) {
 				if res.Code != 200 || res.Header().Get("X-TypeScript-Types") != "http://localhost"+dts {
 					t.Fatalf("%s %s: HTTP %d, headers=%v, body=%s", method, version, res.Code, res.Header(), res.Body.String())
 				}
-				want := "public, max-age=120, stale-while-revalidate=60, stale-if-error=86400"
+				want := "public, max-age=120, stale-while-revalidate=86400, stale-if-error=86400"
 				if version == "@1.0.0" {
 					want = ccImmutable
 				}
@@ -320,7 +320,7 @@ func TestRouterCacheRegressions(t *testing.T) {
 					if res.Code != status {
 						t.Fatalf("%s %s%s: HTTP %d, want %d: %s", method, version, query, res.Code, status, res.Body.String())
 					}
-					want := "public, max-age=120, stale-while-revalidate=60, stale-if-error=86400"
+					want := "public, max-age=120, stale-while-revalidate=86400, stale-if-error=86400"
 					if version == "@1.0.0" {
 						want = ccImmutable
 					}
