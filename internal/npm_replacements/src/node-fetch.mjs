@@ -7,8 +7,7 @@ export const fileFrom = isNotSupport("fileFrom");
 export const fileFromSync = isNotSupport("fileFromSync");
 export const isRedirect = (code) => (code > 300 && code < 304) || (code > 306 && code < 309);
 
-fetch.isRedirect = isRedirect;
-fetch.Promise = globalThis.Promise;
+Object.assign(fetch, { default: fetch, Headers, Request, Response, FetchError, AbortError, isRedirect, Promise: globalThis.Promise });
 export default fetch;
 
 function isNotSupport(fn) {

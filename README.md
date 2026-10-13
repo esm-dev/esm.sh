@@ -275,6 +275,8 @@ esm.sh introduces the `?external` for specifying external dependencies. By emplo
 </script>
 ```
 
+Use `?external=preact/*` to keep subpath imports such as `preact/hooks` unchanged. Use `?external=preact` to keep both the package root and its subpaths unchanged.
+
 Alternatively, you can **mark all dependencies as external** by adding a `*` prefix before the package name:
 
 ```json
@@ -423,8 +425,8 @@ In case the type definitions provided by the `X-TypeScript-Types` header is inco
 import unescape from "https://esm.sh/lodash/unescape?no-dts";
 ```
 
-This will prevent the `X-TypeScript-Types` header from being included in the network request, and you can manually
-specify the types for the imported module.
+This disables the `X-TypeScript-Types` header for the module. esm.sh also passes this option to generated dependency
+URLs. The `?no-check` query is an alias for `?no-dts`. You can manually specify the types for the imported module.
 
 ## esm.sh Configuration
 

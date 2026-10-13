@@ -24,6 +24,12 @@ import (
 	"github.com/esm-dev/esm.sh/internal/importmap"
 	"github.com/esm-dev/esm.sh/internal/storage"
 	esbuild "github.com/ije/esbuild-internal/api"
+	"github.com/ije/esbuild-internal/ast"
+	"github.com/ije/esbuild-internal/cache"
+	esbuild_config "github.com/ije/esbuild-internal/config"
+	"github.com/ije/esbuild-internal/fs"
+	esbuild_logger "github.com/ije/esbuild-internal/logger"
+	"github.com/ije/esbuild-internal/resolver"
 	"github.com/ije/esbuild-internal/xxhash"
 	"github.com/ije/gox/log"
 	"github.com/ije/gox/set"
@@ -73,7 +79,11 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 		header := w.Header()
 
 		// ban malicious requests
-		if strings.HasSuffix(pathname, ".env") || strings.HasSuffix(pathname, ".php") || strings.Contains(pathname, "/.") {
+		hasDotPath := strings.Contains(pathname, "/.")
+		if hasDotPath {
+			hasDotPath = strings.Contains(strings.ReplaceAll(pathname, "/node_modules/.pnpm/", "/node_modules/"), "/.")
+		}
+		if strings.HasSuffix(pathname, ".env") || strings.HasSuffix(pathname, ".php") || hasDotPath {
 			header.Set("Cache-Control", ccImmutable)
 			writeStatus(w, 404, "not found")
 			return
@@ -744,6 +754,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 		// parse the query
 		// todo: validate query
 		query := r.URL.Query()
+		noDts := !strings.HasSuffix(pathname, ".css") && (query.Has("no-dts") || query.Has("no-check"))
 
 		// use `?path=$PATH` query to override the pathname
 		if v := query.Get("path"); v != "" {
@@ -1124,7 +1135,29 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 							writePackageError(w, err)
 							return
 						}
-						entry := b.resolveEntry(esmPath)
+						var entry BuildEntry
+						if ext := path.Ext(esmPath.SubPath); len(ext) > 1 && assetExts[ext[1:]] && b.pkgJson.Exports.Len() > 0 {
+							fsys, err := fs.RealFS(fs.RealFSOptions{AbsWorkingDir: b.wd})
+							if err != nil {
+								writeStatus(w, 500, err.Error())
+								return
+							}
+							pkgDir := fsys.Join(b.wd, "node_modules", esmPath.PkgName)
+							pkgName := b.pkgJson.Name
+							if b.pkgJson.PkgName != "" {
+								pkgName = b.pkgJson.PkgName
+							}
+							res := resolver.NewResolver(esbuild_config.BuildCall, fsys, esbuild_logger.NewDeferLog(esbuild_logger.DeferLogNoVerboseOrDebug, nil), cache.MakeCacheSet(), &esbuild_config.Options{
+								Platform: esbuild_config.PlatformNeutral, PreserveSymlinks: true, TSConfigRaw: "{}",
+							})
+							if resolved, _ := res.Resolve(pkgDir, pkgName+"/"+esmPath.SubPath, ast.ImportStmt); resolved != nil {
+								if subpath, ok := fsys.Rel(pkgDir, resolved.PathPair.Primary.Text); ok && subpath != ".." && !strings.HasPrefix(subpath, "../") {
+									entry.main = "./" + subpath
+								}
+							}
+						} else {
+							entry = b.resolveEntry(esmPath)
+						}
 						if entry.main != "" && entry.main != "./"+esmPath.SubPath {
 							query := ""
 							if rawQuery != "" {
@@ -1192,7 +1225,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 			}
 
 			// serve build/dts files
-			if pathKind == EsmBuild || pathKind == EsmSourceMap || pathKind == EsmDts {
+			if (pathKind == EsmBuild && (!noDts || (xArgs != nil && xArgs.NoDts))) || pathKind == EsmSourceMap || pathKind == EsmDts {
 				var savePath string
 				if asteriskPrefix {
 					pathname = "/*" + pathname[1:]
@@ -1431,6 +1464,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 		if xArgs != nil {
 			buildArgs = *xArgs
 		}
+		buildArgs.NoDts = buildArgs.NoDts || noDts
 
 		// build and return the types(.d.ts) file
 		if pathKind == EsmDts {
@@ -1573,6 +1607,10 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 			target:      target,
 			dev:         dev,
 		}
+		if pathKind == EsmBuild && noDts && (xArgs == nil || !xArgs.NoDts) {
+			redirect(w, origin+build.Path()+"?"+r.URL.RawQuery, isExactVersion)
+			return
+		}
 		buildMeta, ok, err := build.Exists()
 		if err != nil {
 			writeStatus(w, 500, err.Error())
@@ -1613,7 +1651,9 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 		// redirect to `*.d.ts` file
 		if buildMeta.TypesOnly {
 			dtsUrl := origin + buildMeta.Dts
-			header.Set("X-TypeScript-Types", dtsUrl)
+			if !buildArgs.NoDts {
+				header.Set("X-TypeScript-Types", dtsUrl)
+			}
 			header.Set("Content-Type", ctJavaScript)
 			if isExactVersion {
 				header.Set("Cache-Control", ccImmutable)
@@ -1805,7 +1845,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 					))
 					return
 				}
-				if noDts := query.Has("no-dts") || query.Has("no-check"); !noDts && buildMeta.Dts != "" {
+				if !buildArgs.NoDts && buildMeta.Dts != "" {
 					header.Set("X-TypeScript-Types", origin+buildMeta.Dts)
 					header.Set("Access-Control-Expose-Headers", "X-TypeScript-Types")
 				}
@@ -1883,7 +1923,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 				}
 			}
 			header.Set("X-ESM-Path", esmPath)
-			if noDts := query.Has("no-dts") || query.Has("no-check"); !noDts && buildMeta.Dts != "" {
+			if !buildArgs.NoDts && buildMeta.Dts != "" {
 				header.Set("X-TypeScript-Types", origin+buildMeta.Dts)
 				header.Set("Access-Control-Expose-Headers", "X-ESM-Path, X-TypeScript-Types")
 			} else {
