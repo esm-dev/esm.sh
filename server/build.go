@@ -18,6 +18,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/esm-dev/esm.sh/internal/npm"
 	"github.com/esm-dev/esm.sh/internal/npm_replacements"
 	"github.com/esm-dev/esm.sh/internal/storage"
@@ -418,7 +419,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 		buf := &bytes.Buffer{}
 		fmt.Fprintf(buf, `import * as cjsm from "%s";`, entrySpecifier)
 		if len(cjsExports) > 0 {
-			fmt.Fprintf(buf, `export const { %s } = cjsm;`, strings.Join(cjsExports, ","))
+			fmt.Fprintf(buf, `export { %s } from "%s";`, strings.Join(cjsExports, ","), entrySpecifier)
 		}
 		buf.WriteString("export default cjsm.default ?? cjsm;")
 		stdin = esbuild.StdinOptions{
@@ -427,9 +428,15 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 		}
 	}
 
+	var dependencyRootVersions sync.Map
+	var rootVersion *semver.Version
+	if ctx.bundleMode == BundleDeps && !ctx.externalAll && ctx.args.Alias[ctx.pkgJson.Name] == "" {
+		rootVersion, _ = semver.NewVersion(ctx.pkgJson.Version)
+	}
 	browserExclude := map[string]*set.Set[string]{}
 	implicitExternal := set.New[string]()
 	noBundle := !ctx.shouldBundle()
+	nativeResolve := new(bool)
 	esmifyPlugin := esbuild.Plugin{
 		Name: "esmify",
 		Setup: func(build esbuild.PluginBuild) {
@@ -437,7 +444,42 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 			build.OnResolve(
 				esbuild.OnResolveOptions{Filter: ".*"},
 				func(args esbuild.OnResolveArgs) (esbuild.OnResolveResult, error) {
+					if args.PluginData == nativeResolve {
+						return esbuild.OnResolveResult{}, nil
+					}
+
 					// entry point
+					if rootVersion != nil && (args.Path == ctx.pkgJson.Name || strings.HasPrefix(args.Path, ctx.pkgJson.Name+"/")) && !isExternalModule(args.Path, ctx.args.External) {
+						importer, ok := strings.CutPrefix(args.Importer, path.Join(ctx.wd, "node_modules")+"/")
+						importerName := toPackageName(importer)
+						if ok && importerName != ctx.pkgJson.Name {
+							cached, ok := dependencyRootVersions.Load(importerName)
+							if !ok {
+								var raw npm.PackageJSONRaw
+								if err := utils.ParseJSONFile(path.Join(ctx.wd, "node_modules", importerName, "package.json"), &raw); err != nil {
+									return esbuild.OnResolveResult{}, err
+								}
+								pkg := raw.ToNpmPackage()
+								version := pkg.Dependencies[ctx.pkgJson.Name]
+								if version == "" {
+									version = pkg.PeerDependencies[ctx.pkgJson.Name]
+								}
+								if override := ctx.args.Deps[ctx.pkgJson.Name]; override != "" {
+									version = override
+								}
+								if constraint, err := semver.NewConstraint(version); err != nil || constraint.Check(rootVersion) {
+									version = ""
+								}
+								cached, _ = dependencyRootVersions.LoadOrStore(importerName, version)
+							}
+							if version := cached.(string); version != "" {
+								specifier := ctx.pkgJson.Name + "@" + version + strings.TrimPrefix(args.Path, ctx.pkgJson.Name)
+								externalPath, sideEffects, err := ctx.resolveExternalModule(specifier, args.Kind, args.With["type"] == "json", analyzeMode)
+								return esbuild.OnResolveResult{Path: externalPath, SideEffects: sideEffects, External: true}, err
+							}
+						}
+					}
+
 					if args.Path == entryPoint || args.Path == entrySpecifier {
 						path := args.Path
 						if path == entrySpecifier {
@@ -584,6 +626,22 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 						specifier = strings.TrimPrefix(filename, path.Join(ctx.wd, "node_modules")+"/")
 					} else {
 						filename = path.Join(ctx.wd, "node_modules", specifier)
+						if !ctx.externalAll && !isExternalModule(specifier, ctx.args.External) {
+							pkgDir := ctx.getPkgFullPath("")
+							for dir := args.ResolveDir; dir == pkgDir || strings.HasPrefix(dir, pkgDir+"/"); dir = path.Dir(dir) {
+								if path.Base(dir) != "node_modules" && existsDir(path.Join(dir, "node_modules")) {
+									resolved := build.Resolve(specifier, esbuild.ResolveOptions{
+										Importer: args.Importer, Namespace: args.Namespace, ResolveDir: args.ResolveDir,
+										Kind: args.Kind, With: args.With, PluginData: nativeResolve,
+									})
+									if len(resolved.Errors) == 0 && strings.HasPrefix(resolved.Path, pkgDir+"/") {
+										filename = resolved.Path
+										specifier = strings.TrimPrefix(filename, path.Join(ctx.wd, "node_modules")+"/")
+									}
+									break
+								}
+							}
+						}
 					}
 
 					// check if the filename is within the working directory
@@ -631,7 +689,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 					// bundles all dependencies in `bundle` mode, apart from peerDependencies and `?external` flag
 					if !isRelPathSpecifier(specifier) {
 						pkgName := toPackageName(specifier)
-						if ctx.bundleMode == BundleDeps && !ctx.args.External.Has(pkgName) && !isPackageInExternalNamespace(pkgName, ctx.args.External) && !implicitExternal.Has(specifier) {
+						if ctx.bundleMode == BundleDeps && !isExternalModule(specifier, ctx.args.External) && !implicitExternal.Has(specifier) {
 							_, ok := pkgJson.PeerDependencies[pkgName]
 							_, originalPeer := pkgJson.PeerDependencies[toPackageName(originalSpecifier)]
 							if !ok && !originalPeer {
@@ -708,14 +766,14 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 										// exports: "./foo": "./foo.js"
 										match = true
 									} else if m, ok := v.(npm.JSONObject); ok {
-										// exports: "./foo": { "import": "./foo.js" }
-										// exports: "./foo": { "import": { default: "./foo.js" } }
-										// ...
-										paths := getExportConditionPaths(m)
-										for _, path := range paths {
-											if stripModuleExt(path) == stripModuleExt(modulePath) {
-												match = true
-												break
+										exportEntry := ctx.resolveConditionExportEntry(m, pkgJson.Type)
+										match = stripModuleExt(exportEntry.main) == stripModuleExt(modulePath)
+										if !match && path.Join(pkgJson.Name, stripModuleExt(exportName)) == entrySpecifier {
+											for _, p := range getExportConditionPaths(m) {
+												if stripModuleExt(p) == stripModuleExt(modulePath) {
+													match = true
+													break
+												}
 											}
 										}
 									}
@@ -829,6 +887,9 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 						bundleInternalModule := exportAs == "" && !isDynamicImport && ctx.shouldBundleInternalModules()
 						if modulePath == entry.main || exportAs == entrySpecifier || (!isDynamicImport && !noBundle) || bundleInternalModule {
 							if existsFile(resolvedFilename) {
+								if strings.HasSuffix(resolvedFilename, ".css") {
+									return esbuild.OnResolveResult{Path: resolvedFilename}, nil
+								}
 								pkgDir := path.Join(ctx.wd, "node_modules", pkgName)
 								short := strings.TrimPrefix(resolvedFilename, pkgDir)[1:]
 								if analyzeMode && resolvedFilename != entryModuleFilename && strings.HasPrefix(args.Importer, pkgDir) {
@@ -1032,7 +1093,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 					}
 					return esbuild.OnLoadResult{
 						Contents:   &out.Code,
-						ResolveDir: path.Join(ctx.wd, "node_modules", ctx.esmPath.PkgName),
+						ResolveDir: path.Dir(args.Path),
 						Loader:     esbuild.LoaderJS,
 					}, nil
 				},
@@ -1116,11 +1177,10 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 		if ctx.isBrowserTarget() && safeReserveProcessPackages[ctx.esmPath.PkgName] {
 			delete(define, "process")
 		}
-		if ctx.isDenoTarget() {
-			// deno 2 has removed the `window` global object, let's replace it with `globalThis`
-			define["window"] = "globalThis"
-		}
 		for k, v := range define {
+			if k == "process" {
+				continue
+			}
 			define["global."+k] = v
 			define["globalThis."+k] = v
 		}
@@ -1730,6 +1790,17 @@ func (ctx *BuildContext) install() (err error) {
 		}
 
 		ctx.wd = path.Join(ctx.npmrc.StoreDir(), ctx.esmPath.PackageId())
+		if len(ctx.args.Deps) > 0 {
+			pkgDir := path.Join(ctx.wd, "node_modules", ctx.esmPath.PkgName)
+			ctx.wd = path.Join(ctx.wd, fmt.Sprintf("deps-%x", sha512.Sum512_256([]byte(encodeBuildArgs(BuildArgs{Deps: ctx.args.Deps}, false)))))
+			linkDir := path.Join(ctx.wd, "node_modules", ctx.esmPath.PkgName)
+			if err := ensureDir(path.Dir(linkDir)); err != nil {
+				return err
+			}
+			if err := os.Symlink(pkgDir, linkDir); err != nil && !os.IsExist(err) {
+				return err
+			}
+		}
 		ctx.pkgJson = p
 	}
 
@@ -1737,14 +1808,14 @@ func (ctx *BuildContext) install() (err error) {
 	// - install '@babel/runtime' and '@swc/helpers' if they are present in the dependencies in `BundleDefault` mode
 	switch ctx.bundleMode {
 	case BundleDeps:
-		err = ctx.npmrc.installDependenciesContext(ctx.Context(), ctx.wd, ctx.pkgJson, false, nil)
+		err = ctx.npmrc.installDependenciesContext(ctx.Context(), ctx.wd, ctx.pkgJson, false, ctx.args.Deps, nil)
 	case BundleDefault:
 		if v, ok := ctx.pkgJson.Dependencies["@babel/runtime"]; ok {
-			err = ctx.npmrc.installDependenciesContext(ctx.Context(), ctx.wd, &npm.PackageJSON{Dependencies: map[string]string{"@babel/runtime": v}}, false, nil)
+			err = ctx.npmrc.installDependenciesContext(ctx.Context(), ctx.wd, &npm.PackageJSON{Dependencies: map[string]string{"@babel/runtime": v}}, false, ctx.args.Deps, nil)
 		}
 		if err == nil {
 			if v, ok := ctx.pkgJson.Dependencies["@swc/helpers"]; ok {
-				err = ctx.npmrc.installDependenciesContext(ctx.Context(), ctx.wd, &npm.PackageJSON{Dependencies: map[string]string{"@swc/helpers": v}}, false, nil)
+				err = ctx.npmrc.installDependenciesContext(ctx.Context(), ctx.wd, &npm.PackageJSON{Dependencies: map[string]string{"@swc/helpers": v}}, false, ctx.args.Deps, nil)
 			}
 		}
 	}
