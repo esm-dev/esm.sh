@@ -154,9 +154,9 @@ RETRY:
 	err = cmd.Run()
 	if err != nil {
 		if stderr.Len() > 0 {
-			msg := stderr.String()
-			if strings.HasPrefix(msg, "thread 'main' panicked at") {
-				formattedMessage := strings.Split(msg, "\n")[1]
+			msg := strings.TrimSpace(stderr.String())
+			if header, message, ok := strings.Cut(msg, "\n"); ok && strings.HasPrefix(header, "thread 'main' ") && strings.Contains(header, " panicked at ") {
+				formattedMessage, _, _ := strings.Cut(message, "\n")
 				if strings.HasPrefix(formattedMessage, "failed to resolve reexport: NotFound(") && !retried {
 					retried = true
 					// install dependencies and retry
