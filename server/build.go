@@ -1032,7 +1032,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 					}
 					return esbuild.OnLoadResult{
 						Contents:   &out.Code,
-						ResolveDir: path.Join(ctx.wd, "node_modules", ctx.esmPath.PkgName),
+						ResolveDir: path.Dir(args.Path),
 						Loader:     esbuild.LoaderJS,
 					}, nil
 				},
