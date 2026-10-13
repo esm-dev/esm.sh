@@ -435,6 +435,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 	}
 	browserExclude := map[string]*set.Set[string]{}
 	implicitExternal := set.New[string]()
+	solidJSXRuntimes := set.New[string]()
 	noBundle := !ctx.shouldBundle()
 	nativeResolve := new(bool)
 	esmifyPlugin := esbuild.Plugin{
@@ -1016,6 +1017,9 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 					if err != nil {
 						return esbuild.OnResolveResult{}, err
 					}
+					if (specifier == "solid-js/jsx-runtime" || specifier == "solid-js/jsx-dev-runtime") && toPackageName(externalPath) == "solid-js" {
+						solidJSXRuntimes.Add(externalPath)
+					}
 					return esbuild.OnResolveResult{
 						Path:        externalPath,
 						External:    true,
@@ -1331,6 +1335,9 @@ REBUILD:
 
 	for _, file := range res.OutputFiles {
 		if strings.HasSuffix(file.Path, ".js") {
+			if err = validateSolidJSX(file.Contents, solidJSXRuntimes); err != nil {
+				return
+			}
 			header := bytes.NewBufferString("/* esm.sh - ")
 			if ctx.esmPath.GhPrefix {
 				header.WriteString("github:")
