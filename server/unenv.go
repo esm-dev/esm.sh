@@ -119,8 +119,13 @@ func buildUnenvNodeRuntime() (err error) {
 							return esbuild.OnLoadResult{}, err
 						}
 						// A fake Node version makes Emscripten use Node APIs in browsers.
-						code := strings.ReplaceAll(string(data), "return { node: NODE_VERSION };", "return {};")
-						code = strings.ReplaceAll(code, "return `v${NODE_VERSION}`;", `return "";`)
+						code := string(data)
+						for from, to := range map[string]string{"return { node: NODE_VERSION };": "return {};", "return `v${NODE_VERSION}`;": `return "";`} {
+							if !strings.Contains(code, from) {
+								return esbuild.OnLoadResult{}, errors.New("unenv process patch is out of date: " + from)
+							}
+							code = strings.ReplaceAll(code, from, to)
+						}
 						return esbuild.OnLoadResult{Contents: &code, Loader: esbuild.LoaderJS}, nil
 					})
 					// https://github.com/unjs/unenv/issues/365

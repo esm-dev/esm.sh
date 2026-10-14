@@ -441,9 +441,55 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 	solidJSXRuntimes := set.New[string]()
 	noBundle := !ctx.shouldBundle()
 	nativeResolve := new(bool)
+	probeResolve := new(bool)
+	var exportStarExternal sync.Map
 	esmifyPlugin := esbuild.Plugin{
 		Name: "esmify",
 		Setup: func(build esbuild.PluginBuild) {
+			// reports whether `export *` in the module reaches an external module, directly or through bundled modules
+			var hasExternalExportStar func(filename string, visiting []string) (external bool, cyclic bool)
+			hasExternalExportStar = func(filename string, visiting []string) (external bool, cyclic bool) {
+				if v, ok := exportStarExternal.Load(filename); ok {
+					return v.(bool), false
+				}
+				if slices.Contains(visiting, filename) {
+					return false, true
+				}
+				if !slices.Contains(moduleExts, path.Ext(filename)) {
+					return false, false
+				}
+				data, err := os.ReadFile(filename)
+				if err != nil || !bytes.Contains(data, []byte("export")) || !bytes.ContainsRune(data, '*') {
+					return false, false
+				}
+				ast, err := parseJS(filename, data)
+				if err != nil {
+					return false, false
+				}
+				visiting = append(visiting, filename)
+				for _, i := range ast.ExportStarImportRecords {
+					r := build.Resolve(ast.ImportRecords[i].Path.Text, esbuild.ResolveOptions{
+						Importer: filename, ResolveDir: path.Dir(filename), Kind: esbuild.ResolveJSImportStatement, PluginData: probeResolve,
+					})
+					// unresolved sources become implicit externals on rebuild
+					if len(r.Errors) > 0 || r.External {
+						external = true
+						break
+					}
+					ext, cyc := hasExternalExportStar(r.Path, visiting)
+					cyclic = cyclic || cyc
+					if ext {
+						external = true
+						break
+					}
+				}
+				// warning: a negative result inside a cycle depends on modules still being checked
+				if external || !cyclic {
+					exportStarExternal.Store(filename, external)
+				}
+				return
+			}
+
 			// resovler
 			build.OnResolve(
 				esbuild.OnResolveOptions{Filter: ".*"},
@@ -837,18 +883,14 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 							}
 						}
 
-						// Bundled export stars lose names when their source is external.
-						if entry.module && exportAs == "" && args.Kind == esbuild.ResolveJSImportStatement && slices.Contains(moduleExts, path.Ext(resolvedFilename)) {
-							data, readErr := os.ReadFile(resolvedFilename)
-							if readErr == nil && bytes.Contains(data, []byte("export")) && bytes.ContainsRune(data, '*') {
-								ast, parseErr := parseJS(resolvedFilename, data)
-								if parseErr == nil && len(ast.ExportStarImportRecords) > 0 {
-									externalPath, sideEffects, err := ctx.resolveExternalModule(specifier, args.Kind, withTypeJSON, analyzeMode)
-									if err != nil {
-										return esbuild.OnResolveResult{}, err
-									}
-									return esbuild.OnResolveResult{Path: externalPath, SideEffects: sideEffects, External: true}, nil
+						// bundled export stars lose names when their source is external
+						if entry.module && exportAs == "" && args.Kind == esbuild.ResolveJSImportStatement && args.PluginData != probeResolve {
+							if external, _ := hasExternalExportStar(resolvedFilename, nil); external {
+								externalPath, sideEffects, err := ctx.resolveExternalModule(specifier, args.Kind, withTypeJSON, analyzeMode)
+								if err != nil {
+									return esbuild.OnResolveResult{}, err
 								}
+								return esbuild.OnResolveResult{Path: externalPath, SideEffects: sideEffects, External: true}, nil
 							}
 						}
 
@@ -871,7 +913,8 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 								}
 								pkgDir := path.Join(ctx.wd, "node_modules", pkgName)
 								short := strings.TrimPrefix(resolvedFilename, pkgDir)[1:]
-								if analyzeMode && resolvedFilename != entryModuleFilename && strings.HasPrefix(args.Importer, pkgDir) {
+								probe := args.PluginData == probeResolve
+								if analyzeMode && !probe && resolvedFilename != entryModuleFilename && strings.HasPrefix(args.Importer, pkgDir) {
 									includesMu.Lock()
 									includes = append(includes, [2]string{short, strings.TrimPrefix(args.Importer, pkgDir)[1:]})
 									includesMu.Unlock()
@@ -888,7 +931,9 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 										External:    true,
 									}, nil
 								}
-								bundledModules.Add(resolvedFilename + suffix)
+								if !probe {
+									bundledModules.Add(resolvedFilename + suffix)
+								}
 								if strings.HasSuffix(resolvedFilename, ".wasm") {
 									return esbuild.OnResolveResult{
 										Path:      resolvedFilename,

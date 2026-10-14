@@ -34,7 +34,7 @@ func isCommitish(s string) bool {
 	return len(s) >= 7 && len(s) <= 40 && valid.IsHexString(s)
 }
 
-// isNodeBuiltinSpecifier checks if the given specifier is a node.js built-in module.
+// isNodeBuiltinSpecifier checks if the given specifier uses the `node:` scheme, including builtins missing from `nodeBuiltinModules`.
 func isNodeBuiltinSpecifier(specifier string) bool {
 	return strings.HasPrefix(specifier, "node:")
 }
