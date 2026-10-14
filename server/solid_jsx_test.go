@@ -117,6 +117,7 @@ func TestTransformSolidJSX(t *testing.T) {
 		{"react with runtime import", `export { createSignal } from "solid-js/jsx-runtime"; export default <div />;`, "react", false},
 		{"mapped hyperscript", `export default <div />;`, "solid-js", false},
 		{"mapped custom runtime", `export default <div />;`, "solid-js", false},
+		{"self-hosted", `export default <div />;`, "solid-js", true},
 		{"minified", `export default <div><span /><span /></div>;`, "solid-js", true},
 		{"hyperscript", `export default <div />;`, "solid-js/h", false},
 		{"react", `export default <div />;`, "react", false},
@@ -130,6 +131,8 @@ func TestTransformSolidJSX(t *testing.T) {
 				im.Imports.Set("solid-js/jsx-runtime", "https://esm.sh/solid-js@1.6.16/h/jsx-runtime")
 			case "mapped custom runtime":
 				im.Imports.Set("solid-js/jsx-runtime", "https://example.com/runtime.js")
+			case "self-hosted":
+				im.Imports.Set("solid-js/", "http://localhost:8080/solid-js@1.6.16/")
 			}
 			out, err := transform(&ResolvedTransformOptions{
 				TransformOptions: TransformOptions{Lang: "tsx", Code: tt.code, JSXImportSource: tt.source, Minify: tt.name == "minified"},

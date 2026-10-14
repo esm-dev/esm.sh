@@ -57,6 +57,7 @@ func cjsModuleLexer(b *BuildContext, cjsEntry string) (ret cjsModuleLexerResult,
 		version = "deno-" + denoVersion
 	}
 	h := sha1.New()
+	// warning: bump the suffix when the cached export filtering changes
 	h.Write([]byte(version + "-2"))
 	h.Write([]byte(cjsEntry))
 	h.Write([]byte(b.getNodeEnv()))
