@@ -762,7 +762,8 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 		// parse the query
 		// todo: validate query
 		query := r.URL.Query()
-		noDts := !strings.HasSuffix(pathname, ".css") && (query.Has("no-dts") || query.Has("no-check"))
+		// `?no-dts` only drops the `X-TypeScript-Types` header, it never changes the module
+		noDts := query.Has("no-dts") || query.Has("no-check")
 
 		// use `?path=$PATH` query to override the pathname
 		if v := query.Get("path"); v != "" {
@@ -1250,7 +1251,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 			}
 
 			// serve build/dts files
-			if (pathKind == EsmBuild && (!noDts || (xArgs != nil && xArgs.NoDts))) || pathKind == EsmSourceMap || pathKind == EsmDts {
+			if pathKind == EsmBuild || pathKind == EsmSourceMap || pathKind == EsmDts {
 				var savePath string
 				if asteriskPrefix {
 					pathname = "/*" + pathname[1:]
@@ -1493,7 +1494,6 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 		if xArgs != nil {
 			buildArgs = *xArgs
 		}
-		buildArgs.NoDts = buildArgs.NoDts || noDts
 
 		// build and return the types(.d.ts) file
 		if pathKind == EsmDts {
@@ -1636,10 +1636,6 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 			target:      target,
 			dev:         dev,
 		}
-		if pathKind == EsmBuild && noDts && (xArgs == nil || !xArgs.NoDts) {
-			redirect(w, origin+build.Path()+"?"+r.URL.RawQuery, isExactVersion)
-			return
-		}
 		buildMeta, ok, err := build.Exists()
 		if err != nil {
 			writeStatus(w, 500, err.Error())
@@ -1680,7 +1676,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 		// redirect to `*.d.ts` file
 		if buildMeta.TypesOnly {
 			dtsUrl := origin + buildMeta.Dts
-			if !buildArgs.NoDts {
+			if !noDts {
 				header.Set("X-TypeScript-Types", dtsUrl)
 			}
 			header.Set("Content-Type", ctJavaScript)
@@ -1883,7 +1879,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 					))
 					return
 				}
-				if !buildArgs.NoDts && buildMeta.Dts != "" {
+				if !noDts && buildMeta.Dts != "" {
 					header.Set("X-TypeScript-Types", origin+buildMeta.Dts)
 					header.Set("Access-Control-Expose-Headers", "X-TypeScript-Types")
 				}
@@ -1961,7 +1957,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 				}
 			}
 			header.Set("X-ESM-Path", esmPath)
-			if !buildArgs.NoDts && buildMeta.Dts != "" {
+			if !noDts && buildMeta.Dts != "" {
 				header.Set("X-TypeScript-Types", origin+buildMeta.Dts)
 				header.Set("Access-Control-Expose-Headers", "X-ESM-Path, X-TypeScript-Types")
 			} else {
