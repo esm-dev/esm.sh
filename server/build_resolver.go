@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path"
 	"slices"
@@ -342,7 +343,7 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 					}
 					*/
 					exportEntry = ctx.resolveConditionExportEntry(obj, pkgJson.Type)
-				} else if arr, ok := v.([]any); ok {
+				} else if arr, ok := v.([]any); ok && len(arr) > 0 {
 					/**
 					exports: {
 						".": ["./cjs/index.js", "./esm/index.js"]
@@ -924,7 +925,8 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 	// e.g. "react": "github:facebook/react#v18.2.0"
 	p, err := npm.ResolveDependencyVersion(pkgVersion)
 	if err != nil {
-		resolvedPath = fmt.Sprintf("/error.js?type=%s&name=%s&importer=%s", strings.ReplaceAll(err.Error(), " ", "-"), pkgName, ctx.esmPath.String())
+		resolvedPath = fmt.Sprintf("/error.js?type=%s&name=%s&importer=%s", url.QueryEscape(strings.ReplaceAll(err.Error(), " ", "-")), url.QueryEscape(pkgName), ctx.esmPath.String())
+		err = nil
 		return
 	}
 	if p.Url != "" {
@@ -961,17 +963,28 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 	if withTypeJSON {
 		resolvedPath = "/" + dep.String()
 		if subPath == "" || !strings.HasSuffix(subPath, ".json") {
+			// install the exact version, a range would be kept as the store directory name,
+			// but keep the range in the import url
+			installed := dep
+			if !dep.GhPrefix && !dep.PrPrefix && !npm.IsExactVersion(dep.PkgVersion) {
+				var p *npm.PackageJSON
+				p, err = ctx.npmrc.getPackageInfoContext(ctx.Context(), dep.PkgName, dep.PkgVersion)
+				if err != nil {
+					return
+				}
+				installed.PkgVersion = p.Version
+			}
 			b := &BuildContext{
 				npmrc:   ctx.npmrc,
 				logger:  ctx.logger,
-				esmPath: dep,
+				esmPath: installed,
 				ctx:     ctx.ctx,
 			}
 			err = b.install()
 			if err != nil {
 				return
 			}
-			entry := b.resolveEntry(dep)
+			entry := b.resolveEntry(installed)
 			if entry.main != "" {
 				resolvedPath = "/" + dep.PackageId() + entry.main[1:]
 			}
@@ -1091,36 +1104,41 @@ func (ctx *BuildContext) resolveDTS(entry BuildEntry) (string, error) {
 		}
 		for _, version := range versions {
 			p, err := ctx.npmrc.getPackageInfoContext(ctx.Context(), typesPkgName, version)
-			if err == nil {
-				dtsModule := EsmPath{
-					PkgName:    typesPkgName,
-					PkgVersion: p.Version,
-					SubPath:    ctx.esmPath.SubPath,
+			if err != nil {
+				// [warning] the result is cached with the build meta, so only a missing package may be skipped
+				if strings.HasSuffix(err.Error(), " not found") {
+					continue
 				}
-				b := &BuildContext{
-					npmrc:       ctx.npmrc,
-					logger:      ctx.logger,
-					esmPath:     dtsModule,
-					args:        ctx.args,
-					externalAll: ctx.externalAll,
-					target:      "types",
-					ctx:         ctx.ctx,
+				return "", err
+			}
+			dtsModule := EsmPath{
+				PkgName:    typesPkgName,
+				PkgVersion: p.Version,
+				SubPath:    ctx.esmPath.SubPath,
+			}
+			b := &BuildContext{
+				npmrc:       ctx.npmrc,
+				logger:      ctx.logger,
+				esmPath:     dtsModule,
+				args:        ctx.args,
+				externalAll: ctx.externalAll,
+				target:      "types",
+				ctx:         ctx.ctx,
+			}
+			err = b.install()
+			if err != nil {
+				if strings.Contains(err.Error(), " not found") {
+					return "", nil
 				}
-				err := b.install()
-				if err != nil {
-					if strings.Contains(err.Error(), " not found") {
-						return "", nil
-					}
-					return "", err
-				}
-				dts, err := b.resolveDTS(b.resolveEntry(dtsModule))
-				if err != nil {
-					return "", err
-				}
-				if dts != "" {
-					// use tilde semver range instead of the exact version
-					return strings.ReplaceAll(dts, fmt.Sprintf("%s@%s", typesPkgName, p.Version), fmt.Sprintf("%s@~%s", typesPkgName, p.Version)), nil
-				}
+				return "", err
+			}
+			dts, err := b.resolveDTS(b.resolveEntry(dtsModule))
+			if err != nil {
+				return "", err
+			}
+			if dts != "" {
+				// use tilde semver range instead of the exact version
+				return strings.ReplaceAll(dts, fmt.Sprintf("%s@%s", typesPkgName, p.Version), fmt.Sprintf("%s@~%s", typesPkgName, p.Version)), nil
 			}
 		}
 	}
@@ -1251,19 +1269,41 @@ lookup:
 
 	if version == "" {
 		if v, ok := ctx.pkgJson.Dependencies[pkgName]; ok {
-			if strings.HasPrefix(v, "npm:") {
-				pkgName, version, _ = splitEsmPath(v[4:])
-			} else {
-				version = v
-			}
+			version = strings.TrimSpace(v)
 		} else if v, ok = ctx.pkgJson.PeerDependencies[pkgName]; ok {
-			if strings.HasPrefix(v, "npm:") {
-				pkgName, version, _ = splitEsmPath(v[4:])
-			} else {
-				version = v
-			}
+			version = strings.TrimSpace(v)
 		} else {
 			version = "latest"
+		}
+		var p npm.Package
+		p, err = npm.ResolveDependencyVersion(version)
+		if err != nil {
+			return
+		}
+		if p.Url != "" {
+			err = errors.New("unsupported http dependency: " + p.Url)
+			return
+		}
+		if p.Github || p.PkgPrNew {
+			if p.Github {
+				if err = pinGhDependency(ctx.Context(), &p); err != nil {
+					return
+				}
+			}
+			packageJson, err = ctx.npmrc.installPackageContext(ctx.Context(), p)
+			if err == nil {
+				esm = EsmPath{
+					GhPrefix:   p.Github,
+					PrPrefix:   p.PkgPrNew,
+					PkgName:    p.Name,
+					PkgVersion: p.Version,
+					SubPath:    stripEntryModuleExt(subPath),
+				}
+			}
+			return
+		}
+		if p.Name != "" {
+			pkgName, version = p.Name, p.Version
 		}
 	}
 

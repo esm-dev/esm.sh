@@ -10,6 +10,7 @@ import (
 	"runtime/debug"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/andybalholm/brotli"
@@ -19,6 +20,11 @@ import (
 // the minimum content size to enable compression
 const compressMinSize = 1024
 
+var (
+	brWriterPool   = sync.Pool{New: func() any { return brotli.NewWriterLevel(nil, brotli.BestSpeed) }}
+	gzipWriterPool = sync.Pool{New: func() any { zw, _ := gzip.NewWriterLevel(nil, gzip.BestSpeed); return zw }}
+)
+
 // withRecovery returns a middleware that sets the `Server` header and recovers
 // from panics in the next handlers.
 func withRecovery(logger *log.Logger, next http.Handler) http.Handler {
@@ -26,6 +32,7 @@ func withRecovery(logger *log.Logger, next http.Handler) http.Handler {
 		defer func() {
 			if v := recover(); v != nil {
 				logger.Errorf("[panic] %v\n%s", v, debug.Stack())
+				w.Header().Del("Content-Type")
 				writeStatus(w, 500, "Internal Server Error")
 			}
 		}()
@@ -169,9 +176,13 @@ func (w *compressResponseWriter) WriteHeader(code int) {
 				h.Set("Content-Encoding", w.encoding)
 				h.Del("Content-Length")
 				if w.encoding == "br" {
-					w.zWriter = brotli.NewWriterLevel(w.ResponseWriter, brotli.BestSpeed)
+					zw := brWriterPool.Get().(*brotli.Writer)
+					zw.Reset(w.ResponseWriter)
+					w.zWriter = zw
 				} else {
-					w.zWriter, _ = gzip.NewWriterLevel(w.ResponseWriter, gzip.BestSpeed)
+					zw := gzipWriterPool.Get().(*gzip.Writer)
+					zw.Reset(w.ResponseWriter)
+					w.zWriter = zw
 				}
 			}
 		}
@@ -190,10 +201,18 @@ func (w *compressResponseWriter) Write(p []byte) (int, error) {
 }
 
 func (w *compressResponseWriter) Close() error {
-	if w.zWriter != nil {
-		return w.zWriter.Close()
+	if w.zWriter == nil {
+		return nil
 	}
-	return nil
+	err := w.zWriter.Close()
+	switch zw := w.zWriter.(type) {
+	case *brotli.Writer:
+		brWriterPool.Put(zw)
+	case *gzip.Writer:
+		gzipWriterPool.Put(zw)
+	}
+	w.zWriter = nil
+	return err
 }
 
 func (w *compressResponseWriter) Unwrap() http.ResponseWriter {
@@ -206,7 +225,8 @@ func isCompressibleContentType(contentType string) bool {
 		strings.HasPrefix(contentType, "application/typescript") ||
 		strings.HasPrefix(contentType, "application/json") ||
 		strings.HasPrefix(contentType, "application/xml") ||
-		strings.HasPrefix(contentType, "application/wasm"))
+		strings.HasPrefix(contentType, "application/wasm") ||
+		strings.HasPrefix(contentType, "image/svg+xml"))
 }
 
 // remoteIP follows forwarded addresses only through configured trusted proxies.
@@ -220,7 +240,8 @@ func remoteIP(r *http.Request) string {
 		return host
 	}
 	ip = ip.Unmap()
-	forwarded := r.Header.Get("X-Forwarded-For")
+	// a proxy may append its own `X-Forwarded-For` line instead of extending the client's one
+	forwarded := strings.Join(r.Header.Values("X-Forwarded-For"), ",")
 	if forwarded == "" {
 		forwarded = r.Header.Get("X-Real-IP")
 	}

@@ -24,6 +24,12 @@ func esmLegacyRouter(fs storage.Storage, next http.Handler) http.Handler {
 		method := r.Method
 		pathname := r.URL.Path
 
+		// legacy paths map to storage keys directly, let `esmRouter` reject dot segments
+		if strings.Contains(pathname, "/.") {
+			next.ServeHTTP(w, r)
+			return
+		}
+
 	START:
 		// build API (deprecated)
 		if pathname == "/build" {
@@ -85,7 +91,7 @@ func esmLegacyRouter(fs storage.Storage, next http.Handler) http.Handler {
 		// `/v135/react-dom@18.3.1/es2022/react-dom.mjs`
 		if strings.HasPrefix(pathname, "/v") {
 			legacyBuildVersion, path := utils.SplitByFirstByte(pathname[2:], '/')
-			if valid.IsDigtalOnlyString(legacyBuildVersion) {
+			if legacyBuildVersion != "" && valid.IsDigtalOnlyString(legacyBuildVersion) {
 				bv, _ := strconv.Atoi(legacyBuildVersion)
 				if bv <= 0 || bv > 135 {
 					writeStatus(w, 400, "Invalid Module Path")

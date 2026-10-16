@@ -2,6 +2,7 @@ package server
 
 import (
 	"archive/zip"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -11,6 +12,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/ije/gox/utils"
 )
@@ -60,7 +62,13 @@ func installDeno(installPath string, version string) (err error) {
 		return
 	}
 
-	res, err := http.Get(url)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return
+	}
+	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return
 	}
@@ -70,49 +78,53 @@ func installDeno(installPath string, version string) (err error) {
 		return fmt.Errorf("failed to download Deno install package: %s", res.Status)
 	}
 
-	tmpFile := filepath.Join(os.TempDir(), "deno.zip")
-	defer os.Remove(tmpFile)
-
-	f, err := os.OpenFile(tmpFile, os.O_CREATE|os.O_WRONLY, 0644)
+	installDir := filepath.Dir(installPath)
+	zf, err := os.CreateTemp(installDir, ".deno-*.zip")
 	if err != nil {
 		return
 	}
-	defer f.Close()
+	defer os.Remove(zf.Name())
+	defer zf.Close()
 
-	_, err = io.Copy(f, res.Body)
+	size, err := io.Copy(zf, res.Body)
 	if err != nil {
 		return
 	}
 
-	zr, err := zip.OpenReader(tmpFile)
+	zr, err := zip.NewReader(zf, size)
 	if err != nil {
 		return
 	}
-	defer zr.Close()
 
-	for _, zf := range zr.File {
-		if zf.Name == "deno" || zf.Name == "deno.exe" {
-			r, err := zf.Open()
+	for _, entry := range zr.File {
+		if entry.Name == "deno" || entry.Name == "deno.exe" {
+			r, err := entry.Open()
 			if err != nil {
 				return err
 			}
 			defer r.Close()
 
-			f, err := os.OpenFile(installPath, os.O_CREATE|os.O_WRONLY, 0755)
+			f, err := os.CreateTemp(installDir, ".deno-*")
 			if err != nil {
 				return err
 			}
+			defer os.Remove(f.Name())
 			defer f.Close()
 
-			_, err = io.Copy(f, r)
-			if err != nil {
+			if _, err = io.Copy(f, r); err != nil {
 				return err
 			}
-			break
+			if err = f.Chmod(0755); err != nil {
+				return err
+			}
+			if err = f.Close(); err != nil {
+				return err
+			}
+			return os.Rename(f.Name(), installPath)
 		}
 	}
 
-	return nil
+	return errors.New("deno binary not found in the install package")
 }
 
 func getDenoDownloadURL(version string) (string, error) {

@@ -24,12 +24,23 @@ type dtsFile struct {
 	err     error
 }
 
+type dtsResolutionKey struct {
+	specifier string
+	kind      TsImportKind
+}
+
+type dtsResolution struct {
+	specifier string
+	err       error
+}
+
 type dtsTransform struct {
-	ctx     context.Context
-	storage storage.Storage
-	files   map[string]*dtsFile
-	slots   chan struct{}
-	pending sync.WaitGroup
+	ctx         context.Context
+	storage     storage.Storage
+	files       map[string]*dtsFile
+	resolutions map[dtsResolutionKey]dtsResolution
+	slots       chan struct{}
+	pending     sync.WaitGroup
 }
 
 // stat prefetches storage metadata while the caller walks the declaration graph.
@@ -80,7 +91,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, transfo
 	if entry {
 		buildCtx, cancel := context.WithCancel(ctx.Context())
 		defer cancel()
-		transform = &dtsTransform{ctx: buildCtx, storage: ctx.storage, files: map[string]*dtsFile{}, slots: make(chan struct{}, 16)}
+		transform = &dtsTransform{ctx: buildCtx, storage: ctx.storage, files: map[string]*dtsFile{}, resolutions: map[dtsResolutionKey]dtsResolution{}, slots: make(chan struct{}, 16)}
 		defer func() {
 			if err != nil {
 				cancel()
@@ -92,7 +103,11 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, transfo
 		return
 	}
 
-	savePath := normalizeSavePath(path.Join("types", "/"+ctx.esmPath.PackageId(), buildArgsPrefix, dts))
+	pkgDir := ctx.esmPath.PackageId()
+	if ctx.externalAll {
+		pkgDir = "*" + pkgDir
+	}
+	savePath := normalizeSavePath(path.Join("types", pkgDir, buildArgsPrefix, dts))
 	file := transform.stat(savePath)
 	if file.visited {
 		return
@@ -127,26 +142,23 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, transfo
 	buffer := &bytes.Buffer{}
 
 	deps := map[string]*dtsFile{}
-	type resolutionKey struct {
-		specifier string
-		kind      TsImportKind
-	}
-	type resolutionValue struct {
-		specifier string
-		err       error
-	}
-	resolutions := map[resolutionKey]resolutionValue{}
+	resolutions := map[dtsResolutionKey]dtsResolution{}
 
 	err = parseDts(dtsContent, buffer, func(specifier string, kind TsImportKind, position int) (resolvedSpecifier string, resolveErr error) {
 		if err := transform.ctx.Err(); err != nil {
 			return "", err
 		}
-		key := resolutionKey{specifier, kind}
-		if cached, ok := resolutions[key]; ok {
+		key := dtsResolutionKey{specifier, kind}
+		cache := resolutions
+		// relative and `#` imports resolve against the importing file, others are shared by the whole walk
+		if s := normalizeImportSpecifier(specifier); !isRelPathSpecifier(s) && !strings.HasPrefix(s, "#") {
+			cache = transform.resolutions
+		}
+		if cached, ok := cache[key]; ok {
 			return cached.specifier, cached.err
 		}
 		defer func() {
-			resolutions[key] = resolutionValue{resolvedSpecifier, resolveErr}
+			cache[key] = dtsResolution{resolvedSpecifier, resolveErr}
 		}()
 
 		if ctx.esmPath.PkgName == "@types/node" {
@@ -249,7 +261,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, transfo
 			}
 
 			if endsWith(specifier, ".d.ts", ".d.mts", ".d.cts") {
-				deps[specifier] = transform.stat(normalizeSavePath(path.Join("types", "/"+ctx.esmPath.PackageId(), buildArgsPrefix, path.Dir(dts), specifier)))
+				deps[specifier] = transform.stat(normalizeSavePath(path.Join("types", pkgDir, buildArgsPrefix, path.Dir(dts), specifier)))
 			} else {
 				specifier += ".d.ts"
 			}
@@ -341,12 +353,13 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, transfo
 			depPkgVersion = ""
 		}
 
+		var dep EsmPath
 		var p *npm.PackageJSON
 		var err error
 		if depPkgVersion != "" {
 			p, err = ctx.npmrc.getPackageInfoContext(ctx.Context(), depPkgName, depPkgVersion)
 		} else {
-			_, p, err = ctx.resolveDependency(depPkgName, true)
+			dep, p, err = ctx.resolveDependency(depPkgName, true)
 		}
 		if err != nil {
 			if kind == TsDeclareModule && strings.HasSuffix(err.Error(), " not found") {
@@ -359,6 +372,10 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, transfo
 			PkgName:    p.Name,
 			PkgVersion: p.Version,
 			SubPath:    stripEntryModuleExt(subPath),
+		}
+		if dep.GhPrefix || dep.PrPrefix {
+			dep.SubPath = dtsModule.SubPath
+			dtsModule = dep
 		}
 		args := BuildArgs{
 			Alias:      ctx.args.Alias,
@@ -392,11 +409,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, transfo
 			return fmt.Sprintf("{ESM_CDN_ORIGIN}%s", dtsPath), nil
 		}
 
-		if kind == TsDeclareModule {
-			return fmt.Sprintf("{ESM_CDN_ORIGIN}/%s", dtsModule.String()), nil
-		}
-
-		return fmt.Sprintf("{ESM_CDN_ORIGIN}%s", b.Path()), nil
+		return fmt.Sprintf("{ESM_CDN_ORIGIN}/%s", dtsModule.String()), nil
 	})
 	dtsContent.Close()
 	if err != nil {

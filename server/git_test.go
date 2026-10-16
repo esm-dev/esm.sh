@@ -32,7 +32,7 @@ func (zeroReader) Read(p []byte) (int, error) {
 }
 
 func TestListRepoRefs(t *testing.T) {
-	refs, err := listGhRepoRefs("https://github.com/esm-dev/esm.sh")
+	refs, err := listGhRepoRefsContext(context.Background(), "https://github.com/esm-dev/esm.sh")
 	if err != nil {
 		t.Fatal(err)
 	}

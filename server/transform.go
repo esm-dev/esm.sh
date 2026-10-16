@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"sync"
 
 	"github.com/esm-dev/esm.sh/internal/importmap"
 	"github.com/esm-dev/esm.sh/internal/npm"
@@ -212,6 +213,9 @@ func treeShake(npmrc *NpmRC, pkg npm.Package, code []byte, exports []string, tar
 		Contents: fmt.Sprintf(`export { %s } from '.';`, strings.Join(exports, ", ")),
 		Loader:   esbuild.LoaderJS,
 	}
+	installPackage := sync.OnceValues(func() (*npm.PackageJSON, error) {
+		return npmrc.installPackage(pkg)
+	})
 	plugins := []esbuild.Plugin{
 		{
 			Name: "tree-shaking",
@@ -222,7 +226,7 @@ func treeShake(npmrc *NpmRC, pkg npm.Package, code []byte, exports []string, tar
 					}
 					sideEffects := esbuild.SideEffectsTrue
 					if isRelPathSpecifier(args.Path) {
-						pkgJson, err := npmrc.installPackage(pkg)
+						pkgJson, err := installPackage()
 						if err != nil {
 							return esbuild.OnResolveResult{}, err
 						}

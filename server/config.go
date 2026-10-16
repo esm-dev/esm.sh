@@ -242,9 +242,13 @@ func normalizeConfig(config *Config) {
 			config.NpmRegistry = npmRegistry
 		}
 	}
-	if config.NpmBackupRegistry != "" && config.NpmBackupRegistry == config.NpmRegistry {
-		fmt.Println(term.Red("[error] npm backup registry cannot be the same as the npm registry"))
-		config.NpmBackupRegistry = ""
+	if config.NpmBackupRegistry != "" {
+		backup := strings.TrimRight(config.NpmBackupRegistry, "/") + "/"
+		if !isHttpSpecifier(backup) || backup == config.NpmRegistry {
+			fmt.Println(term.Red("[error] npm backup registry must be an http(s) url other than the npm registry: " + config.NpmBackupRegistry))
+			backup = ""
+		}
+		config.NpmBackupRegistry = backup
 	}
 	if config.NpmToken == "" {
 		config.NpmToken = os.Getenv("NPM_TOKEN")
@@ -260,6 +264,14 @@ func normalizeConfig(config *Config) {
 		for scope, rc := range config.NpmScopedRegistries {
 			if strings.HasPrefix(scope, "@") && isHttpSpecifier(rc.Registry) {
 				rc.Registry = strings.TrimRight(rc.Registry, "/") + "/"
+				if rc.BackupRegistry != "" {
+					backup := strings.TrimRight(rc.BackupRegistry, "/") + "/"
+					if !isHttpSpecifier(backup) || backup == rc.Registry {
+						fmt.Printf("[error] invalid npm backup registry for scope %s: %s\n", scope, rc.BackupRegistry)
+						backup = ""
+					}
+					rc.BackupRegistry = backup
+				}
 				regs[scope] = rc
 			} else {
 				fmt.Printf("[error] invalid npm registry for scope %s: %s\n", scope, rc.Registry)

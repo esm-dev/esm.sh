@@ -1,10 +1,12 @@
 package server
 
 import (
+	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -14,13 +16,14 @@ import (
 // gate expensive or abusable endpoints. A feature registers a scope in
 // `powPolicies` and then calls `powVerify(scope, id, nonce)` to check the
 // solution submitted by the client.
+//
+// Challenges are stateless: the id carries the salt and the expiry, signed
+// with a per-process key, so minting them cannot exhaust server memory. Only
+// solved challenges are remembered, until they expire, to keep them single-use.
 
-const powChallengeMaxSize = 10000 // in-memory cap of pending challenges
+const powSolvedMaxSize = 10000 // in-memory cap of solved, unexpired challenges
 
-var (
-	errUnknownPowScope = errors.New("unknown proof-of-work scope")
-	errPowStoreFull    = errors.New("too many pending proof-of-work challenges")
-)
+var errUnknownPowScope = errors.New("unknown proof-of-work scope")
 
 // powPolicy describes how hard and how long the challenges of a scope are.
 type powPolicy struct {
@@ -35,17 +38,12 @@ var powPolicies = map[string]powPolicy{
 	"purge": {difficulty: 4, ttl: 2 * time.Minute},
 }
 
-type powChallenge struct {
-	salt       string
-	scope      string
-	difficulty int
-	expiresAt  time.Time
-}
+var powKey = []byte(randomHex(32))
 
-var powChallengeStore = struct {
+var powSolved = struct {
 	sync.Mutex
-	m map[string]powChallenge
-}{m: make(map[string]powChallenge)}
+	m map[string]int64 // challenge id -> expiry (unix seconds)
+}{m: make(map[string]int64)}
 
 // powChallengeResponse is the JSON body served by `GET /pow/challenge`.
 type powChallengeResponse struct {
@@ -62,44 +60,62 @@ func randomHex(size int) string {
 	return hex.EncodeToString(buffer)
 }
 
-// newPowChallenge mints a one-time challenge for the given scope. It fails
-// when the scope is unknown or too many challenges are pending (expired ones
-// are garbage collected once the store runs full).
+// powSign signs the `salt.expiry` payload of a challenge for the given scope.
+func powSign(scope string, payload string) string {
+	mac := hmac.New(sha256.New, powKey)
+	mac.Write([]byte(scope + "|" + payload))
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
+// newPowChallenge mints a one-time challenge for the given scope.
 func newPowChallenge(scope string) (*powChallengeResponse, error) {
 	policy, ok := powPolicies[scope]
 	if !ok {
 		return nil, errUnknownPowScope
 	}
-	now := time.Now()
-	powChallengeStore.Lock()
-	defer powChallengeStore.Unlock()
-	if len(powChallengeStore.m) >= powChallengeMaxSize {
-		for id, stored := range powChallengeStore.m {
-			if now.After(stored.expiresAt) {
-				delete(powChallengeStore.m, id)
-			}
-		}
-		if len(powChallengeStore.m) >= powChallengeMaxSize {
-			return nil, errPowStoreFull
-		}
-	}
-	challenge := powChallenge{salt: randomHex(16), scope: scope, difficulty: policy.difficulty, expiresAt: now.Add(policy.ttl)}
-	id := randomHex(16)
-	powChallengeStore.m[id] = challenge
-	return &powChallengeResponse{ID: id, Salt: challenge.salt, Scope: scope, Difficulty: challenge.difficulty}, nil
+	salt := randomHex(16)
+	payload := salt + "." + strconv.FormatInt(time.Now().Add(policy.ttl).Unix(), 10)
+	return &powChallengeResponse{ID: payload + "." + powSign(scope, payload), Salt: salt, Scope: scope, Difficulty: policy.difficulty}, nil
 }
 
 // powVerify checks a solved challenge. A challenge is single-use and only
 // valid for the scope it was minted for, so a valid solution cannot be
 // replayed across endpoints.
 func powVerify(scope string, id string, nonce string) bool {
-	powChallengeStore.Lock()
-	challenge, ok := powChallengeStore.m[id]
-	delete(powChallengeStore.m, id)
-	powChallengeStore.Unlock()
-	if !ok || challenge.scope != scope || time.Now().After(challenge.expiresAt) {
+	policy, ok := powPolicies[scope]
+	if !ok {
 		return false
 	}
-	sum := sha256.Sum256([]byte(challenge.salt + nonce))
-	return strings.HasPrefix(hex.EncodeToString(sum[:]), strings.Repeat("0", challenge.difficulty))
+	i := strings.LastIndexByte(id, '.')
+	if i < 0 || !hmac.Equal([]byte(id[i+1:]), []byte(powSign(scope, id[:i]))) {
+		return false
+	}
+	salt, expStr, _ := strings.Cut(id[:i], ".")
+	exp, err := strconv.ParseInt(expStr, 10, 64)
+	now := time.Now().Unix()
+	if err != nil || now > exp {
+		return false
+	}
+	sum := sha256.Sum256([]byte(salt + nonce))
+	if !strings.HasPrefix(hex.EncodeToString(sum[:]), strings.Repeat("0", policy.difficulty)) {
+		return false
+	}
+	powSolved.Lock()
+	defer powSolved.Unlock()
+	if _, used := powSolved.m[id]; used {
+		return false
+	}
+	if len(powSolved.m) >= powSolvedMaxSize {
+		for k, e := range powSolved.m {
+			if now > e {
+				delete(powSolved.m, k)
+			}
+		}
+		// fail closed: forgetting an unexpired solution would allow its replay
+		if len(powSolved.m) >= powSolvedMaxSize {
+			return false
+		}
+	}
+	powSolved.m[id] = exp
+	return true
 }

@@ -1,12 +1,16 @@
 package server
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/esm-dev/esm.sh/internal/npm"
 	"github.com/esm-dev/esm.sh/internal/storage"
@@ -529,5 +533,118 @@ func TestResolveEntryBrowserPath(t *testing.T) {
 				})
 			}
 		}
+	}
+}
+
+func TestResolveDTSRegistryError(t *testing.T) {
+	for _, tt := range []struct {
+		status  int
+		wantErr bool
+	}{
+		{404, false},
+		{503, true},
+	} {
+		t.Run(fmt.Sprint(tt.status), func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(tt.status)
+			}))
+			defer srv.Close()
+			ctx := &BuildContext{
+				npmrc:   &NpmRC{globalRegistry: &NpmRegistry{NpmRegistryConfig: NpmRegistryConfig{Registry: srv.URL + "/"}}},
+				esmPath: EsmPath{PkgName: "dts-registry-error", PkgVersion: "1.2.3"},
+				pkgJson: &npm.PackageJSON{Name: "dts-registry-error", Version: "1.2.3"},
+			}
+			dts, err := ctx.resolveDTS(BuildEntry{})
+			if (err != nil) != tt.wantErr || dts != "" {
+				t.Fatalf("resolveDTS = %q, %v; want error = %v", dts, err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestResolveExternalModuleUnsupportedDependency(t *testing.T) {
+	ctx := &BuildContext{
+		wd: t.TempDir(), target: "es2022",
+		esmPath: EsmPath{PkgName: "example", PkgVersion: "1.0.0"},
+		pkgJson: &npm.PackageJSON{Name: "example", Version: "1.0.0", Dependencies: map[string]string{"local": "file:../local"}},
+	}
+	got, _, err := ctx.resolveExternalModule("local", esbuild.ResolveJSImportStatement, false, false)
+	if err != nil || !strings.HasPrefix(got, "/error.js?type=unsupported-file-dependency&name=local&") {
+		t.Fatalf("resolved = %q, %v; want the error module", got, err)
+	}
+}
+
+func TestResolveDependencySpecs(t *testing.T) {
+	workDir := config.WorkDir
+	config.WorkDir = t.TempDir()
+	t.Cleanup(func() { config.WorkDir = workDir })
+	npmrc := &NpmRC{globalRegistry: &NpmRegistry{NpmRegistryConfig: NpmRegistryConfig{Registry: npmRegistry}}}
+	writeStorePackage(t, npmrc, npm.Package{Name: "real-pkg", Version: "1.0.0"}, `{"name":"real-pkg","version":"1.0.0"}`)
+	writeStorePackage(t, npmrc, npm.Package{Name: "owner/gh-pkg", Version: "abcdef1", Github: true}, `{"name":"gh-pkg","version":"0.1.0","type":"module"}`)
+	ctx := &BuildContext{
+		npmrc: npmrc, wd: t.TempDir(), target: "es2022",
+		esmPath: EsmPath{PkgName: "example", PkgVersion: "1.0.0"},
+		pkgJson: &npm.PackageJSON{Name: "example", Version: "1.0.0", Dependencies: map[string]string{
+			"alias": "npm:real-pkg@1.0.0",
+			"gh":    "github:owner/gh-pkg#abcdef1",
+			"url":   "https://example.com/pkg.tgz",
+		}},
+	}
+	for _, tt := range []struct {
+		specifier string
+		want      string
+		module    bool
+	}{
+		{"alias/sub", "real-pkg@1.0.0/sub", false},
+		{"gh", "gh/owner/gh-pkg@abcdef1", true},
+		{"url", "", false},
+	} {
+		t.Run(tt.specifier, func(t *testing.T) {
+			esm, p, err := ctx.resolveDependency(tt.specifier, false)
+			if tt.want == "" {
+				if err == nil {
+					t.Fatalf("resolved to %s, want an error", esm.String())
+				}
+				return
+			}
+			if err != nil || esm.String() != tt.want || (p.Type == "module") != tt.module {
+				t.Fatalf("resolved to %s, %v; want %s", esm.String(), err, tt.want)
+			}
+		})
+	}
+}
+
+func TestResolveEntryEmptyExportsArray(t *testing.T) {
+	var raw npm.PackageJSONRaw
+	if err := json.Unmarshal([]byte(`{"name":"empty-exports","version":"1.0.0","exports":{".":[]}}`), &raw); err != nil {
+		t.Fatal(err)
+	}
+	ctx := &BuildContext{wd: t.TempDir(), target: "es2022", pkgJson: raw.ToNpmPackage()}
+	ctx.resolveEntry(EsmPath{PkgName: "empty-exports", PkgVersion: "1.0.0"})
+}
+
+func TestResolveJSONModuleInstallsExactVersion(t *testing.T) {
+	workDir := config.WorkDir
+	config.WorkDir = t.TempDir()
+	t.Cleanup(func() { config.WorkDir = workDir })
+	npmrc := &NpmRC{globalRegistry: &NpmRegistry{NpmRegistryConfig: NpmRegistryConfig{Registry: npmRegistry}}}
+	writeStorePackage(t, npmrc, npm.Package{Name: "json-dep", Version: "1.2.0"}, `{"name":"json-dep","version":"1.2.0","main":"./data.json"}`)
+	if err := os.WriteFile(filepath.Join(npmrc.StoreDir(), "json-dep@1.2.0", "node_modules", "json-dep", "data.json"), []byte(`{}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	key := "npm:json-dep@^1.0.0"
+	setCacheItem(key, &npm.PackageJSON{Name: "json-dep", Version: "1.2.0"}, time.Minute)
+	t.Cleanup(func() { deleteCacheItem(key) })
+	ctx := &BuildContext{
+		npmrc: npmrc, wd: t.TempDir(), target: "es2022",
+		esmPath: EsmPath{PkgName: "example", PkgVersion: "1.0.0"},
+		pkgJson: &npm.PackageJSON{Name: "example", Version: "1.0.0", Dependencies: map[string]string{"json-dep": "^1.0.0"}},
+	}
+	got, _, err := ctx.resolveExternalModule("json-dep", esbuild.ResolveJSImportStatement, true, false)
+	if err != nil || got != "/json-dep@^1.0.0/data.json" {
+		t.Fatalf("resolved = %q, %v", got, err)
+	}
+	if existsDir(filepath.Join(npmrc.StoreDir(), "json-dep@^1.0.0")) {
+		t.Fatal("installed with the version range")
 	}
 }

@@ -100,6 +100,33 @@ func TestNpmQueryCacheTTL(t *testing.T) {
 	}
 }
 
+func TestNpmBackupRegistry(t *testing.T) {
+	for _, test := range []struct {
+		backup   string
+		expected string
+	}{
+		{"https://proxy.example.com", "https://proxy.example.com/"},
+		{"https://proxy.example.com/npm//", "https://proxy.example.com/npm/"},
+		{"https://registry.example.com", ""},
+		{"proxy.example.com", ""},
+	} {
+		t.Run(test.backup, func(t *testing.T) {
+			c := &Config{
+				NpmRegistry:         "https://registry.example.com/",
+				NpmBackupRegistry:   test.backup,
+				NpmScopedRegistries: map[string]NpmRegistryConfig{"@scope": {Registry: "https://registry.example.com", BackupRegistry: test.backup}},
+			}
+			normalizeConfig(c)
+			if c.NpmBackupRegistry != test.expected {
+				t.Fatalf("NpmBackupRegistry = %q, want %q", c.NpmBackupRegistry, test.expected)
+			}
+			if got := c.NpmScopedRegistries["@scope"].BackupRegistry; got != test.expected {
+				t.Fatalf("scoped BackupRegistry = %q, want %q", got, test.expected)
+			}
+		})
+	}
+}
+
 func TestExtractPackageName(t *testing.T) {
 	type want struct {
 		packageId string

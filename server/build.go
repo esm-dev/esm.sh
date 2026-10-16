@@ -227,17 +227,13 @@ func (ctx *BuildContext) buildPath() {
 
 	esm := ctx.esmPath
 	if ctx.target == "types" {
-		if endsWith(esm.SubPath, ".d.ts", ".d.mts", ".d.cts") {
-			ctx.path = fmt.Sprintf(
-				"/%s%s/%s%s",
-				asteriskPrefix,
-				esm.PackageId(),
-				ctx.getBuildArgsPrefix(true),
-				esm.SubPath,
-			)
-		} else {
-			ctx.path = "/" + esm.String()
-		}
+		ctx.path = fmt.Sprintf(
+			"/%s%s/%s%s",
+			asteriskPrefix,
+			esm.PackageId(),
+			ctx.getBuildArgsPrefix(true),
+			esm.SubPath,
+		)
 		return
 	}
 
@@ -381,8 +377,8 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 		if err != nil {
 			return
 		}
-		entry = b.resolveEntry(dep)
-		meta, _, _, err = b.lexer(&entry)
+		depEntry := b.resolveEntry(dep)
+		meta, _, _, err = b.lexer(&depEntry)
 		if err != nil {
 			return
 		}
@@ -399,6 +395,9 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 			return
 		}
 		meta.Dts, err = ctx.resolveDTS(entry)
+		if err == nil && meta.Dts == "" && ctx.pkgJson.Types == "" {
+			meta.Dts, err = b.resolveDTS(depEntry)
+		}
 		return
 	}
 
@@ -1291,49 +1290,54 @@ REBUILD:
 	ctx.cjsRequires = nil
 	res := esbCtx.Rebuild()
 	if len(res.Errors) > 0 {
-		// mark the missing module as external to exclude it from the bundle
-		msg := res.Errors[0].Text
-		if strings.HasPrefix(msg, "Could not resolve \"") {
-			// current module can not be marked as an external
-			if strings.HasPrefix(msg, fmt.Sprintf("Could not resolve \"%s\"", entrySpecifier)) {
-				err = fmt.Errorf("could not resolve \"%s\"", entrySpecifier)
-				return
-			}
-			name := strings.Split(msg, "\"")[1]
-			// a relative path import can not be externalized, report it as a build error
-			if isRelPathSpecifier(name) || strings.HasPrefix(name, "/") {
-				if loc := res.Errors[0].Location; loc != nil {
-					err = fmt.Errorf("could not resolve \"%s\" (imported by %s)", name, loc.File)
-				} else {
-					err = fmt.Errorf("could not resolve \"%s\"", name)
+		retry := false
+		for _, e := range res.Errors {
+			// mark the missing module as external to exclude it from the bundle
+			msg := e.Text
+			if strings.HasPrefix(msg, "Could not resolve \"") {
+				// current module can not be marked as an external
+				if strings.HasPrefix(msg, fmt.Sprintf("Could not resolve \"%s\"", entrySpecifier)) {
+					err = fmt.Errorf("could not resolve \"%s\"", entrySpecifier)
+					return
 				}
-				return
-			}
-			if !implicitExternal.Has(name) {
-				ctx.logger.Warnf("build(%s): implicit external '%s'", ctx.Path(), name)
-				implicitExternal.Add(name)
-				goto REBUILD
+				name := strings.Split(msg, "\"")[1]
+				// a relative path import can not be externalized, report it as a build error
+				if isRelPathSpecifier(name) || strings.HasPrefix(name, "/") {
+					if loc := e.Location; loc != nil {
+						err = fmt.Errorf("could not resolve \"%s\" (imported by %s)", name, loc.File)
+					} else {
+						err = fmt.Errorf("could not resolve \"%s\"", name)
+					}
+					return
+				}
+				if !implicitExternal.Has(name) {
+					ctx.logger.Warnf("build(%s): implicit external '%s'", ctx.Path(), name)
+					implicitExternal.Add(name)
+					retry = true
+				}
+			} else if strings.HasPrefix(msg, "No matching export in \"") {
+				a := strings.Split(msg, "\"")
+				if len(a) > 4 {
+					path, exportName := a[1], a[3]
+					if strings.HasPrefix(path, "browser-exclude:") && exportName != "default" {
+						path = strings.TrimPrefix(path, "browser-exclude:")
+						exports, ok := browserExclude[path]
+						if !ok {
+							exports = set.New[string]()
+							browserExclude[path] = exports
+						}
+						if !exports.Has(exportName) {
+							exports.Add(exportName)
+							retry = true
+						}
+					}
+				}
 			}
 		}
-		if strings.HasPrefix(msg, "No matching export in \"") {
-			a := strings.Split(msg, "\"")
-			if len(a) > 4 {
-				path, exportName := a[1], a[3]
-				if strings.HasPrefix(path, "browser-exclude:") && exportName != "default" {
-					path = strings.TrimPrefix(path, "browser-exclude:")
-					exports, ok := browserExclude[path]
-					if !ok {
-						exports = set.New[string]()
-						browserExclude[path] = exports
-					}
-					if !exports.Has(exportName) {
-						exports.Add(exportName)
-						goto REBUILD
-					}
-				}
-			}
+		if retry {
+			goto REBUILD
 		}
-		err = errors.New("esbuild: " + msg)
+		err = errors.New("esbuild: " + res.Errors[0].Text)
 		return
 	}
 
@@ -1505,16 +1509,11 @@ REBUILD:
 					}
 					// `var mod = require("module");...;mod()` -> cjs
 					// `var mod = require("module");...;mod.default` -> es module
-					if a := bytes.SplitN(jsContent, fmt.Appendf(nil, `("%s")`, specifier), 2); len(a) >= 2 {
-						ret := regexpVarDecl.FindSubmatch(a[0])
-						if len(ret) == 2 {
-							r, e := regexp.Compile(fmt.Sprintf(`[^\w$]%s(\(|\.default[^\w$=])`, string(ret[1])))
-							if e == nil {
-								ret := r.FindSubmatch(jsContent)
-								if len(ret) == 2 {
-									isEsModule[i] = string(ret[1]) != "("
-									continue
-								}
+					if j := bytes.Index(jsContent, fmt.Appendf(nil, `("%s")`, specifier)); j >= 0 {
+						if ret := regexpVarDecl.FindSubmatch(jsContent[:j]); len(ret) == 2 {
+							if ret := regexp.MustCompile(`[^\w$]` + regexp.QuoteMeta(string(ret[1])) + `(\(|\.default[^\w$=])`).FindSubmatch(jsContent); len(ret) == 2 {
+								isEsModule[i] = string(ret[1]) != "("
+								continue
 							}
 						}
 					}
@@ -1677,7 +1676,7 @@ REBUILD:
 				ctx.logger.Infof("build(%s): file already exists in the storage, skip it", ctx.Path())
 				continue
 			}
-			if err != storage.ErrNotFound {
+			if err != nil && err != storage.ErrNotFound {
 				ctx.logger.Errorf("storage.stat(%s): %v", ctx.getSavePath(), err)
 				err = errors.New("storage(stat): " + err.Error())
 				return
@@ -1841,14 +1840,14 @@ func (ctx *BuildContext) install() (err error) {
 	// - install '@babel/runtime' and '@swc/helpers' if they are present in the dependencies in `BundleDefault` mode
 	switch ctx.bundleMode {
 	case BundleDeps:
-		err = ctx.npmrc.installDependenciesContext(ctx.Context(), ctx.wd, ctx.pkgJson, false, ctx.args.Deps, nil)
+		err = ctx.npmrc.installDependenciesContext(ctx.Context(), ctx.wd, ctx.pkgJson, false, ctx.args.Deps)
 	case BundleDefault:
 		if v, ok := ctx.pkgJson.Dependencies["@babel/runtime"]; ok {
-			err = ctx.npmrc.installDependenciesContext(ctx.Context(), ctx.wd, &npm.PackageJSON{Dependencies: map[string]string{"@babel/runtime": v}}, false, ctx.args.Deps, nil)
+			err = ctx.npmrc.installDependenciesContext(ctx.Context(), ctx.wd, &npm.PackageJSON{Dependencies: map[string]string{"@babel/runtime": v}}, false, ctx.args.Deps)
 		}
 		if err == nil {
 			if v, ok := ctx.pkgJson.Dependencies["@swc/helpers"]; ok {
-				err = ctx.npmrc.installDependenciesContext(ctx.Context(), ctx.wd, &npm.PackageJSON{Dependencies: map[string]string{"@swc/helpers": v}}, false, ctx.args.Deps, nil)
+				err = ctx.npmrc.installDependenciesContext(ctx.Context(), ctx.wd, &npm.PackageJSON{Dependencies: map[string]string{"@swc/helpers": v}}, false, ctx.args.Deps)
 			}
 		}
 	}

@@ -6,11 +6,15 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
 	esbuild "github.com/ije/esbuild-internal/api"
 )
+
+// each loader process boots a deno runtime with a bundled compiler, so cap them to avoid exhausting memory
+var loaderSema = make(chan struct{}, runtime.NumCPU())
 
 type LoaderOutput struct {
 	Lang string
@@ -24,6 +28,13 @@ func runLoaderContext(ctx context.Context, loaderJsPath string, filename string,
 	})
 	if err != nil {
 		return
+	}
+
+	select {
+	case loaderSema <- struct{}{}:
+		defer func() { <-loaderSema }()
+	case <-ctx.Done():
+		return nil, ctx.Err()
 	}
 
 	cancelCtx, cancel := context.WithTimeout(ctx, time.Minute)
@@ -72,7 +83,6 @@ func buildLoader(wd, loaderJs, outfile string) (err error) {
 		MinifySyntax:      true,
 		MinifyWhitespace:  true,
 		MinifyIdentifiers: true,
-		Write:             true,
 		PreserveSymlinks:  true,
 		Plugins: []esbuild.Plugin{{
 			Name: "resolver",
@@ -90,7 +100,15 @@ func buildLoader(wd, loaderJs, outfile string) (err error) {
 		}},
 	})
 	if len(ret.Errors) > 0 {
-		err = errors.New(ret.Errors[0].Text)
+		return errors.New(ret.Errors[0].Text)
 	}
-	return
+	if err = ensureDir(filepath.Dir(outfile)); err != nil {
+		return
+	}
+	// write to a temp file first, callers treat an existing loader file as complete
+	tmpfile := outfile + ".tmp"
+	if err = os.WriteFile(tmpfile, ret.OutputFiles[0].Contents, 0644); err != nil {
+		return
+	}
+	return os.Rename(tmpfile, outfile)
 }
