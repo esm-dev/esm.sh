@@ -563,7 +563,7 @@ func TestBuildModuleSharedCSS(t *testing.T) {
 					}
 				}
 				if cached {
-					if err := os.WriteFile(filepath.Join(wd, "splitting.txt"), []byte("2\nshared.js\nshared.css"), 0644); err != nil {
+					if err := os.WriteFile(filepath.Join(wd, "splitting-v2-"+target+".txt"), []byte("2\nshared.js\nshared.css"), 0644); err != nil {
 						t.Fatal(err)
 					}
 				}
@@ -1726,6 +1726,116 @@ func TestBuildModuleExportStars(t *testing.T) {
 			})
 			if len(result.Errors) > 0 {
 				t.Fatal(result.Errors)
+			}
+		})
+	}
+}
+
+func TestBuildTypesPath(t *testing.T) {
+	ctx := &BuildContext{
+		target: "types", externalAll: true, args: BuildArgs{Conditions: []string{"custom"}},
+		esmPath: EsmPath{PkgName: "example", PkgVersion: "1.0.0", SubPath: "src/mod.ts"},
+	}
+	want := "/*example@1.0.0/" + ctx.getBuildArgsPrefix(true) + "src/mod.ts"
+	if got := ctx.Path(); got != want {
+		t.Fatalf("build path = %q, want %q", got, want)
+	}
+}
+
+func TestBuildModuleEmptyOutput(t *testing.T) {
+	wd := t.TempDir()
+	pkgDir := filepath.Join(wd, "node_modules", "example")
+	if err := os.MkdirAll(pkgDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pkgDir, "index.js"), []byte("export const value = 1;"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	fs, err := storage.NewFSStorage(filepath.Join(wd, "storage"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	logger, err := log.New("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	logger.SetOutput(io.Discard)
+	ctx := &BuildContext{
+		wd: wd, target: "es2022", storage: fs, logger: logger, npmrc: &NpmRC{},
+		esmPath: EsmPath{PkgName: "example", PkgVersion: "1.0.0"},
+		pkgJson: &npm.PackageJSON{Name: "example", Version: "1.0.0", Type: "module", Main: "./index.js", Types: "./index.d.ts"},
+	}
+	if err := fs.Put(ctx.getSavePath(), strings.NewReader("")); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := ctx.buildModule(false); err != nil {
+		t.Fatal(err)
+	}
+	stat, err := fs.Stat(ctx.getSavePath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stat.Size() == 0 {
+		t.Fatal("empty output was not rebuilt")
+	}
+}
+
+func TestBuildModuleRequireUsage(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		code string
+		want string
+	}{
+		{"default", `var a$ = require("dep"); export const run = () => a$.default;`, `case"dep":return c(`},
+		{"call", `var a$ = require("dep"); export const run = () => a$();`, `case"dep":return e(`},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			wd := t.TempDir()
+			for name, content := range map[string]string{
+				"example/index.js":     tt.code,
+				"dep/package.json":     `{"name":"dep","version":"1.0.0","type":"module"}`,
+				"dep/index.js":         `export default 1;`,
+				"example/package.json": `{"name":"example","version":"1.0.0","type":"module"}`,
+			} {
+				filename := filepath.Join(wd, "node_modules", name)
+				if err := os.MkdirAll(filepath.Dir(filename), 0755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filename, []byte(content), 0644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			fs, err := storage.NewFSStorage(filepath.Join(wd, "storage"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			logger, err := log.New("")
+			if err != nil {
+				t.Fatal(err)
+			}
+			logger.SetOutput(io.Discard)
+			ctx := &BuildContext{
+				wd: wd, target: "es2022", dev: true, storage: fs, logger: logger, npmrc: &NpmRC{},
+				esmPath: EsmPath{PkgName: "example", PkgVersion: "1.0.0"},
+				pkgJson: &npm.PackageJSON{
+					Name: "example", Version: "1.0.0", Type: "module", Main: "./index.js", Types: "./index.d.ts",
+					Dependencies: map[string]string{"dep": "1.0.0"},
+				},
+			}
+			if _, _, err := ctx.buildModule(false); err != nil {
+				t.Fatal(err)
+			}
+			f, _, err := fs.Get(ctx.getSavePath())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer f.Close()
+			output, err := io.ReadAll(f)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(string(output), tt.want) {
+				t.Fatalf("missing %q in:\n%s", tt.want, output)
 			}
 		})
 	}

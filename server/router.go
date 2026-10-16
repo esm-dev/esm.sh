@@ -339,7 +339,6 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 				}
 				readme = bytes.ReplaceAll(readme, []byte("./server/embed/"), []byte("/embed/"))
 				readme = bytes.ReplaceAll(readme, []byte("./HOSTING.md"), []byte("https://github.com/esm-dev/esm.sh/blob/main/HOSTING.md"))
-				readme = bytes.ReplaceAll(readme, []byte("https://esm.sh"), []byte(getOrigin(r)))
 				indexHTML, err = embedFS.ReadFile("embed/index.html")
 				if err != nil {
 					err = errors.New("failed to read index.html: " + err.Error())
@@ -356,6 +355,10 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 			if err != nil {
 				writeStatus(w, 500, err.Error())
 				return
+			}
+			// the cached page is shared by all hosts, so the origin is applied per request
+			if origin := getOrigin(r); origin != "https://esm.sh" {
+				indexHTML = bytes.ReplaceAll(indexHTML, []byte("https://esm.sh"), []byte(origin))
 			}
 			header.Set("Content-Type", ctHTML)
 			header.Set("Cache-Control", ccMustRevalidate)
@@ -560,6 +563,10 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 			savePath := normalizeSavePath(fmt.Sprintf("modules/transform/%s.%s", hash, ext))
 			f, fi, err := esmStorage.Get(savePath)
 			if err != nil {
+				if err == storage.ErrNotFound {
+					writeStatus(w, 404, "Not Found")
+					return
+				}
 				logger.Errorf("storage.get(%s): %v", savePath, err)
 				writeStatus(w, 500, "Storage error, please try again")
 				return
@@ -737,7 +744,8 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 					esmPath.SubPath = esmPath.SubPath + jsxRuntime
 				}
 				pathname = fmt.Sprintf("/%s/%s", esmPath.PkgName, esmPath.SubPath)
-				r.URL.RawQuery = strings.TrimSuffix(rawQuery, jsxRuntime)
+				rawQuery = strings.TrimSuffix(rawQuery, jsxRuntime)
+				r.URL.RawQuery = rawQuery
 				break
 			}
 		}
@@ -890,11 +898,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 					pkgName = "jsr/@" + strings.ReplaceAll(pkgName[5:], "__", "/")
 				}
 				if asteriskPrefix {
-					if esmPath.GhPrefix || esmPath.PrPrefix {
-						pkgName = pkgName[0:3] + "*" + pkgName[3:]
-					} else {
-						pkgName = "*" + pkgName
-					}
+					pkgName = "*" + pkgName
 				}
 				if esmPath.SubPath != "" {
 					subPath = "/" + esmPath.SubPath
@@ -951,15 +955,19 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 				writeStatus(w, 403, "File Too Large")
 				return
 			}
-			data, err := io.ReadAll(io.LimitReader(res.Body, maxAssetFileSize+1))
-			if err != nil {
-				writeStatus(w, 502, err.Error())
-				return
-			}
-			if len(data) > maxAssetFileSize {
-				header.Set("Cache-Control", ccImmutable)
-				writeStatus(w, 403, "File Too Large")
-				return
+			// the size is unknown for a compressed body, so buffer it to check the limit
+			var data []byte
+			if res.StatusCode == 200 && res.ContentLength < 0 && r.Method != http.MethodHead {
+				data, err = io.ReadAll(io.LimitReader(res.Body, maxAssetFileSize+1))
+				if err != nil {
+					writeStatus(w, 502, err.Error())
+					return
+				}
+				if len(data) > maxAssetFileSize {
+					header.Set("Cache-Control", ccImmutable)
+					writeStatus(w, 403, "File Too Large")
+					return
+				}
 			}
 			for _, key := range []string{"ETag", "Last-Modified"} {
 				if value := res.Header.Get(key); value != "" {
@@ -978,18 +986,25 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 				contentType = res.Header.Get("Content-Type")
 			}
 			header.Set("Content-Type", contentType)
+			if res.ContentLength < 0 {
+				if r.Method == http.MethodHead {
+					w.WriteHeader(200)
+					return
+				}
+				writeBody(w, data)
+				return
+			}
+			header.Set("Content-Length", strconv.FormatInt(res.ContentLength, 10))
 			if r.Method == http.MethodHead {
-				header.Set("Content-Length", fmt.Sprintf("%d", len(data)))
 				w.WriteHeader(200)
 				return
 			}
-			writeBody(w, data)
+			io.Copy(w, res.Body)
 			return
 		}
 
 		// fix url that is related to `import.meta.url`
 		if hasTargetSegment && isExactVersion && pathKind == RawFile && !rawFlag {
-			extname := path.Ext(esmPath.SubPath)
 			dir := path.Join(npmrc.StoreDir(), esmPath.PackageId())
 			if !existsDir(dir) {
 				_, err := npmrc.installPackage(esmPath.Package())
@@ -999,39 +1014,49 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 				}
 			}
 			pkgRoot := path.Join(dir, "node_modules", esmPath.PkgName)
-			files, err := findFiles(pkgRoot, "", func(fp string) bool {
-				return strings.HasSuffix(fp, extname)
-			})
-			if err != nil {
-				writeStatus(w, 500, err.Error())
-				return
-			}
-			var file string
-			if l := len(files); l == 1 {
-				file = files[0]
-			} else if l > 1 {
-				for _, f := range files {
-					if strings.HasSuffix(esmPath.SubPath, f) {
-						file = f
-						break
+			if existsFile(path.Join(pkgRoot, target, esmPath.SubPath)) {
+				// the target segment is a real directory of the package (e.g. `/pkg@1.0.0/node/foo.wasm`),
+				// serve the file as is, redirecting would loop
+				esmPath.SubPath = target + "/" + esmPath.SubPath
+			} else {
+				file := esmPath.SubPath
+				if !existsFile(path.Join(pkgRoot, file)) {
+					extname := path.Ext(esmPath.SubPath)
+					files, err := findFiles(pkgRoot, "", func(fp string) bool {
+						return strings.HasSuffix(fp, extname)
+					})
+					if err != nil {
+						writeStatus(w, 500, err.Error())
+						return
 					}
-				}
-				if file == "" {
-					for _, f := range files {
-						if path.Base(esmPath.SubPath) == path.Base(f) {
-							file = f
-							break
+					file = ""
+					if l := len(files); l == 1 {
+						file = files[0]
+					} else if l > 1 {
+						for _, f := range files {
+							if strings.HasSuffix(esmPath.SubPath, "/"+f) {
+								file = f
+								break
+							}
+						}
+						if file == "" {
+							for _, f := range files {
+								if path.Base(esmPath.SubPath) == path.Base(f) {
+									file = f
+									break
+								}
+							}
 						}
 					}
 				}
-			}
-			if file == "" {
-				writeRawNotFound("File not found")
+				if file == "" {
+					writeRawNotFound("File not found")
+					return
+				}
+				url := fmt.Sprintf("%s%s/%s@%s/%s", origin, registryPrefix, esmPath.PkgName, esmPath.PkgVersion, file)
+				redirect(w, url, true)
 				return
 			}
-			url := fmt.Sprintf("%s%s/%s@%s/%s", origin, registryPrefix, esmPath.PkgName, esmPath.PkgVersion, file)
-			redirect(w, url, true)
-			return
 		}
 
 		// try to serve package static files if the version is exact
@@ -1361,11 +1386,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 				pkgName = "jsr/@" + strings.ReplaceAll(pkgName[5:], "__", "/")
 			}
 			if asteriskPrefix {
-				if esmPath.GhPrefix || esmPath.PrPrefix {
-					pkgName = pkgName[0:3] + "*" + pkgName[3:]
-				} else {
-					pkgName = "*" + pkgName
-				}
+				pkgName = "*" + pkgName
 			}
 			if esmPath.SubPath != "" {
 				subPath = "/" + esmPath.SubPath
@@ -1411,8 +1432,16 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 				if v != "" {
 					esm, _, _, _, _, err := parseEsmPath(npmrc, v)
 					if err != nil {
-						header.Set("Cache-Control", ccImmutable)
-						writeStatus(w, 400, fmt.Sprintf("Invalid deps query: %v not found", v))
+						status := 500
+						message := err.Error()
+						if strings.HasPrefix(message, "invalid") {
+							status = 400
+							header.Set("Cache-Control", ccImmutable)
+						} else if strings.HasSuffix(message, " not found") {
+							status = 404
+							header.Set("Cache-Control", ccTenMinutes)
+						}
+						writeStatus(w, status, fmt.Sprintf("Invalid deps query %q: %s", v, message))
 						return
 					}
 					if esm.PkgName != esmPath.PkgName {
@@ -1473,11 +1502,11 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 				if a := encodeBuildArgs(buildArgs, true); a != "" {
 					args = "X-" + a
 				}
-				savePath := normalizeSavePath(path.Join(fmt.Sprintf(
-					"types/%s/%s",
-					esmPath.PackageId(),
-					args,
-				), esmPath.SubPath))
+				pkgDir := esmPath.PackageId()
+				if externalAll {
+					pkgDir = "*" + pkgDir
+				}
+				savePath := normalizeSavePath(path.Join("types", pkgDir, args, esmPath.SubPath))
 				content, stat, err = esmStorage.Get(savePath)
 				return
 			}
@@ -1670,6 +1699,9 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 
 		// redirect to package css from `?css`
 		if query.Has("css") && esmPath.SubPath == "" {
+			if targetFromUA {
+				appendVaryHeader(header, "User-Agent")
+			}
 			if !buildMeta.CSSInJS {
 				if isExactVersion {
 					header.Set("Cache-Control", ccImmutable)
@@ -1685,6 +1717,9 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 		}
 
 		if query.Has("meta") {
+			if targetFromUA {
+				appendVaryHeader(header, "User-Agent")
+			}
 			metaJson := map[string]any{
 				"name":    esmPath.PkgName,
 				"version": esmPath.PkgVersion,
@@ -1760,12 +1795,15 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 					return
 				}
 				integrity = "sha384-" + base64.StdEncoding.EncodeToString(sha.Sum(nil))
-				buildMeta.Integrity = integrity
-				err = metaDB.Put(build.Path(), encodeBuildMeta(buildMeta))
+				// the cached meta is shared with other requests, don't mutate it
+				meta := *buildMeta
+				meta.Integrity = integrity
+				err = metaDB.Put(build.Path(), encodeBuildMeta(&meta))
 				if err != nil {
 					writeStatus(w, 500, err.Error())
 					return
 				}
+				cacheLRU.Add(build.Path(), &meta)
 			}
 			metaJson["integrity"] = integrity
 			if isExactVersion {

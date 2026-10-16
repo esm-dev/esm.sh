@@ -28,9 +28,10 @@ var (
 
 // getNodeRuntimeJS returns the unenv node runtime by the given name.
 func getNodeRuntimeJS(name string) (js []byte, ok bool) {
-	doOnce("load-node-runtime", func() (err error) {
-		return loadNodeRuntime()
-	})
+	// a failed load is retried and writes the map again, so never read it before a load succeeds
+	if doOnce("load-node-runtime", loadNodeRuntime) != nil {
+		return nil, false
+	}
 	js, ok = unenvNodeRuntimeMap[name]
 	return
 }
@@ -76,7 +77,7 @@ func buildUnenvNodeRuntime() (err error) {
 	if err != nil {
 		return
 	}
-	err = npmrc.installDependencies(wd, pkgJson, false, nil)
+	err = npmrc.installDependencies(wd, pkgJson, false)
 	if err != nil {
 		return err
 	}

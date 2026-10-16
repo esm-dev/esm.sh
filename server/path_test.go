@@ -24,6 +24,13 @@ func TestParsePrPackagePath(t *testing.T) {
 	}
 }
 
+func TestParsePrPackagePathAtInSubPath(t *testing.T) {
+	esm, _, exact, _, _, err := parseEsmPath(nil, "/pr/owner/repo/@scope/pkg@abc1234/assets/logo@2x.png")
+	if err != nil || !exact || esm.PkgName != "owner/repo/@scope/pkg" || esm.PkgVersion != "abc1234" || esm.SubPath != "assets/logo@2x.png" {
+		t.Fatalf("parse: %+v, exact=%v, err=%v", esm, exact, err)
+	}
+}
+
 func TestParsePrPackagePathInvalid(t *testing.T) {
 	for _, name := range []string{"owner/", "owner/repo/", "owner//pkg", "owner/../pkg", "../repo", "owner/..", "owner/repo/../pkg", "owner/repo/@scope/..", "owner\\repo"} {
 		for _, prefix := range []string{"/pr/", "/pkg.pr.new/"} {

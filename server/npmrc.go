@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"context"
+	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -22,7 +23,6 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/esm-dev/esm.sh/internal/npm"
-	"github.com/ije/gox/set"
 	"github.com/ije/gox/term"
 	"github.com/ije/gox/utils"
 )
@@ -125,26 +125,24 @@ func (npmrc *NpmRC) fetchPackageMetadataContext(ctx context.Context, pkgName str
 		// use backup registry if the global registry is rate limited
 		regUrlStr = reg.BackupRegistry
 	}
-	regUrlStr += pkgName
-
-	var useVersionRoute bool
-	if isWellknownVersion {
-		useVersionRoute = reg.isSupportVersionRoute(regUrlStr)
-		if useVersionRoute {
-			regUrlStr += "/" + version
-		}
-	}
-
-	regUrl, err := url.Parse(regUrlStr)
-	if err != nil {
-		return nil, nil, err
-	}
 
 	header := http.Header{}
 	if reg.Token != "" {
 		header.Set("Authorization", "Bearer "+reg.Token)
 	} else if reg.User != "" && reg.Password != "" {
 		header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(reg.User+":"+reg.Password)))
+	}
+
+	// [warning] the probe result is kept per registry, so never use the version route of the backup registry
+	useVersionRoute := isWellknownVersion && regUrlStr == reg.Registry && reg.isSupportVersionRoute(ctx, header)
+	regUrlStr += pkgName
+	if useVersionRoute {
+		regUrlStr += "/" + version
+	}
+
+	regUrl, err := url.Parse(regUrlStr)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	if DEBUG {
@@ -171,7 +169,7 @@ RETRY:
 	}
 	defer res.Body.Close()
 
-	if res.StatusCode == 404 || res.StatusCode == 401 {
+	if res.StatusCode == 404 || res.StatusCode == 401 || res.StatusCode == 403 {
 		if res.StatusCode == 404 && !useVersionRoute {
 			negativeCache.put(missingKey, fmt.Sprintf("package '%s' not found", pkgName), packageNotFoundTTL)
 		}
@@ -268,6 +266,15 @@ func (npmrc *NpmRC) getPackageInfoContext(ctx context.Context, pkgName string, v
 
 	version = npm.NormalizePackageVersion(version)
 
+	// [warning] don't cache the installed package.json: it has no `dist` field, and the store
+	// may be purged before the cache expires, then the installer would fetch an empty tarball url
+	if npm.IsExactVersion(version) {
+		var raw npm.PackageJSONRaw
+		if utils.ParseJSONFile(filepath.Join(npmrc.StoreDir(), pkgName+"@"+version, "node_modules", pkgName, "package.json"), &raw) == nil {
+			return raw.ToNpmPackage(), nil
+		}
+	}
+
 	ttl := time.Duration(config.NpmQueryCacheTTL) * time.Second
 	return withCache("npm:"+pkgName+"@"+version, ttl, func() (_ *npm.PackageJSON, _ string, err error) {
 		key := "404:" + npmrc.getRegistryByPackageName(pkgName).Registry + pkgName + "@"
@@ -283,13 +290,6 @@ func (npmrc *NpmRC) getPackageInfoContext(ctx context.Context, pkgName string, v
 				negativeCache.put(key, err.Error(), packageNotFoundTTL)
 			}
 		}()
-		if npm.IsExactVersion(version) {
-			var raw npm.PackageJSONRaw
-			pkgJsonPath := filepath.Join(npmrc.StoreDir(), pkgName+"@"+version, "node_modules", pkgName, "package.json")
-			if utils.ParseJSONFile(pkgJsonPath, &raw) == nil {
-				return raw.ToNpmPackage(), "", nil
-			}
-		}
 
 		metadata, raw, err := npmrc.fetchPackageMetadataContext(ctx, pkgName, version, npm.IsExactVersion(version) || npm.IsDistTag(version))
 		if err != nil {
@@ -322,7 +322,7 @@ func (npmrc *NpmRC) getPackageInfoContext(ctx context.Context, pkgName string, v
 // default URL to a version whose build fails.
 func invalidateDistTagCacheIfNewer(pkgName string, version string) {
 	version = npm.NormalizePackageVersion(version)
-	if !npm.IsExactVersion(version) {
+	if !npm.IsExactVersion(version) || strings.ContainsRune(version, '-') {
 		return
 	}
 	key := "npm:" + pkgName + "@latest"
@@ -539,114 +539,104 @@ func (npmrc *NpmRC) installPackageContext(ctx context.Context, pkg npm.Package) 
 	return
 }
 
-func (npmrc *NpmRC) installDependencies(wd string, pkgJson *npm.PackageJSON, npmMode bool, mark *set.Set[string]) error {
-	return npmrc.installDependenciesContext(context.Background(), wd, pkgJson, npmMode, nil, mark)
+func (npmrc *NpmRC) installDependencies(wd string, pkgJson *npm.PackageJSON, npmMode bool) error {
+	return npmrc.installDependenciesContext(context.Background(), wd, pkgJson, npmMode, nil)
 }
 
-func (npmrc *NpmRC) installDependenciesContext(ctx context.Context, wd string, pkgJson *npm.PackageJSON, npmMode bool, overrides map[string]string, mark *set.Set[string]) error {
+func (npmrc *NpmRC) installDependenciesContext(ctx context.Context, wd string, pkgJson *npm.PackageJSON, npmMode bool, overrides map[string]string) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	wg := sync.WaitGroup{}
-	var errMu sync.Mutex
+	type link struct {
+		depth  int
+		target string
+	}
+	var wg sync.WaitGroup
+	var mu sync.Mutex
 	var firstErr error
-	dependencies := map[string]string{}
-	maps.Copy(dependencies, pkgJson.Dependencies)
-	// install peer dependencies if `npmMode` is true
-	if npmMode {
-		maps.Copy(dependencies, pkgJson.PeerDependencies)
-	}
-	if mark == nil {
-		mark = set.New[string]()
-	}
+	links := map[string]link{}
+	walked := map[string]int{}
 	setErr := func(err error) {
 		if err == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return
 		}
-		errMu.Lock()
+		mu.Lock()
 		if firstErr == nil {
 			firstErr = err
 			cancel()
 		}
-		errMu.Unlock()
+		mu.Unlock()
 	}
-	getFirstErr := func() error {
-		errMu.Lock()
-		defer errMu.Unlock()
-		return firstErr
-	}
-	for name, version := range dependencies {
-		if override, ok := overrides[name]; ok {
-			version = override
+	var walk func(parent *npm.PackageJSON, depth int)
+	walk = func(parent *npm.PackageJSON, depth int) {
+		dependencies := map[string]string{}
+		maps.Copy(dependencies, parent.Dependencies)
+		// install peer dependencies if `npmMode` is true
+		if npmMode {
+			maps.Copy(dependencies, parent.PeerDependencies)
 		}
-		if ctx.Err() != nil || getFirstErr() != nil {
-			break
-		}
-		wg.Add(1)
-		go func(name, version string) {
-			defer wg.Done()
+		for name, version := range dependencies {
+			if override, ok := overrides[name]; ok {
+				version = override
+			}
 			if ctx.Err() != nil {
 				return
 			}
-			// name is the symlink path below, not necessarily the resolved package.
-			if !npm.ValidatePackageName(name) {
-				return
-			}
-			pkg := npm.Package{Name: name, Version: version}
-			p, err := npm.ResolveDependencyVersion(version)
-			if err != nil || p.Url != "" {
-				setErr(err)
-				return
-			}
-			if p.Name != "" {
-				pkg = p
-			}
-			if strings.HasPrefix(pkg.Name, "@types/") {
-				// skip installing `@types/*` packages
-				return
-			}
-			if !npm.IsExactVersion(pkg.Version) && !pkg.Github && !pkg.PkgPrNew {
-				p, e := npmrc.getPackageInfoContext(ctx, pkg.Name, pkg.Version)
-				if e != nil {
-					setErr(e)
+			wg.Go(func() {
+				// name is the symlink path below, not necessarily the resolved package.
+				if !npm.ValidatePackageName(name) {
 					return
 				}
-				pkg.Version = p.Version
-			}
-			markId := fmt.Sprintf("%s@%s:%s:%s:%v", pkgJson.Name, pkgJson.Version, name, pkg.String(), npmMode)
-			if mark.Has(markId) {
-				return
-			}
-			mark.Add(markId)
-			installed, err := npmrc.installPackageContext(ctx, pkg)
-			if err != nil {
-				setErr(err)
-				return
-			}
-			// link the installed package to the node_modules directory of current build context
-			linkDir := filepath.Join(wd, "node_modules", name)
-			_, err = os.Lstat(linkDir)
-			if err != nil && os.IsNotExist(err) {
-				if strings.ContainsRune(name, '/') {
-					ensureDir(filepath.Dir(linkDir))
-				}
-				err = os.Symlink(filepath.Join(npmrc.StoreDir(), pkg.String(), "node_modules", pkg.Name), linkDir)
-				if err != nil && !os.IsExist(err) {
+				pkg := npm.Package{Name: name, Version: version}
+				p, err := npm.ResolveDependencyVersion(version)
+				if err != nil || p.Url != "" {
 					setErr(err)
 					return
 				}
-			} else if err != nil {
-				setErr(err)
-				return
-			}
-			// install dependencies recursively
-			if len(installed.Dependencies) > 0 || (len(installed.PeerDependencies) > 0 && npmMode) {
-				if err := npmrc.installDependenciesContext(ctx, wd, installed, npmMode, overrides, mark); err != nil {
-					setErr(err)
+				if p.Name != "" {
+					pkg = p
 				}
-			}
-		}(name, version)
+				if strings.HasPrefix(pkg.Name, "@types/") {
+					// skip installing `@types/*` packages
+					return
+				}
+				if pkg.Github {
+					if err := pinGhDependency(ctx, &pkg); err != nil {
+						setErr(err)
+						return
+					}
+				} else if !npm.IsExactVersion(pkg.Version) && !pkg.PkgPrNew {
+					p, e := npmrc.getPackageInfoContext(ctx, pkg.Name, pkg.Version)
+					if e != nil {
+						setErr(e)
+						return
+					}
+					pkg.Version = p.Version
+				}
+				installed, err := npmrc.installPackageContext(ctx, pkg)
+				if err != nil {
+					setErr(err)
+					return
+				}
+				// [warning] the flat `node_modules/<name>` slot belongs to the shallowest dependency,
+				// and a package found at a shallower depth must be walked again
+				mu.Lock()
+				if l, ok := links[name]; !ok || depth < l.depth {
+					links[name] = link{depth, filepath.Join(npmrc.StoreDir(), pkg.String(), "node_modules", pkg.Name)}
+				}
+				d, ok := walked[pkg.String()]
+				shallower := !ok || depth < d
+				if shallower {
+					walked[pkg.String()] = depth
+				}
+				mu.Unlock()
+				if shallower && (len(installed.Dependencies) > 0 || (len(installed.PeerDependencies) > 0 && npmMode)) {
+					walk(installed, depth+1)
+				}
+			})
+		}
 	}
+	walk(pkgJson, 0)
 	wg.Wait()
 	if firstErr != nil {
 		return firstErr
@@ -654,6 +644,57 @@ func (npmrc *NpmRC) installDependenciesContext(ctx context.Context, wd string, p
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+
+	// link the installed packages to the node_modules directory of current build context
+	for name, l := range links {
+		linkDir := filepath.Join(wd, "node_modules", name)
+		fi, err := os.Lstat(linkDir)
+		if err == nil {
+			// [warning] a direct dependency replaces the deeper one linked by a previous install
+			if l.depth > 0 || fi.Mode()&os.ModeSymlink == 0 {
+				continue
+			}
+			if target, _ := os.Readlink(linkDir); target == l.target {
+				continue
+			}
+			tmp := linkDir + "." + rand.Text()
+			if err := os.Symlink(l.target, tmp); err != nil {
+				return err
+			}
+			if err := os.Rename(tmp, linkDir); err != nil {
+				os.Remove(tmp)
+				return err
+			}
+			continue
+		}
+		if !os.IsNotExist(err) {
+			return err
+		}
+		if strings.ContainsRune(name, '/') {
+			ensureDir(filepath.Dir(linkDir))
+		}
+		if err := os.Symlink(l.target, linkDir); err != nil && !os.IsExist(err) {
+			return err
+		}
+	}
+	return nil
+}
+
+// pinGhDependency resolves the tag or branch of a github dependency to a commit,
+// a tag of an exact version is kept as-is.
+func pinGhDependency(ctx context.Context, pkg *npm.Package) error {
+	if isCommitish(pkg.Version) || npm.IsExactVersion(strings.TrimPrefix(pkg.Version, "v")) {
+		return nil
+	}
+	ref, err := url.QueryUnescape(pkg.Version)
+	if err != nil {
+		return err
+	}
+	version, err := resolveGhPackageVersion(ctx, EsmPath{GhPrefix: true, PkgName: pkg.Name, PkgVersion: ref})
+	if err != nil {
+		return err
+	}
+	pkg.Version = version
 	return nil
 }
 
@@ -683,24 +724,25 @@ func (reg *NpmRegistry) hitRateLimit() {
 
 // check if the registry supports the version route
 // example: https://registry.npmjs.org/react/19.0.0
-func (reg *NpmRegistry) isSupportVersionRoute(urlStr string) bool {
-	if strings.HasPrefix(urlStr, npmRegistry) {
+func (reg *NpmRegistry) isSupportVersionRoute(ctx context.Context, header http.Header) bool {
+	if strings.HasPrefix(reg.Registry, npmRegistry) {
 		return true
 	}
 
-	u, err := url.Parse(urlStr)
+	// 0: unknown, 1: supported, 2: unsupported
+	switch reg.versionRouteSupported.Load() {
+	case 1:
+		return true
+	case 2:
+		return false
+	}
+
+	u, err := url.Parse(reg.Registry + "react/19.0.0")
 	if err != nil {
 		return false
 	}
 
-	if reg.versionRouteSupported.Load() == 1 {
-		return true
-	}
-
-	fetchClient := newFetchClient("esmd/"+VERSION, 15)
-
-	u.Path = "/react/19.0.0"
-	res, err := fetchClient.Fetch(u, nil)
+	res, err := newFetchClient("esmd/"+VERSION, 15).FetchWithContext(ctx, u, header)
 	if err != nil {
 		return false
 	}
@@ -709,6 +751,9 @@ func (reg *NpmRegistry) isSupportVersionRoute(urlStr string) bool {
 	if res.StatusCode == 200 {
 		reg.versionRouteSupported.Store(1)
 		return true
+	}
+	if res.StatusCode != 429 && res.StatusCode < 500 {
+		reg.versionRouteSupported.Store(2)
 	}
 	return false
 }

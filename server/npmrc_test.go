@@ -30,7 +30,7 @@ import (
 func TestInstallDependenciesMalformedGitURL(t *testing.T) {
 	for _, version := range []string{"git+https://github.com", "git+ssh://github.com", "git://github.com", "https://pkg.pr.new"} {
 		pkg := &npm.PackageJSON{Name: "example", Dependencies: map[string]string{"dep": version}}
-		if err := new(NpmRC).installDependencies(t.TempDir(), pkg, false, nil); err == nil {
+		if err := new(NpmRC).installDependencies(t.TempDir(), pkg, false); err == nil {
 			t.Fatalf("installDependencies(%q) returned no error", version)
 		}
 	}
@@ -200,7 +200,7 @@ func TestInstallDependenciesAliases(t *testing.T) {
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			if err := npmrc.installDependenciesContext(ctx, wd, root, npmMode, nil, nil); err != nil {
+			if err := npmrc.installDependenciesContext(ctx, wd, root, npmMode, nil); err != nil {
 				t.Fatal(err)
 			}
 			linked := 0
@@ -508,7 +508,7 @@ func TestInstallDependenciesSkipsTypes(t *testing.T) {
 	err := npmrc.installDependencies(t.TempDir(), &npm.PackageJSON{
 		Name: "test", Version: "1.0.0",
 		Dependencies: map[string]string{"@types/test": "1.0.0", "types-alias": "npm:@types/test@1.0.0"},
-	}, false, nil)
+	}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -887,5 +887,168 @@ func TestExtractPackageTarballWillNotWriteThroughSymlink(t *testing.T) {
 	}
 	if existsFile(filepath.Join(destination, "index.js")) {
 		t.Fatal("tarball escaped the extraction root")
+	}
+}
+
+func writeStorePackage(t *testing.T, npmrc *NpmRC, pkg npm.Package, packageJson string) {
+	t.Helper()
+	dir := filepath.Join(npmrc.StoreDir(), pkg.String(), "node_modules", pkg.Name)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte(packageJson), 0644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestInstallDependenciesLevelOrder(t *testing.T) {
+	workDir := config.WorkDir
+	config.WorkDir = t.TempDir()
+	t.Cleanup(func() { config.WorkDir = workDir })
+	npmrc := &NpmRC{globalRegistry: &NpmRegistry{NpmRegistryConfig: NpmRegistryConfig{Registry: npmRegistry}}}
+	// the transitive `level-b@1.0.0` is ready in the store, the direct `level-b@2.0.0` downloads slowly
+	writeStorePackage(t, npmrc, npm.Package{Name: "level-a", Version: "1.0.0"}, `{"name":"level-a","version":"1.0.0","dependencies":{"level-b":"1.0.0"}}`)
+	writeStorePackage(t, npmrc, npm.Package{Name: "level-b", Version: "1.0.0"}, `{"name":"level-b","version":"1.0.0"}`)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(200 * time.Millisecond)
+		gz := gzip.NewWriter(w)
+		tw := tar.NewWriter(gz)
+		data := `{"name":"level-b","version":"2.0.0"}`
+		tw.WriteHeader(&tar.Header{Name: "package/package.json", Mode: 0644, Size: int64(len(data))})
+		io.WriteString(tw, data)
+		tw.Close()
+		gz.Close()
+	}))
+	defer srv.Close()
+	key := "npm:level-b@2.0.0"
+	setCacheItem(key, &npm.PackageJSON{Name: "level-b", Version: "2.0.0", Dist: npm.NpmPackageDist{Tarball: srv.URL + "/level-b-2.0.0.tgz"}}, time.Minute)
+	t.Cleanup(func() { deleteCacheItem(key) })
+	wd := t.TempDir()
+	if err := os.Mkdir(filepath.Join(wd, "node_modules"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	root := &npm.PackageJSON{Name: "root", Version: "1.0.0", Dependencies: map[string]string{"level-a": "1.0.0", "level-b": "2.0.0"}}
+	if err := npmrc.installDependenciesContext(context.Background(), wd, root, false, nil); err != nil {
+		t.Fatal(err)
+	}
+	linkDir := filepath.Join(wd, "node_modules", "level-b")
+	want := filepath.Join(npmrc.StoreDir(), "level-b@2.0.0", "node_modules", "level-b")
+	if target, err := os.Readlink(linkDir); err != nil || target != want {
+		t.Fatalf("node_modules/level-b -> %q, %v; want %q", target, err, want)
+	}
+	// a deeper link left by a previous install is replaced by the direct dependency
+	if err := os.Remove(linkDir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(npmrc.StoreDir(), "level-b@1.0.0", "node_modules", "level-b"), linkDir); err != nil {
+		t.Fatal(err)
+	}
+	if err := npmrc.installDependenciesContext(context.Background(), wd, root, false, nil); err != nil {
+		t.Fatal(err)
+	}
+	if target, err := os.Readlink(linkDir); err != nil || target != want {
+		t.Fatalf("node_modules/level-b -> %q, %v; want %q", target, err, want)
+	}
+}
+
+func TestPinGhDependency(t *testing.T) {
+	const repo = "pin-test/repo"
+	key := "git ls-remote https://github.com/" + repo
+	setCacheItem(key, []GitRef{
+		{Ref: "HEAD", Sha: "abcdef1234567890"},
+		{Ref: "refs/heads/main", Sha: "bbbbbbb234567890"},
+		{Ref: "refs/tags/v1.2.0", Sha: "1111111234567890"},
+	}, time.Minute)
+	t.Cleanup(func() { deleteCacheItem(key) })
+	for _, tt := range []struct{ spec, want string }{
+		{"github:" + repo, "abcdef1"},
+		{"github:" + repo + "#main", "bbbbbbb"},
+		{"github:" + repo + "#semver:^1", "1111111"},
+		{"git+https://github.com/" + repo + ".git#main", "bbbbbbb"},
+		{"github:" + repo + "#v1.2.0", "v1.2.0"},
+		{"github:" + repo + "#c0ffee1", "c0ffee1"},
+		{"github:" + repo + "#missing", ""},
+	} {
+		t.Run(tt.spec, func(t *testing.T) {
+			pkg, err := npm.ResolveDependencyVersion(tt.spec)
+			if err != nil {
+				t.Fatal(err)
+			}
+			ref, _ := url.QueryUnescape(pkg.Version)
+			t.Cleanup(func() { deleteCacheItem("gh/" + repo + "@" + ref) })
+			err = pinGhDependency(context.Background(), &pkg)
+			if tt.want == "" {
+				if err == nil {
+					t.Fatalf("pinned to %q, want an error", pkg.Version)
+				}
+				return
+			}
+			if err != nil || pkg.Version != tt.want {
+				t.Fatalf("pinned to %q, %v; want %q", pkg.Version, err, tt.want)
+			}
+		})
+	}
+}
+
+func TestVersionRouteProbe(t *testing.T) {
+	for _, tt := range []struct {
+		status    int
+		supported bool
+		probes    int32
+	}{
+		{200, true, 1},
+		{404, false, 1},
+		{503, false, 2},
+	} {
+		t.Run(fmt.Sprint(tt.status), func(t *testing.T) {
+			var probes atomic.Int32
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/api/npm/x/react/19.0.0" || r.Header.Get("Authorization") != "Bearer token" {
+					t.Errorf("probe %s with auth %q", r.URL.Path, r.Header.Get("Authorization"))
+				}
+				probes.Add(1)
+				w.WriteHeader(tt.status)
+			}))
+			defer srv.Close()
+			reg := &NpmRegistry{NpmRegistryConfig: NpmRegistryConfig{Registry: srv.URL + "/api/npm/x/"}}
+			header := http.Header{"Authorization": []string{"Bearer token"}}
+			for range 2 {
+				if got := reg.isSupportVersionRoute(context.Background(), header); got != tt.supported {
+					t.Fatalf("supported = %v, want %v", got, tt.supported)
+				}
+			}
+			if probes.Load() != tt.probes {
+				t.Fatalf("probed %d times, want %d", probes.Load(), tt.probes)
+			}
+		})
+	}
+}
+
+func TestGetPackageInfoDoesNotCacheStoreCopy(t *testing.T) {
+	workDir := config.WorkDir
+	config.WorkDir = t.TempDir()
+	t.Cleanup(func() { config.WorkDir = workDir })
+	npmrc := &NpmRC{globalRegistry: &NpmRegistry{NpmRegistryConfig: NpmRegistryConfig{Registry: npmRegistry}}}
+	writeStorePackage(t, npmrc, npm.Package{Name: "store-copy", Version: "1.0.0"}, `{"name":"store-copy","version":"1.0.0"}`)
+	p, err := npmrc.getPackageInfo("store-copy", "1.0.0")
+	if err != nil || p.Version != "1.0.0" {
+		t.Fatalf("getPackageInfo = %v, %v", p, err)
+	}
+	if _, ok := getCacheItem("npm:store-copy@1.0.0"); ok {
+		t.Fatal("the store copy of package.json is cached")
+	}
+}
+
+func TestInvalidateDistTagCacheSkipsPrerelease(t *testing.T) {
+	key := "npm:dist-tag-test@latest"
+	t.Cleanup(func() { deleteCacheItem(key) })
+	setCacheItem(key, &npm.PackageJSON{Name: "dist-tag-test", Version: "1.0.0"}, time.Minute)
+	invalidateDistTagCacheIfNewer("dist-tag-test", "2.0.0-canary.1")
+	if _, ok := getCacheItem(key); !ok {
+		t.Fatal("a prerelease build dropped the latest cache")
+	}
+	invalidateDistTagCacheIfNewer("dist-tag-test", "2.0.0")
+	if _, ok := getCacheItem(key); ok {
+		t.Fatal("a newer release build kept the latest cache")
 	}
 }

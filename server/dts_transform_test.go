@@ -271,7 +271,8 @@ export * from 'node:original-fs';
 		if err := os.WriteFile(filepath.Join(pkgDir, "index.d.ts"), []byte(`export * from "./child.d.ts";`), 0644); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(filepath.Join(pkgDir, "child.d.ts"), []byte(strings.Repeat("x", 1024*1024+1)), 0644); err != nil {
+		// an unreadable dependency makes the dependency transform fail
+		if err := os.Mkdir(filepath.Join(pkgDir, "child.d.ts"), 0755); err != nil {
 			t.Fatal(err)
 		}
 		fs, err := storage.NewFSStorage(filepath.Join(root, "storage"))
@@ -328,7 +329,7 @@ export * from "npm:foo@1.2.3/sub";
 			t.Fatalf("expected one related dts file, got %d", n)
 		}
 
-		savePath := normalizeSavePath(path.Join("types", "/"+ctx.esmPath.PackageId(), "./index.d.ts"))
+		savePath := normalizeSavePath(path.Join("types", "*"+ctx.esmPath.PackageId(), "./index.d.ts"))
 		content, _, err := fs.Get(savePath)
 		if err != nil {
 			t.Fatal(err)
@@ -414,9 +415,13 @@ func TestTransformDTSPackageImports(t *testing.T) {
 			if n != len(wantFiles)-1 {
 				t.Fatalf("transformed %d dependencies, want %d", n, len(wantFiles)-1)
 			}
+			pkgId := ctx.esmPath.PackageId()
+			if tt.external {
+				pkgId = "*" + pkgId
+			}
 			for name, want := range wantFiles {
 				want += "\n"
-				content, _, err := fs.Get(path.Join("types", ctx.esmPath.PackageId(), name))
+				content, _, err := fs.Get(normalizeSavePath(path.Join("types", pkgId, name)))
 				if err != nil {
 					t.Fatal(err)
 				}

@@ -1,12 +1,15 @@
 package server
 
 import (
+	"context"
 	"errors"
+	"net/netip"
 	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/esm-dev/esm.sh/internal/npm"
@@ -136,23 +139,11 @@ func purgePackageCache(npmrc *NpmRC, metaDB *BuildMetaDB, esmStorage storage.Sto
 		}
 		return resp, nil
 	}
-	keys, err = negativeCache.delete("404-path:"+pkgId+"/", true)
-	if err != nil {
-		return nil, err
-	}
-	resp.CacheKeys = append(resp.CacheKeys, keys...)
-	tooLargeKey := "npm-too-large:" + npmrc.getRegistryByPackageName(esmPath.PkgName).Registry + pkgId
-	if esmPath.GhPrefix {
-		tooLargeKey = "gh-too-large:" + strings.ToLower(esmPath.PkgName) + "@" + esmPath.PkgVersion
-	}
-	keys, err = negativeCache.delete(tooLargeKey, false)
-	if err != nil {
-		return nil, err
-	}
-	resp.CacheKeys = append(resp.CacheKeys, keys...)
-
+	// [warning] wait for a running install before locking the metadata, a slow download would block every meta read
+	unlockInstall, _ := lockInstall(context.Background(), pkgId)
+	defer unlockInstall()
 	// Block legacy metadata before deleting the package's metadata namespace.
-	unlock := metaDB.lockPackage("meta/"+pkgId, true)
+	unlock := sync.OnceFunc(metaDB.lockPackage("meta/"+pkgId, true))
 	defer unlock()
 	if err := esmStorage.Put("meta-purged/"+pkgId, strings.NewReader("")); err != nil {
 		return nil, err
@@ -192,6 +183,24 @@ func purgePackageCache(npmrc *NpmRC, metaDB *BuildMetaDB, esmStorage storage.Sto
 		resp.Purged = append(resp.Purged, "install:"+installDir)
 	}
 
+	// Clear the "not found" records only after the artifacts are gone, so a
+	// build that raced with the removal cannot leave a stale record behind.
+	keys, err = negativeCache.delete("404-path:"+pkgId+"/", true)
+	if err != nil {
+		return nil, err
+	}
+	resp.CacheKeys = append(resp.CacheKeys, keys...)
+	tooLargeKey := "npm-too-large:" + npmrc.getRegistryByPackageName(esmPath.PkgName).Registry + pkgId
+	if esmPath.GhPrefix {
+		tooLargeKey = "gh-too-large:" + strings.ToLower(esmPath.PkgName) + "@" + esmPath.PkgVersion
+	}
+	keys, err = negativeCache.delete(tooLargeKey, false)
+	if err != nil {
+		return nil, err
+	}
+	resp.CacheKeys = append(resp.CacheKeys, keys...)
+	unlock()
+
 	if origin != "" {
 		resp.Rebuild = origin + "/" + pkgId
 		// also evict the matching entries from the CDN edge cache, so clients
@@ -209,6 +218,11 @@ func purgeRateAllowed(key string) bool {
 		window    = time.Minute
 		rateLimit = 5
 	)
+	// a client usually owns a whole IPv6 /64, so limit the prefix, not the address
+	if ip, err := netip.ParseAddr(strings.TrimPrefix(key, "ip:")); err == nil && ip.Is6() && !ip.Is4In6() {
+		prefix, _ := ip.Prefix(64)
+		key = "ip:" + prefix.String()
+	}
 	key = "purge-rate:" + key
 	unlock := cacheMutex.Lock(key)
 	defer unlock()
@@ -217,7 +231,8 @@ func purgeRateAllowed(key string) bool {
 	if v, ok := getCacheItem(key); ok {
 		times = v.([]int64)
 	}
-	times = slices.DeleteFunc(times, func(when int64) bool { return now-when > window.Milliseconds() })
+	// copy before mutating: the cached slice may still be read by another request
+	times = slices.DeleteFunc(slices.Clone(times), func(when int64) bool { return now-when > window.Milliseconds() })
 	if len(times) >= rateLimit {
 		setCacheItem(key, times, window)
 		return false

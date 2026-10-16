@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/esm-dev/esm.sh/internal/npm"
+	"github.com/ije/esbuild-internal/xxhash"
 	"github.com/ije/gox/set"
 )
 
@@ -42,7 +43,17 @@ func (ctx *BuildContext) analyzeSplitting() {
 	}
 
 	if exportNames.Len() > 1 {
-		splittingTxtPath := path.Join(ctx.wd, "splitting.txt")
+		name := "splitting-v2-" + ctx.target
+		if ctx.dev {
+			name += "-dev"
+		}
+		if ctx.externalAll {
+			name += "-x"
+		}
+		if a := encodeBuildArgs(ctx.args, false); a != "" {
+			name += "-" + strconv.FormatUint(xxhash.Sum64([]byte(a)), 36)
+		}
+		splittingTxtPath := path.Join(ctx.wd, name+".txt")
 		readSplittingTxt := func() bool {
 			f, err := os.Open(splittingTxtPath)
 			if err != nil {
@@ -94,7 +105,12 @@ func (ctx *BuildContext) analyzeSplitting() {
 			return
 		}
 
+		partial := false
 		defer func() {
+			// [warning] a canceled or failed analysis is partial, caching it would duplicate shared modules
+			if partial || ctx.checkCanceled() != nil {
+				return
+			}
 			splitting := []string{}
 			if ctx.splitting != nil {
 				splitting = ctx.splitting.Values()
@@ -141,6 +157,7 @@ func (ctx *BuildContext) analyzeSplitting() {
 				// like an asset esbuild has no loader for
 				if err.Error() != "could not resolve build entry" {
 					ctx.logger.Warnf("build(%s): failed to analyze %s: %v", ctx.esmPath.String(), esmPath.String(), err)
+					partial = true
 				}
 				continue
 			}

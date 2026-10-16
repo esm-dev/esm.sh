@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -111,11 +112,49 @@ func TestPowChallenge(t *testing.T) {
 	}
 
 	// an expired challenge is rejected
-	powChallengeStore.Lock()
-	powChallengeStore.m["expired"] = powChallenge{salt: "s", scope: "purge", difficulty: 1, expiresAt: time.Now().Add(-time.Minute)}
-	powChallengeStore.Unlock()
-	if powVerify("purge", "expired", "0") {
+	expired := &powChallengeResponse{Salt: "s", Difficulty: powPolicies["purge"].difficulty}
+	payload := "s." + strconv.FormatInt(time.Now().Add(-time.Minute).Unix(), 10)
+	expired.ID = payload + "." + powSign("purge", payload)
+	if powVerify("purge", expired.ID, solvePowForTest(expired)) {
 		t.Fatal("expected an expired challenge to be rejected")
+	}
+
+	// a forged or tampered challenge is rejected
+	forged, err := newPowChallenge("purge")
+	if err != nil {
+		t.Fatal(err)
+	}
+	forgedNonce := solvePowForTest(forged)
+	if powVerify("purge", forged.ID[:len(forged.ID)-1]+"x", forgedNonce) {
+		t.Fatal("expected a tampered signature to be rejected")
+	}
+	if powVerify("purge", "s.9999999999.bad", "0") {
+		t.Fatal("expected a forged challenge to be rejected")
+	}
+
+	// minting challenges keeps no server state
+	for range powSolvedMaxSize + 1 {
+		if _, err := newPowChallenge("purge"); err != nil {
+			t.Fatalf("expected unlimited challenges to be minted: %v", err)
+		}
+	}
+	if !powVerify("purge", forged.ID, forgedNonce) {
+		t.Fatal("expected a challenge to verify after many were minted")
+	}
+}
+
+func TestPurgeRateAllowed(t *testing.T) {
+	t.Cleanup(func() { deleteCacheItemsWithPrefix("purge-rate:") })
+	for i := range 5 {
+		if !purgeRateAllowed(fmt.Sprintf("ip:2001:db8::%x", i+1)) {
+			t.Fatalf("purge %d was rate limited too early", i+1)
+		}
+	}
+	if purgeRateAllowed("ip:2001:db8::ffff") {
+		t.Fatal("expected addresses of one IPv6 /64 to share the rate limit")
+	}
+	if !purgeRateAllowed("ip:2001:db8:0:1::1") || !purgeRateAllowed("ip:192.0.2.1") || !purgeRateAllowed("user:octocat") {
+		t.Fatal("expected other clients to keep their own rate limit")
 	}
 }
 

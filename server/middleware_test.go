@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/andybalholm/brotli"
+	"github.com/ije/gox/log"
 )
 
 func TestRemoteIPTrustedProxies(t *testing.T) {
@@ -48,6 +49,31 @@ func TestRemoteIPTrustedProxies(t *testing.T) {
 				t.Fatalf("remoteIP = %q, want %q", got, test.want)
 			}
 		})
+	}
+	t.Run("proxy appended header line", func(t *testing.T) {
+		config.TrustedProxies = []netip.Prefix{netip.MustParsePrefix("192.0.2.0/24")}
+		req := httptest.NewRequest(http.MethodGet, "http://localhost/", nil)
+		req.RemoteAddr = "192.0.2.1:1234"
+		req.Header.Add("X-Forwarded-For", "203.0.113.9")
+		req.Header.Add("X-Forwarded-For", "198.51.100.1")
+		if got := remoteIP(req); got != "198.51.100.1" {
+			t.Fatalf("remoteIP = %q, want %q", got, "198.51.100.1")
+		}
+	})
+}
+
+func TestRecoveryDropsCacheHeaders(t *testing.T) {
+	logger := new(log.Logger)
+	logger.SetOutput(io.Discard)
+	handler := withRecovery(logger, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", ccImmutable)
+		w.Header().Set("Content-Type", ctJavaScript)
+		panic("boom")
+	}))
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/", nil))
+	if w.Code != 500 || w.Header().Get("Cache-Control") != "" || !strings.HasPrefix(w.Header().Get("Content-Type"), "text/plain") {
+		t.Fatalf("unexpected response: %d %v", w.Code, w.Header())
 	}
 }
 

@@ -10,7 +10,11 @@ import (
 	bolt "go.etcd.io/bbolt"
 )
 
-const packageNotFoundTTL = 10 * time.Minute
+const (
+	packageNotFoundTTL = 10 * time.Minute
+	// cap of "permanent" (ttl 0) records, whose keys can come from arbitrary request paths
+	negativeCacheMaxTTL = 7 * 24 * time.Hour
+)
 
 var negativeCache *negativeCacheDB
 
@@ -46,7 +50,7 @@ func (db *negativeCacheDB) get(key string) (message string) {
 		value := tx.Bucket([]byte("records")).Get([]byte(key))
 		if len(value) > 8 {
 			expires := int64(binary.BigEndian.Uint64(value[:8]))
-			if expires == 0 || time.Now().UnixMilli() < expires {
+			if time.Now().UnixMilli() < expires {
 				message = string(value[8:])
 			}
 		}
@@ -62,12 +66,13 @@ func (db *negativeCacheDB) put(key, message string, ttl time.Duration) {
 	if db == nil {
 		return
 	}
-	value := make([]byte, 8+len(message))
-	if ttl != 0 {
-		binary.BigEndian.PutUint64(value[:8], uint64(time.Now().Add(ttl).UnixMilli()))
+	if ttl == 0 {
+		ttl = negativeCacheMaxTTL
 	}
-	copy(value[8:], message)
-	err := db.Update(func(tx *bolt.Tx) error {
+	err := db.Batch(func(tx *bolt.Tx) error {
+		value := make([]byte, 8+len(message))
+		binary.BigEndian.PutUint64(value[:8], uint64(time.Now().Add(ttl).UnixMilli()))
+		copy(value[8:], message)
 		return tx.Bucket([]byte("records")).Put([]byte(key), value)
 	})
 	if err != nil {
@@ -105,7 +110,8 @@ func (db *negativeCacheDB) gc(now time.Time) {
 		for k, v := cursor.First(); k != nil; k, v = cursor.Next() {
 			if len(v) > 8 {
 				expires := int64(binary.BigEndian.Uint64(v[:8]))
-				if expires != 0 && expires <= now.UnixMilli() {
+				// expiry 0 is a legacy "permanent" record, drop it as well
+				if expires <= now.UnixMilli() {
 					if err := cursor.Delete(); err != nil {
 						return err
 					}

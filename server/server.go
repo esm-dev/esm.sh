@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -9,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"path"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -27,6 +29,8 @@ func Start() {
 	flag.StringVar(&cfile, "config", "config.json", "the config file path")
 	flag.Parse()
 
+	configSet := false
+	flag.Visit(func(f *flag.Flag) { configSet = configSet || f.Name == "config" })
 	if existsFile(cfile) {
 		config, err = LoadConfig(cfile)
 		if err != nil {
@@ -36,6 +40,9 @@ func Start() {
 		if DEBUG {
 			fmt.Printf("%s [info] Config loaded from %s\n", time.Now().Format("2006-01-02 15:04:05"), cfile)
 		}
+	} else if configSet {
+		fmt.Println("config file not found:", cfile)
+		os.Exit(1)
 	}
 
 	if DEBUG {
@@ -71,11 +78,20 @@ func Start() {
 	if err != nil {
 		logger.Fatalf("failed to initialize negative cache: %v", err)
 	}
-	defer negativeCache.Close()
 	negativeCache.gc(time.Now())
 
-	// purge npm cache when disk is low or full
+	// the default transport keeps only 2 idle connections per host, too few for parallel registry fetches
+	http.DefaultTransport.(*http.Transport).MaxIdleConnsPerHost = 64
+
+	// remove staging dirs left behind by installs interrupted by a crash or restart
 	npmrc := DefaultNpmRC()
+	if dirs, err := filepath.Glob(filepath.Join(npmrc.StoreDir(), ".install-*")); err == nil {
+		for _, dir := range dirs {
+			os.RemoveAll(dir)
+		}
+	}
+
+	// purge npm cache when disk is low or full
 	go func() {
 		purgeNPMCacheWhenDiskIsLowOrFull(npmrc, logger)
 		ticker := time.NewTicker(time.Hour)
@@ -107,8 +123,10 @@ func Start() {
 	// start the http server
 	errCh := make(chan error, 2)
 	httpServer := &http.Server{
-		Addr:    fmt.Sprintf(":%d", config.Port),
-		Handler: handler,
+		Addr:              fmt.Sprintf(":%d", config.Port),
+		Handler:           handler,
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       2 * time.Minute,
 	}
 	go func() {
 		errCh <- httpServer.ListenAndServe()
@@ -116,6 +134,7 @@ func Start() {
 	logger.Infof("Server is ready on http://localhost:%d", config.Port)
 
 	// start the https server with autocert (Let's Encrypt) if the `tlsPort` is set
+	var httpsServer *http.Server
 	if config.TlsPort > 0 && !DEBUG {
 		cdnURL, err := url.Parse(config.CdnOrigin)
 		if err != nil || cdnURL.Hostname() == "" {
@@ -126,10 +145,12 @@ func Start() {
 			Cache:      autocert.DirCache(path.Join(config.WorkDir, "autotls")),
 			HostPolicy: autocert.HostWhitelist(cdnURL.Hostname()),
 		}
-		httpsServer := &http.Server{
-			Addr:      fmt.Sprintf(":%d", config.TlsPort),
-			Handler:   handler,
-			TLSConfig: certManager.TLSConfig(),
+		httpsServer = &http.Server{
+			Addr:              fmt.Sprintf(":%d", config.TlsPort),
+			Handler:           handler,
+			TLSConfig:         certManager.TLSConfig(),
+			ReadHeaderTimeout: 10 * time.Second,
+			IdleTimeout:       2 * time.Minute,
 		}
 		go func() {
 			errCh <- httpsServer.ListenAndServeTLS("", "")
@@ -141,13 +162,23 @@ func Start() {
 	signal.Notify(c, syscall.SIGTERM, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGHUP, syscall.SIGABRT)
 	select {
 	case <-c:
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		httpServer.Shutdown(ctx)
+		if httpsServer != nil {
+			httpsServer.Shutdown(ctx)
+		}
+		cancel()
 	case err = <-errCh:
 		logger.Error(err)
 	}
 
 	// release resources
+	negativeCache.Close()
 	logger.FlushBuffer()
 	accessLogger.FlushBuffer()
+	if err != nil {
+		os.Exit(1)
+	}
 }
 
 // corsMiddleware returns a middleware that handles CORS requests.

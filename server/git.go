@@ -26,10 +26,6 @@ type GitRef struct {
 }
 
 // list refs of a github repository using `git ls-remote repo`
-func listGhRepoRefs(repo string) (refs []GitRef, err error) {
-	return listGhRepoRefsContext(context.Background(), repo)
-}
-
 func listGhRepoRefsContext(ctx context.Context, repo string) (refs []GitRef, err error) {
 	return withCache("git ls-remote "+repo, time.Duration(config.NpmQueryCacheTTL)*time.Second, func() ([]GitRef, string, error) {
 		stdout := &bytes.Buffer{}
@@ -37,6 +33,8 @@ func listGhRepoRefsContext(ctx context.Context, repo string) (refs []GitRef, err
 		cancelCtx, cancel := context.WithTimeout(ctx, time.Minute)
 		defer cancel()
 		cmd := exec.CommandContext(cancelCtx, "git", "ls-remote", repo)
+		// git asks for credentials on missing or private repos, never block on a prompt
+		cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GCM_INTERACTIVE=never")
 		cmd.Stdout = stdout
 		cmd.Stderr = errout
 		err = cmd.Run()

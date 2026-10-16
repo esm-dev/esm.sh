@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -14,6 +15,8 @@ import (
 	"github.com/ije/gox/set"
 	"github.com/ije/gox/utils"
 )
+
+var regexpPrVersion = regexp.MustCompile(`[^/]@([\da-f]{7,})$`)
 
 type EsmPath struct {
 	GhPrefix   bool
@@ -64,10 +67,7 @@ func parseEsmPath(npmrc *NpmRC, pathname string) (esm EsmPath, extraQuery string
 			err = errors.New("pkg.pr.new: tag or branch not found")
 		}
 	} else if esm.GhPrefix {
-		esm.PkgVersion, err = resolveGhPackageVersion(esm)
-		if err == nil && !isCommitish(esm.PkgVersion) {
-			err = errors.New("github: tag or branch not found")
-		}
+		esm.PkgVersion, err = resolveGhPackageVersion(context.Background(), esm)
 	} else {
 		var date time.Time
 		var isDateVersion bool
@@ -97,7 +97,14 @@ func parseEsmPathSyntax(pathname string) (esm EsmPath, extraQuery string, exactV
 		} else {
 			pathname = pathname[12:]
 		}
-		pkgName, rest := utils.SplitByLastByte(pathname, '@')
+		// the name may contain `/@` (scope) and the sub path may contain `@`
+		var pkgName, rest string
+		for i := 1; i < len(pathname); i++ {
+			if pathname[i] == '@' && pathname[i-1] != '/' {
+				pkgName, rest = pathname[:i], pathname[i+1:]
+				break
+			}
+		}
 		if rest == "" || !validatePrPackageName(pkgName) {
 			err = errors.New("invalid path")
 			return
@@ -275,10 +282,10 @@ func isExternalModule(specifier string, external set.ReadOnlySet[string]) bool {
 	return false
 }
 
-func resolveGhPackageVersion(esm EsmPath) (version string, err error) {
+func resolveGhPackageVersion(ctx context.Context, esm EsmPath) (version string, err error) {
 	return withCache("gh/"+esm.PkgName+"@"+esm.PkgVersion, time.Duration(config.NpmQueryCacheTTL)*time.Second, func() (version string, aliasKey string, err error) {
 		var refs []GitRef
-		refs, err = listGhRepoRefs(fmt.Sprintf("https://github.com/%s", esm.PkgName))
+		refs, err = listGhRepoRefsContext(ctx, fmt.Sprintf("https://github.com/%s", esm.PkgName))
 		if err != nil {
 			return
 		}
@@ -314,6 +321,10 @@ func resolveGhPackageVersion(esm EsmPath) (version string, err error) {
 				}
 			}
 		}
+		if !isCommitish(esm.PkgVersion) {
+			err = errors.New("github: tag or branch not found")
+			return
+		}
 		version = esm.PkgVersion
 		return
 	})
@@ -325,11 +336,10 @@ func resolvePrPackageVersion(esm EsmPath) (version string, err error) {
 		if err != nil {
 			return
 		}
-		versionRegex := regexp.MustCompile(`[^/]@([\da-f]{7,})$`)
 		client := newFetchClient("esmd/"+VERSION, 30)
 		version = esm.PkgVersion
 		client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
-			match := versionRegex.FindStringSubmatch(req.URL.Path)
+			match := regexpPrVersion.FindStringSubmatch(req.URL.Path)
 			if len(match) > 1 {
 				version = match[1][:7]
 			}

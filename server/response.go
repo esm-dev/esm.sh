@@ -23,6 +23,10 @@ func writeStatus(w http.ResponseWriter, code int, message string) {
 	if h.Get("Content-Type") == "" {
 		h.Set("Content-Type", "text/plain; charset=utf-8")
 	}
+	if code >= 500 {
+		// never cache server errors with the headers set before the failure
+		h.Del("Cache-Control")
+	}
 	h.Set("Content-Length", strconv.Itoa(len(message)))
 	w.WriteHeader(code)
 	w.Write([]byte(message))

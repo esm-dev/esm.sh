@@ -64,9 +64,10 @@ func cjsModuleLexer(b *BuildContext, cjsEntry string) (ret cjsModuleLexerResult,
 	cacheFileName := path.Join(b.wd, ".cjs-module-lexer", base64.RawURLEncoding.EncodeToString(h.Sum(nil))+".json")
 
 	// check the cache first
-	if existsFile(cacheFileName) && utils.ParseJSONFile(cacheFileName, &ret) == nil {
+	if utils.ParseJSONFile(cacheFileName, &ret) == nil {
 		return
 	}
+	ret = cjsModuleLexerResult{}
 
 	start := time.Now()
 	defer func() {
@@ -74,9 +75,12 @@ func cjsModuleLexer(b *BuildContext, cjsEntry string) (ret cjsModuleLexerResult,
 			if DEBUG {
 				b.logger.Debugf("[cjsModuleLexer] parse %s in %s", path.Join(b.esmPath.PkgName, cjsEntry), time.Since(start))
 			}
-			if !existsFile(cacheFileName) {
-				ensureDir(path.Dir(cacheFileName))
-				utils.WriteJSONFile(cacheFileName, ret, "")
+			// write to a temp file first, a truncated cache file would never be repaired
+			if data, e := json.Marshal(ret); e == nil && ensureDir(path.Dir(cacheFileName)) == nil {
+				tmpFile := fmt.Sprintf("%s.%d.tmp", cacheFileName, time.Now().UnixNano())
+				if os.WriteFile(tmpFile, data, 0644) != nil || os.Rename(tmpFile, cacheFileName) != nil {
+					os.Remove(tmpFile)
+				}
 			}
 		}
 	}()
@@ -167,7 +171,7 @@ RETRY:
 				if strings.HasPrefix(formattedMessage, "failed to resolve reexport: NotFound(") && !retried {
 					retried = true
 					// install dependencies and retry
-					err = b.npmrc.installDependenciesContext(b.Context(), b.wd, b.pkgJson, true, b.args.Deps, nil)
+					err = b.npmrc.installDependenciesContext(b.Context(), b.wd, b.pkgJson, true, b.args.Deps)
 					if err != nil {
 						return
 					}

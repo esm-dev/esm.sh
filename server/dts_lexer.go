@@ -21,6 +21,7 @@ var (
 	bytesCommentEnd   = []byte{'*', '/'}
 	bytesDoubleSlash  = []byte{'/', '/'}
 	bytesStripleSlash = []byte{'/', '/', '/'}
+	bytesBOM          = []byte{0xEF, 0xBB, 0xBF}
 )
 
 type TsImportKind uint8
@@ -55,9 +56,15 @@ func parseDts(r io.Reader, w *bytes.Buffer, resolve func(specifier string, kind 
 	}
 
 	scanner := bufio.NewScanner(r)
-	scanner.Buffer(nil, 1024*1024)
+	scanner.Buffer(nil, 64*1024*1024)
+	firstLine := true
 	for scanner.Scan() {
-		line, trimedSpaces := trimSpace(scanner.Bytes())
+		line := scanner.Bytes()
+		if firstLine {
+			line = bytes.TrimPrefix(line, bytesBOM)
+			firstLine = false
+		}
+		line, trimedSpaces := trimSpace(line)
 		w.Write(trimedSpaces)
 	CheckCommentScope:
 		if !multiLineComment && bytes.HasPrefix(line, bytesCommentStart) {

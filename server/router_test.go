@@ -504,6 +504,13 @@ func TestRouterCacheRegressions(t *testing.T) {
 				}
 			}
 		}
+		for _, query := range []string{"?meta", "?css"} {
+			res := httptest.NewRecorder()
+			handler.ServeHTTP(res, httptest.NewRequest("GET", "http://localhost/"+name+"@1.0.0"+query, nil))
+			if !strings.Contains(res.Header().Get("Vary"), "User-Agent") {
+				t.Errorf("%s: missing `Vary: User-Agent`: %v", query, res.Header())
+			}
+		}
 	})
 }
 
@@ -735,5 +742,73 @@ func TestGhRawAssets(t *testing.T) {
 	}
 	if existsDir(filepath.Join(config.WorkDir, "npm", "gh", "owner")) {
 		t.Fatal("asset request installed the repository")
+	}
+}
+
+func TestRouterPathRegressions(t *testing.T) {
+	useNegativeCache(t)
+	previousConfig, previousNpmRC, transport := config, defaultNpmRC, http.DefaultTransport
+	testConfig := *config
+	testConfig.WorkDir = t.TempDir()
+	config, defaultNpmRC = &testConfig, nil
+	t.Cleanup(func() {
+		config, defaultNpmRC, http.DefaultTransport = previousConfig, previousNpmRC, transport
+	})
+	fs, err := storage.NewFSStorage(filepath.Join(config.WorkDir, "storage"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	logger := new(log.Logger)
+	logger.SetOutput(io.Discard)
+	handler := esmLegacyRouter(fs, esmRouter(fs, logger))
+	http.DefaultTransport = ghTestTransport(func(r *http.Request) (*http.Response, error) {
+		t.Errorf("unexpected request: %s", r.URL)
+		return &http.Response{StatusCode: 500, Body: http.NoBody}, nil
+	})
+	const pkg = "asset-url-test"
+	dir := filepath.Join(config.WorkDir, "npm", pkg+"@1.0.0", "node_modules", pkg)
+	for _, filename := range []string{"package.json", "node/foo.wasm", "b.wasm", "lib/ab.wasm"} {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, filename)), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, filename), []byte(filename), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, key := range []string{"gh/owner/repo@main", "pr/q@main"} {
+		setCacheItem(key, "abcdef0", time.Minute)
+		t.Cleanup(func() { deleteCacheItem(key) })
+	}
+	setCacheItem("npm:react@18", &npm.PackageJSON{Name: "react", Version: "18.3.1"}, time.Minute)
+	t.Cleanup(func() { deleteCacheItem("npm:react@18") })
+
+	for _, test := range []struct {
+		path, ua string
+		status   int
+		location string
+	}{
+		{"/" + pkg + "@1.0.0/node/foo.wasm", "", 200, ""},
+		{"/" + pkg + "@1.0.0/es2022/lib/ab.wasm", "", 301, "/" + pkg + "@1.0.0/lib/ab.wasm"},
+		{"/" + pkg + "@1.0.0/es2022/x/ab.wasm", "", 301, "/" + pkg + "@1.0.0/lib/ab.wasm"},
+		{"/gh/*owner/repo@main/foo.json", "", 302, "/gh/*owner/repo@abcdef0/foo.json"},
+		{"/gh/*owner/repo@main", "Deno/2.0.0", 302, "/gh/*owner/repo@abcdef0"},
+		{"/pr/*q@main/foo.json", "", 302, "/pr/*q@abcdef0/foo.json"},
+		{"/react@18?dev/jsx-runtime", "Deno/2.0.0", 302, "/react@18.3.1/jsx-runtime?dev"},
+		{"/+" + strings.Repeat("a", 40) + ".mjs", "", 404, ""},
+		{"/v135/react@18.2.0/es2022/../../../../modules/x.mjs", "", 404, ""},
+	} {
+		req := httptest.NewRequest("GET", "http://localhost"+test.path, nil)
+		req.Header.Set("User-Agent", test.ua)
+		res := httptest.NewRecorder()
+		handler.ServeHTTP(res, req)
+		if res.Code != test.status {
+			t.Fatalf("%s: HTTP %d, want %d: %s", test.path, res.Code, test.status, res.Body.String())
+		}
+		if test.location != "" && res.Header().Get("Location") != "http://localhost"+test.location {
+			t.Fatalf("%s: location=%q, want %q", test.path, res.Header().Get("Location"), test.location)
+		}
+		if test.status == 200 && res.Body.String() != "node/foo.wasm" {
+			t.Fatalf("%s: unexpected body %q", test.path, res.Body.String())
+		}
 	}
 }

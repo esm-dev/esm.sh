@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -137,5 +138,22 @@ func TestDtsWalkerResolveError(t *testing.T) {
 	})
 	if !errors.Is(err, want) {
 		t.Fatalf("expected %v, got %v", want, err)
+	}
+}
+
+func TestDtsWalkerBOMAndLongLine(t *testing.T) {
+	long := strings.Repeat("x", 2*1024*1024)
+	rawDts := "\xEF\xBB\xBFimport x from \"pkg\";\ntype Long = \"" + long + "\";\nexport * from \"./a\";\n"
+	expectedDts := "import x from \"/resolved/pkg\";\ntype Long = \"" + long + "\";\nexport * from \"/resolved/./a\";\n"
+
+	buf := bytes.NewBuffer(nil)
+	err := parseDts(bytes.NewBufferString(rawDts), buf, func(specifier string, kind TsImportKind, position int) (string, error) {
+		return "/resolved/" + specifier, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if buf.String() != expectedDts {
+		t.Fatalf("transformed dts not match, got prefix:\n%.80s", buf.String())
 	}
 }
