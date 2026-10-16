@@ -144,8 +144,7 @@ func transform(options *ResolvedTransformOptions) (out *TransformOutput, err err
 						}
 						runtimePath := path
 						if isHttpSpecifier(path) {
-							runtimePath = ""
-							if u, err := url.Parse(path); err == nil && u.Hostname() == "esm.sh" {
+							if u, err := url.Parse(path); err == nil {
 								runtimePath = u.Path
 							}
 						}
@@ -168,18 +167,17 @@ func transform(options *ResolvedTransformOptions) (out *TransformOutput, err err
 		err = errors.New("failed to validate code: no output files")
 		return
 	}
-	output := &TransformOutput{}
+	out = &TransformOutput{}
 	for _, file := range ret.OutputFiles {
 		if strings.HasSuffix(file.Path, ".js") || strings.HasSuffix(file.Path, ".css") {
 			if err = validateSolidJSX(file.Contents, solidJSXRuntimes); err != nil {
-				return
+				return nil, err
 			}
-			output.Code = string(file.Contents)
+			out.Code = string(file.Contents)
 		} else if strings.HasSuffix(file.Path, ".map") {
-			output.Map = string(file.Contents)
+			out.Map = string(file.Contents)
 		}
 	}
-	out = output
 	return
 }
 
