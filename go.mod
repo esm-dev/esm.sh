@@ -6,7 +6,7 @@ require (
 	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/andybalholm/brotli v1.2.3
 	github.com/hashicorp/golang-lru/v2 v2.0.7
-	github.com/ije/esbuild-internal v0.28.2
+	github.com/ije/esbuild-internal v0.28.3-0.20261018040716-5dbffdff6fc3
 	github.com/ije/gox v0.10.4
 	go.etcd.io/bbolt v1.5.0
 	golang.org/x/crypto v0.57.0
