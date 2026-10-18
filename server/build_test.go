@@ -10,9 +10,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"slices"
 	"strings"
 	"testing"
@@ -1843,12 +1845,16 @@ func TestBuildModuleRequireUsage(t *testing.T) {
 
 func TestBuildModuleInternalExportStars(t *testing.T) {
 	for _, tt := range []struct {
-		name, barrel string
-		split        bool
+		name, barrel, child string
+		split, childSplit   bool
 	}{
 		{name: "internal", barrel: `export * from "./leaf.js";`},
 		{name: "cycle", barrel: `export * from "./leaf.js"; export * from "./barrel.js";`},
 		{name: "external", barrel: `export * from "./leaf.js"; export * from "peer";`, split: true},
+		{name: "shared leaf", barrel: `export * from "./child.js"; export * from "./leaf.js";`, child: `export * from "./leaf.js"; export const bar = 2;`},
+		{name: "closed cycle", barrel: `export * from "./child.js"; export * from "./leaf.js";`, child: `export * from "./barrel.js"; export const bar = 2;`},
+		{name: "external cycle", barrel: `export * from "./child.js"; export * from "peer";`, child: `export * from "./barrel.js"; export const bar = 2;`, split: true, childSplit: true},
+		{name: "pending sibling", barrel: `export * from "./child.js"; export * from "./external.js";`, split: true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			wd := t.TempDir()
@@ -1856,10 +1862,16 @@ func TestBuildModuleInternalExportStars(t *testing.T) {
 			if err := os.MkdirAll(pkgDir, 0755); err != nil {
 				t.Fatal(err)
 			}
+			child := tt.child
+			if child == "" {
+				child = `export const bar = 2;`
+			}
 			for name, code := range map[string]string{
-				"index.js":  `export { foo } from "./barrel.js";`,
-				"barrel.js": tt.barrel,
-				"leaf.js":   `/** doc */ export const foo = 1;`,
+				"index.js":    `export { foo } from "./barrel.js"; export { bar } from "./child.js";`,
+				"barrel.js":   tt.barrel,
+				"leaf.js":     `/** doc */ export const foo = 1;`,
+				"child.js":    child,
+				"external.js": `export * from "peer";`,
 			} {
 				if err := os.WriteFile(filepath.Join(pkgDir, name), []byte(code), 0644); err != nil {
 					t.Fatal(err)
@@ -1886,6 +1898,60 @@ func TestBuildModuleInternalExportStars(t *testing.T) {
 			if split := slices.Contains(meta.Imports, "/example@1.0.0/es2022/barrel.mjs"); split != tt.split {
 				t.Fatalf("barrel split = %v, want %v (imports: %v)", split, tt.split, meta.Imports)
 			}
+			if split := slices.Contains(meta.Imports, "/example@1.0.0/es2022/child.mjs"); split != tt.childSplit {
+				t.Fatalf("child split = %v, want %v (imports: %v)", split, tt.childSplit, meta.Imports)
+			}
 		})
+	}
+}
+
+func TestBuildModuleExportStarDepth(t *testing.T) {
+	if os.Getenv("ESM_TEST_EXPORT_STAR_DEPTH") == "" {
+		cmd := exec.Command(os.Args[0], "-test.run=^TestBuildModuleExportStarDepth$")
+		cmd.Env = append(os.Environ(), "ESM_TEST_EXPORT_STAR_DEPTH=1")
+		if output, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("deep export-star build failed: %v\n%s", err, output)
+		}
+		return
+	}
+	defer debug.SetMaxStack(debug.SetMaxStack(512 << 10))
+	wd := t.TempDir()
+	pkgDir := filepath.Join(wd, "node_modules", "example")
+	if err := os.MkdirAll(pkgDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pkgDir, "index.js"), []byte(`export * from "./f0.js";`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	const depth = 4096
+	for i := 0; i <= depth; i++ {
+		code := `export * from "peer";`
+		if i < depth {
+			code = fmt.Sprintf(`export * from "./f%d.js";`, i+1)
+		}
+		if err := os.WriteFile(filepath.Join(pkgDir, fmt.Sprintf("f%d.js", i)), []byte(code), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	fs, err := storage.NewFSStorage(filepath.Join(wd, "storage"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	logger, err := log.New("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	logger.SetOutput(io.Discard)
+	ctx := &BuildContext{
+		wd: wd, target: "es2022", storage: fs, logger: logger, npmrc: &NpmRC{},
+		esmPath: EsmPath{PkgName: "example", PkgVersion: "1.0.0"},
+		pkgJson: &npm.PackageJSON{Name: "example", Version: "1.0.0", Type: "module", Main: "./index.js", Types: "./index.d.ts", PeerDependencies: map[string]string{"peer": "1.0.0"}},
+	}
+	meta, _, err := ctx.buildModule(false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(meta.Imports, "/example@1.0.0/es2022/f0.mjs") {
+		t.Fatalf("deep external export star was not preserved: %v", meta.Imports)
 	}
 }
