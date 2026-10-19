@@ -4,11 +4,10 @@ import (
 	"crypto/rand"
 	"errors"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
-
-	"github.com/ije/gox/utils"
 )
 
 type fsStorage struct {
@@ -31,30 +30,29 @@ func NewFSStorage(root string) (storage Storage, err error) {
 	return &fsStorage{root: root}, nil
 }
 
-// joinRootSafe returns filepath.Join(fs.root, key) only when key is
-// filepath.IsLocal, so lexical ".." segments cannot escape the storage root.
-func (fs *fsStorage) joinRootSafe(key string) (filename string, err error) {
+func (fs *fsStorage) openRoot(key string) (root *os.Root, filename string, err error) {
 	if key == "" {
-		return "", errors.New("key is required")
+		return nil, "", errors.New("key is required")
 	}
 	if strings.Contains(key, "\x00") {
-		return "", ErrInvalidStorageKey
+		return nil, "", ErrInvalidStorageKey
 	}
 	k := filepath.FromSlash(strings.Trim(filepath.ToSlash(key), "/"))
 	if !filepath.IsLocal(k) {
-		return "", ErrInvalidStorageKey
+		return nil, "", ErrInvalidStorageKey
 	}
-	root := filepath.Clean(fs.root)
-	full := filepath.Join(root, k)
-	return full, nil
+	// [warning] lexical checks alone do not prevent symlinks from escaping storage.
+	root, err = os.OpenRoot(fs.root)
+	return root, filepath.Clean(k), err
 }
 
 func (fs *fsStorage) Stat(key string) (stat Stat, err error) {
-	filename, err := fs.joinRootSafe(key)
+	root, filename, err := fs.openRoot(key)
 	if err != nil {
 		return nil, err
 	}
-	fi, err := os.Lstat(filename)
+	defer root.Close()
+	fi, err := root.Lstat(filename)
 	if err != nil {
 		if os.IsNotExist(err) || strings.HasSuffix(err.Error(), "not a directory") {
 			return nil, ErrNotFound
@@ -65,11 +63,12 @@ func (fs *fsStorage) Stat(key string) (stat Stat, err error) {
 }
 
 func (fs *fsStorage) Get(key string) (content io.ReadCloser, stat Stat, err error) {
-	filename, err := fs.joinRootSafe(key)
+	root, filename, err := fs.openRoot(key)
 	if err != nil {
 		return
 	}
-	file, err := os.Open(filename)
+	defer root.Close()
+	file, err := root.Open(filename)
 	if err != nil && (os.IsNotExist(err) || strings.HasSuffix(err.Error(), "not a directory")) {
 		err = ErrNotFound
 	}
@@ -85,20 +84,22 @@ func (fs *fsStorage) Get(key string) (content io.ReadCloser, stat Stat, err erro
 }
 
 func (fs *fsStorage) Put(key string, content io.Reader) (err error) {
-	filename, err := fs.joinRootSafe(key)
+	root, filename, err := fs.openRoot(key)
 	if err != nil {
 		return err
 	}
-	err = ensureDir(filepath.Dir(filename))
+	defer root.Close()
+	err = root.MkdirAll(filepath.Dir(filename), 0755)
 	if err != nil {
 		return
 	}
 
-	file, err := os.OpenFile(filepath.Join(filepath.Dir(filename), ".storage-"+rand.Text()), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0666)
+	tmpfile := filepath.Join(filepath.Dir(filename), ".storage-"+rand.Text())
+	file, err := root.OpenFile(tmpfile, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0666)
 	if err != nil {
 		return
 	}
-	defer os.Remove(file.Name())
+	defer root.Remove(tmpfile)
 
 	_, err = io.Copy(file, content)
 	if closeErr := file.Close(); err == nil {
@@ -107,48 +108,46 @@ func (fs *fsStorage) Put(key string, content io.Reader) (err error) {
 	if err != nil {
 		return err
 	}
-	return os.Rename(file.Name(), filename)
+	return root.Rename(tmpfile, filename)
 }
 
 func (fs *fsStorage) Delete(key string) (err error) {
-	filename, err := fs.joinRootSafe(key)
+	root, filename, err := fs.openRoot(key)
 	if err != nil {
 		return err
 	}
-	return os.Remove(filename)
+	defer root.Close()
+	return root.Remove(filename)
 }
 
 func (fs *fsStorage) List(prefix string) (keys []string, err error) {
-	dir := strings.TrimSuffix(utils.NormalizePathname(prefix)[1:], "/")
-	dir = strings.Trim(strings.TrimSpace(dir), "/")
-	scanRoot := filepath.Clean(fs.root)
-	parentKey := ""
-	if dir != "" {
-		var ferr error
-		scanRoot, ferr = fs.joinRootSafe(dir)
-		if ferr != nil {
-			return nil, ferr
-		}
-		parentKey = dir
-	}
-	return findFiles(scanRoot, parentKey)
-}
-
-func (fs *fsStorage) DeleteAll(prefix string) (deletedKeys []string, err error) {
-	dir := strings.TrimSuffix(utils.NormalizePathname(prefix)[1:], "/")
-	dir = strings.Trim(strings.TrimSpace(dir), "/")
+	dir := strings.Trim(strings.TrimSpace(filepath.ToSlash(prefix)), "/")
 	if dir == "" {
-		return nil, errors.New("prefix is required")
+		dir = "."
 	}
-	keys, err := fs.List(prefix)
-	if err != nil {
-		return
-	}
-	absDir, err := fs.joinRootSafe(dir)
+	root, dir, err := fs.openRoot(dir)
 	if err != nil {
 		return nil, err
 	}
-	err = os.RemoveAll(absDir)
+	defer root.Close()
+	return findFiles(root, filepath.ToSlash(dir))
+}
+
+func (fs *fsStorage) DeleteAll(prefix string) (deletedKeys []string, err error) {
+	dir := strings.Trim(strings.TrimSpace(filepath.ToSlash(prefix)), "/")
+	if dir == "" || filepath.Clean(dir) == "." {
+		return nil, errors.New("prefix is required")
+	}
+	root, dir, err := fs.openRoot(dir)
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
+	keys, err := findFiles(root, filepath.ToSlash(dir))
+	if err != nil {
+		return nil, err
+	}
+	err = root.RemoveAll(dir)
 	if err != nil {
 		return
 	}
@@ -165,8 +164,8 @@ func ensureDir(dir string) (err error) {
 }
 
 // findFiles returns a list of files in the given directory.
-func findFiles(root string, parentDir string) ([]string, error) {
-	entries, err := os.ReadDir(root)
+func findFiles(root *os.Root, parentDir string) ([]string, error) {
+	entries, err := fs.ReadDir(root.FS(), parentDir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return []string{}, nil
@@ -177,11 +176,11 @@ func findFiles(root string, parentDir string) ([]string, error) {
 	for _, entry := range entries {
 		name := entry.Name()
 		path := name
-		if parentDir != "" {
+		if parentDir != "." {
 			path = parentDir + "/" + name
 		}
 		if entry.IsDir() {
-			subFiles, err := findFiles(filepath.Join(root, name), path)
+			subFiles, err := findFiles(root, path)
 			if err != nil {
 				return nil, err
 			}

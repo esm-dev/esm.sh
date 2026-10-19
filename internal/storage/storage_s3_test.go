@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -274,6 +275,61 @@ func TestS3StorageFSCacheKey(t *testing.T) {
 	}
 	if got = s3.fsCacheKey("v135/react@19.2.0/esnext/react.mjs"); got != "v135/react@19.2.0/esnext/react.mjs" {
 		t.Fatalf("invalid cache key %q", got)
+	}
+}
+
+func TestS3StorageCacheRejectSymlinkEscape(t *testing.T) {
+	for _, operation := range []string{"Get", "Put"} {
+		t.Run(operation, func(t *testing.T) {
+			root := t.TempDir()
+			outside := t.TempDir()
+			victim := filepath.Join(outside, "file.txt")
+			if err := os.WriteFile(victim, []byte("original"), 0644); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(outside, filepath.Join(root, "link")); err != nil {
+				t.Fatal(err)
+			}
+			cache, err := NewFSStorage(root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			client := http.DefaultClient
+			t.Cleanup(func() { http.DefaultClient = client })
+			http.DefaultClient = &http.Client{Transport: s3TestTransport(func(req *http.Request) (*http.Response, error) {
+				if req.Body != nil {
+					defer req.Body.Close()
+					if _, err := io.Copy(io.Discard, req.Body); err != nil {
+						return nil, err
+					}
+				}
+				return &http.Response{
+					StatusCode: 200,
+					Header: http.Header{
+						"Content-Length": {"11"},
+						"Last-Modified":  {time.Now().UTC().Format(http.TimeFormat)},
+					},
+					Body: io.NopCloser(strings.NewReader("replacement")),
+				}, nil
+			})}
+			s3 := &s3Storage{apiEndpoint: "https://storage.test", fsCache: cache.(*fsStorage)}
+			if operation == "Put" {
+				err = s3.Put("link/file.txt", strings.NewReader("replacement"))
+			} else {
+				var content io.ReadCloser
+				content, _, err = s3.Get("link/file.txt")
+				if err == nil {
+					_, err = io.ReadAll(content)
+					content.Close()
+				}
+			}
+			if err == nil {
+				t.Errorf("%s followed a symlink outside the cache", operation)
+			}
+			if data, err := os.ReadFile(victim); err != nil || string(data) != "original" {
+				t.Fatalf("outside file changed: content %q, error %v", data, err)
+			}
+		})
 	}
 }
 
