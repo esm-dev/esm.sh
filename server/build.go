@@ -445,46 +445,59 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 	esmifyPlugin := esbuild.Plugin{
 		Name: "esmify",
 		Setup: func(build esbuild.PluginBuild) {
-			// reports whether `export *` in the module reaches an external module, directly or through bundled modules
-			var hasExternalExportStar func(filename string, visiting []string) (external bool, cyclic bool)
-			hasExternalExportStar = func(filename string, visiting []string) (external bool, cyclic bool) {
+			hasExternalExportStar := func(filename string) (external bool) {
 				if v, ok := exportStarExternal.Load(filename); ok {
-					return v.(bool), false
+					return v.(bool)
 				}
-				if slices.Contains(visiting, filename) {
-					return false, true
-				}
-				if !slices.Contains(moduleExts, path.Ext(filename)) {
-					return false, false
-				}
-				data, err := os.ReadFile(filename)
-				if err != nil || !bytes.Contains(data, []byte("export")) || !bytes.ContainsRune(data, '*') {
-					return false, false
-				}
-				ast, err := parseJS(filename, data)
-				if err != nil {
-					return false, false
-				}
-				visiting = append(visiting, filename)
-				for _, i := range ast.ExportStarImportRecords {
-					r := build.Resolve(ast.ImportRecords[i].Path.Text, esbuild.ResolveOptions{
-						Importer: filename, ResolveDir: path.Dir(filename), Kind: esbuild.ResolveJSImportStatement, PluginData: probeResolve,
-					})
-					// unresolved sources become implicit externals on rebuild
-					if len(r.Errors) > 0 || r.External {
-						external = true
+				parents := map[string]string{filename: ""}
+				pending := []string{filename}
+				for len(pending) > 0 {
+					filename = pending[len(pending)-1]
+					pending = pending[:len(pending)-1]
+					if v, ok := exportStarExternal.Load(filename); ok {
+						if external = v.(bool); external {
+							break
+						}
+						continue
+					}
+					if !slices.Contains(moduleExts, path.Ext(filename)) {
+						continue
+					}
+					data, err := os.ReadFile(filename)
+					if err != nil || !bytes.Contains(data, []byte("export")) || !bytes.ContainsRune(data, '*') {
+						continue
+					}
+					ast, err := parseJS(filename, data)
+					if err != nil {
+						continue
+					}
+					for _, i := range ast.ExportStarImportRecords {
+						r := build.Resolve(ast.ImportRecords[i].Path.Text, esbuild.ResolveOptions{
+							Importer: filename, ResolveDir: path.Dir(filename), Kind: esbuild.ResolveJSImportStatement, PluginData: probeResolve,
+						})
+						if len(r.Errors) > 0 || r.External {
+							external = true
+							break
+						}
+						if _, ok := parents[r.Path]; !ok {
+							parents[r.Path] = filename
+							pending = append(pending, r.Path)
+						}
+					}
+					if external {
 						break
 					}
-					ext, cyc := hasExternalExportStar(r.Path, visiting)
-					cyclic = cyclic || cyc
-					if ext {
-						external = true
-						break
-					}
 				}
-				// warning: a negative result inside a cycle depends on modules still being checked
-				if external || !cyclic {
-					exportStarExternal.Store(filename, external)
+				if external {
+					// warning: other visited branches may not reach this external source
+					for filename != "" {
+						exportStarExternal.Store(filename, true)
+						filename = parents[filename]
+					}
+				} else {
+					for filename := range parents {
+						exportStarExternal.Store(filename, false)
+					}
 				}
 				return
 			}
@@ -884,7 +897,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 
 						// bundled export stars lose names when their source is external
 						if entry.module && exportAs == "" && args.Kind == esbuild.ResolveJSImportStatement && args.PluginData != probeResolve {
-							if external, _ := hasExternalExportStar(resolvedFilename, nil); external {
+							if hasExternalExportStar(resolvedFilename) {
 								externalPath, sideEffects, err := ctx.resolveExternalModule(specifier, args.Kind, withTypeJSON, analyzeMode)
 								if err != nil {
 									return esbuild.OnResolveResult{}, err
