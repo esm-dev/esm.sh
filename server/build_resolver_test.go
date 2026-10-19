@@ -30,6 +30,10 @@ func TestResolveExternalModuleSideEffects(t *testing.T) {
 		}{
 			{name: "listed", listed: []string{"./init.js"}, keep: true},
 			{name: "listed without dot", listed: []string{"init.js"}, keep: true},
+			{name: "glob", listed: []string{"*.js"}, keep: true},
+			{name: "dot glob", listed: []string{"./*.js"}, keep: true},
+			{name: "globstar", listed: []string{"./**/init.js"}, keep: true},
+			{name: "unmatched glob", listed: []string{"*.css", "./lib/*.js"}},
 			{name: "unlisted", listed: []string{"./other.js"}},
 			{name: "unspecified", keep: true},
 			{name: "false", pure: true},
@@ -646,5 +650,70 @@ func TestResolveJSONModuleInstallsExactVersion(t *testing.T) {
 	}
 	if existsDir(filepath.Join(npmrc.StoreDir(), "json-dep@^1.0.0")) {
 		t.Fatal("installed with the version range")
+	}
+}
+
+func TestResolveEntryRegressions(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		pkgJson string
+		files   []string
+		subPath string
+		dev     bool
+		want    string
+	}{
+		{"browser key with ext", `{"main":"lib/index.js","browser":{"./lib/index.js":"./lib/browser.js"}}`, []string{"lib/index.js", "lib/browser.js"}, "", false, "./lib/browser.js"},
+		{"browser key for extensionless main", `{"main":"./lib/index","browser":{"./lib/index.js":"./lib/browser.js"}}`, []string{"lib/index.js", "lib/browser.js"}, "", false, "./lib/browser.js"},
+		{"extensionless browser key", `{"main":"./lib/index.js","browser":{"./lib/index":"./lib/browser.js"}}`, []string{"lib/index.js", "lib/browser.js"}, "", false, "./lib/browser.js"},
+		{"browser condition in dev", `{"exports":{".":{"browser":"./browser.js","import":"./index.mjs","require":"./index.cjs"}}}`, []string{"browser.js", "index.mjs", "index.cjs"}, "", true, "./browser.js"},
+		{"extensionless mjs export", `{"exports":{"./foo":"./lib/foo"}}`, []string{"lib/foo.mjs"}, "foo", false, "./lib/foo.mjs"},
+		{"longest pattern prefix", `{"exports":{"./*":"./dist/*.js","./internal/*":"./internal/*.js"}}`, []string{"dist/internal/a.js", "internal/a.js"}, "internal/a", false, "./internal/a.js"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			wd := t.TempDir()
+			for _, name := range tt.files {
+				filename := filepath.Join(wd, "node_modules", "example", name)
+				if err := os.MkdirAll(filepath.Dir(filename), 0755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filename, []byte("module.exports = {};"), 0644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			var raw npm.PackageJSONRaw
+			if err := json.Unmarshal([]byte(tt.pkgJson), &raw); err != nil {
+				t.Fatal(err)
+			}
+			raw.Name, raw.Version = "example", "1.0.0"
+			ctx := &BuildContext{
+				wd: wd, target: "es2022", dev: tt.dev, pkgJson: raw.ToNpmPackage(),
+				esmPath: EsmPath{PkgName: "example", PkgVersion: "1.0.0", SubPath: tt.subPath},
+			}
+			if entry := ctx.resolveEntry(ctx.esmPath); entry.main != tt.want {
+				t.Fatalf("entry = %+v, want main %q", entry, tt.want)
+			}
+		})
+	}
+}
+
+func TestHasSideEffects(t *testing.T) {
+	patterns := set.NewReadOnly("*.css", "./src/polyfills/**/*.js", "register.js")
+	for path, want := range map[string]bool{
+		"./style.css":                  true,
+		"./a/b/style.css":              true,
+		"./src/polyfills/a.js":         true,
+		"./src/polyfills/x/y/a.js":     true,
+		"./lib/register.js":            true,
+		"./index.js":                   false,
+		"./src/a.js":                   false,
+		"./src/polyfills/a.mjs":        false,
+		"./lib/register.js.map":        false,
+		"./style.css/index.js":         false,
+		"./src/polyfills.js":           false,
+		"./src/polyfills/a.js/foo.cjs": false,
+	} {
+		if got := hasSideEffects(*patterns, path); got != want {
+			t.Errorf("hasSideEffects(%q) = %v, want %v", path, got, want)
+		}
 	}
 }

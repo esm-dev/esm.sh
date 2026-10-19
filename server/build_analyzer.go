@@ -130,7 +130,10 @@ func (ctx *BuildContext) analyzeSplitting() {
 				buf[i] = '\n'
 				i++
 			}
-			os.WriteFile(splittingTxtPath, buf[0:bufSize-1], 0644)
+			// readers don't take the lock, so write a temp file and rename it
+			if os.WriteFile(splittingTxtPath+".tmp", buf[0:bufSize-1], 0644) == nil {
+				os.Rename(splittingTxtPath+".tmp", splittingTxtPath)
+			}
 		}()
 
 		refs := map[string]Ref{}

@@ -98,10 +98,12 @@ func purgePackageCache(npmrc *NpmRC, metaDB *BuildMetaDB, esmStorage storage.Sto
 	// specifier may be a bare name, a semver range, a dist-tag, a date or a
 	// git ref, each cached under its own key, so matching a single resolved
 	// version is not enough — a purge must force a fresh resolution.
+	registry := npmrc.getRegistryByPackageName(esmPath.PkgName).Registry
+	packumentCache.Remove(registry + esmPath.PkgName)
 	prefixes := []string{
 		"npm:" + esmPath.PkgName + "@",
 		"404:" + esmPath.PkgName + "@",
-		npmrc.getRegistryByPackageName(esmPath.PkgName).Registry + esmPath.PkgName + "@",
+		registry + esmPath.PkgName + "@",
 	}
 	if esmPath.GhPrefix {
 		prefixes = append(prefixes, "gh/"+esmPath.PkgName+"@")
@@ -115,7 +117,7 @@ func purgePackageCache(npmrc *NpmRC, metaDB *BuildMetaDB, esmStorage storage.Sto
 	for _, prefix := range prefixes {
 		resp.CacheKeys = append(resp.CacheKeys, deleteCacheItemsWithPrefix(prefix)...)
 	}
-	keys, err := negativeCache.delete("404:"+npmrc.getRegistryByPackageName(esmPath.PkgName).Registry+esmPath.PkgName+"@", true)
+	keys, err := negativeCache.delete("404:"+registry+esmPath.PkgName+"@", true)
 	if err != nil {
 		return nil, err
 	}
@@ -190,7 +192,7 @@ func purgePackageCache(npmrc *NpmRC, metaDB *BuildMetaDB, esmStorage storage.Sto
 		return nil, err
 	}
 	resp.CacheKeys = append(resp.CacheKeys, keys...)
-	tooLargeKey := "npm-too-large:" + npmrc.getRegistryByPackageName(esmPath.PkgName).Registry + pkgId
+	tooLargeKey := "npm-too-large:" + registry + pkgId
 	if esmPath.GhPrefix {
 		tooLargeKey = "gh-too-large:" + strings.ToLower(esmPath.PkgName) + "@" + esmPath.PkgVersion
 	}

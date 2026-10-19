@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"path"
 	"sort"
 	"strings"
 	"sync"
@@ -124,6 +125,11 @@ func Parse(baseUrl *url.URL, data []byte) (im *ImportMap, err error) {
 	}
 	scopes := make(map[string]*Imports)
 	for scope, imports := range importMapRaw.Scopes {
+		if baseUrl != nil {
+			if u, err := baseUrl.Parse(scope); err == nil {
+				scope = u.String()
+			}
+		}
 		scopes[scope] = newImports(imports)
 	}
 	im = &ImportMap{
@@ -218,7 +224,7 @@ func (im *ImportMap) Resolve(specifier string, referrer *url.URL) (string, bool)
 		referrerURL := referrer.String()
 		var scopeKeys ScopeKeys
 		im.RangeScopes(func(scope string, _ *Imports) bool {
-			if strings.HasPrefix(referrerURL, scope) {
+			if referrerURL == scope || (strings.HasSuffix(scope, "/") && strings.HasPrefix(referrerURL, scope)) {
 				scopeKeys = append(scopeKeys, scope)
 			}
 			return true
@@ -242,22 +248,16 @@ func (im *ImportMap) Resolve(specifier string, referrer *url.URL) (string, bool)
 }
 
 func (im *ImportMap) resolveWith(specifier string, imports *Imports) (string, bool) {
-	if url, ok := imports.Get(specifier); ok {
+	imports.lock.RLock()
+	defer imports.lock.RUnlock()
+	if url, ok := imports.imports[specifier]; ok {
 		return normalizeUrl(im.baseUrl, url), true
 	}
-	// try to match tailing slash specifier
-	if strings.ContainsRune(specifier, '/') {
-		var matchedUrl string
-		var matchedLen int
-		imports.Range(func(k string, v string) bool {
-			if len(k) > matchedLen && strings.HasSuffix(k, "/") && strings.HasPrefix(specifier, k) {
-				matchedUrl = v
-				matchedLen = len(k)
-			}
-			return true
-		})
-		if matchedLen > 0 {
-			return normalizeUrl(im.baseUrl, matchedUrl+specifier[matchedLen:]), true
+	// [warning] look up the trailing slash keys by the specifier prefixes (longest first),
+	// scanning all keys is quadratic with a user supplied import map
+	for i := strings.LastIndexByte(specifier, '/'); i >= 0; i = strings.LastIndexByte(specifier[:i], '/') {
+		if url, ok := imports.imports[specifier[:i+1]]; ok {
+			return normalizeUrl(im.baseUrl, url+specifier[i+1:]), true
 		}
 	}
 	return "", false
@@ -270,7 +270,7 @@ func (im *ImportMap) resolveWith(specifier string, imports *Imports) (string, bo
 // - github:owner/repo[@<branch|tag|commit>][/subpath]
 func (im *ImportMap) ParseImport(specifier string) (meta ImportMeta, err error) {
 	imp, err := ParseSpecifier(specifier)
-	if err != nil || imp.Name == "" {
+	if err != nil {
 		return
 	}
 	return im.FetchImportMeta(imp)
@@ -278,23 +278,26 @@ func (im *ImportMap) ParseImport(specifier string) (meta ImportMeta, err error) 
 
 func ParseSpecifier(specifier string) (imp Import, err error) {
 	var scopeName string
-	if strings.HasPrefix(specifier, "gh:") {
+	if s, ok := strings.CutPrefix(specifier, "gh:"); ok {
 		imp.Github = true
-		specifier = specifier[3:]
-	} else if strings.HasPrefix(specifier, "jsr:") {
+		specifier = s
+	} else if s, ok := strings.CutPrefix(specifier, "jsr:"); ok {
 		imp.Jsr = true
-		specifier = specifier[4:]
+		specifier = s
+	} else {
+		specifier = strings.TrimPrefix(specifier, "npm:")
 	}
 	if len(specifier) > 0 && (specifier[0] == '@' || imp.Github) {
 		scopeName, specifier = utils.SplitByFirstByte(specifier, '/')
 	}
 	imp.Name, imp.SubPath = utils.SplitByFirstByte(specifier, '/')
-	if imp.Name == "" {
-		// ignore empty package name
-		return
-	}
 	imp.Name, imp.Version = utils.SplitByFirstByte(imp.Name, '@')
-	if imp.Name == "" || !npm.Naming.Match(imp.Name) || !(scopeName == "" || npm.Naming.Match(strings.TrimPrefix(scopeName, "@"))) || !(imp.Version == "" || npm.Versioning.Match(imp.Version)) {
+	valid := imp.Name != "" && npm.Naming.Match(imp.Name) && (scopeName == "" || npm.Naming.Match(strings.TrimPrefix(scopeName, "@")))
+	if valid && imp.Version != "" && !npm.Versioning.Match(imp.Version) {
+		_, e := semver.NewConstraint(imp.Version)
+		valid = e == nil
+	}
+	if !valid {
 		err = fmt.Errorf("invalid package name or version: %s", specifier)
 		return
 	}
@@ -305,7 +308,7 @@ func ParseSpecifier(specifier string) (imp Import, err error) {
 }
 
 func (im *ImportMap) FetchImportMeta(imp Import) (meta ImportMeta, err error) {
-	return fetchImportMeta(im.cdnOrigin(), imp, im.config.Target)
+	return fetchImportMeta(im.cdnOrigin(), imp, im.target())
 }
 
 // AddImportFromSpecifier adds an import from a specifier to the import map.
@@ -325,11 +328,6 @@ func (im *ImportMap) AddImport(imp ImportMeta, noSRI bool) (warnings []string, e
 
 // addImport adds an import to the import map.
 func (im *ImportMap) addImport(mark *sync.Map, imp ImportMeta, indirect bool, targetImports *Imports, noSRI bool) (warnings []string, errors []error) {
-	specifier := imp.Specifier(false)
-	if _, loaded := mark.LoadOrStore(specifier, struct{}{}); loaded {
-		return
-	}
-
 	cdnOrigin := im.cdnOrigin()
 	cdnScopeImportsMap := im.getOrCreateScopeImports(cdnOrigin + "/")
 
@@ -342,25 +340,18 @@ func (im *ImportMap) addImport(mark *sync.Map, imp ImportMeta, indirect bool, ta
 		}
 	}
 
-	var target string
-	switch v := im.config.Target; v {
-	case "es2015", "es2016", "es2017", "es2018", "es2019", "es2020", "es2021", "es2022", "es2023", "es2024", "esnext":
-		target = v
-	default:
-		target = "es2022"
+	// [warning] key by the target map and the exact version, a conflicting version must still be added to its own scope
+	if _, loaded := mark.LoadOrStore([2]any{imports, imp.Specifier(true)}, nil); loaded {
+		return
 	}
 
-	moduleUrl := cdnOrigin + "/" + imp.EsmSpecifier() + "/"
-	moduleUrl += target + "/"
+	specifier := imp.Specifier(false)
+
+	moduleUrl := cdnOrigin + "/" + imp.EsmSpecifier() + "/" + im.target() + "/"
 	if imp.SubPath != "" {
 		moduleUrl += imp.SubPath
 	} else {
-		if strings.ContainsRune(imp.Name, '/') {
-			_, name := utils.SplitByFirstByte(imp.Name, '/')
-			moduleUrl += name
-		} else {
-			moduleUrl += imp.Name
-		}
+		moduleUrl += path.Base(imp.npmName())
 	}
 	if imp.Dev || imp.SubPath == "jsx-dev-runtime" {
 		moduleUrl += ".development"
@@ -444,7 +435,8 @@ func (im *ImportMap) addImport(mark *sync.Map, imp ImportMeta, indirect bool, ta
 						}
 						if !npm.IsExactVersion(depImport.Version) {
 							c, err := semver.NewConstraint(depImport.Version)
-							if err == nil && c.Check(semver.MustParse(addedImport.Version)) {
+							// [warning] IsExactVersion accepts versions that semver rejects (e.g. "1.0.0-a_b"), never MustParse
+							if v, e := semver.NewVersion(addedImport.Version); err == nil && e == nil && c.Check(v) {
 								return
 							}
 						}
@@ -477,9 +469,18 @@ func (im *ImportMap) addImport(mark *sync.Map, imp ImportMeta, indirect bool, ta
 func (im *ImportMap) cdnOrigin() string {
 	cdn := im.config.CDN
 	if strings.HasPrefix(cdn, "https://") || strings.HasPrefix(cdn, "http://") {
-		return cdn
+		return strings.TrimRight(cdn, "/")
 	}
 	return "https://esm.sh"
+}
+
+// [warning] the meta and the module url must use the same target, or the integrity won't match the module
+func (im *ImportMap) target() string {
+	switch v := strings.ToLower(im.config.Target); v {
+	case "es2015", "es2016", "es2017", "es2018", "es2019", "es2020", "es2021", "es2022", "es2023", "es2024", "esnext":
+		return v
+	}
+	return "es2022"
 }
 
 // MarshalJSON implements the json.Marshaler interface.
@@ -612,10 +613,14 @@ func newImports(imports map[string]string) *Imports {
 
 func normalizeUrl(baseUrl *url.URL, path string) string {
 	if strings.HasPrefix(path, "./") || strings.HasPrefix(path, "../") {
+		ref, err := url.Parse(path)
+		if err != nil {
+			return path
+		}
 		if baseUrl == nil {
 			baseUrl = &url.URL{Scheme: "file", Path: "/"}
 		}
-		return baseUrl.ResolveReference(&url.URL{Path: path}).String()
+		return baseUrl.ResolveReference(ref).String()
 	}
 	return path
 }

@@ -1052,3 +1052,213 @@ func TestInvalidateDistTagCacheSkipsPrerelease(t *testing.T) {
 		t.Fatal("a newer release build kept the latest cache")
 	}
 }
+
+func testPackageTarball(packageJson string) []byte {
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gz)
+	tw.WriteHeader(&tar.Header{Name: "package/package.json", Mode: 0644, Size: int64(len(packageJson))})
+	io.WriteString(tw, packageJson)
+	tw.Close()
+	gz.Close()
+	return buf.Bytes()
+}
+
+func TestFetchPackageTarballBackupPath(t *testing.T) {
+	tarball := testPackageTarball(`{"name":"foo","version":"1.0.0"}`)
+	for _, rateLimited := range []bool{false, true} {
+		paths := make(chan string, 4)
+		backup := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			paths <- r.URL.RequestURI()
+			w.Write(tarball)
+		}))
+		primary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(429) }))
+		reg := &NpmRegistry{NpmRegistryConfig: NpmRegistryConfig{Registry: primary.URL + "/npm/", BackupRegistry: backup.URL + "/mirror/"}}
+		if rateLimited {
+			reg.rateLimited.Store(1)
+		}
+		err := fetchPackageTarballContext(context.Background(), reg, t.TempDir(), "foo", primary.URL+"/npm/foo/-/foo-1.0.0.tgz?x=1")
+		primary.Close()
+		backup.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := <-paths; got != "/mirror/foo/-/foo-1.0.0.tgz?x=1" {
+			t.Fatalf("rateLimited=%v: backup request %q lost the registry path", rateLimited, got)
+		}
+	}
+}
+
+func TestBackupRegistryMissIsNotNotFound(t *testing.T) {
+	useNegativeCache(t)
+	backup := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(404) }))
+	defer backup.Close()
+	primary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(429) }))
+	defer primary.Close()
+	reg := &NpmRegistry{NpmRegistryConfig: NpmRegistryConfig{Registry: primary.URL + "/", BackupRegistry: backup.URL + "/"}}
+	npmrc := &NpmRC{globalRegistry: reg}
+	name := "backup-miss-test"
+	defer deleteCacheItemsWithPrefix("npm:" + name + "@")
+	if _, err := npmrc.getPackageInfo(name, "^1.0.0"); err == nil || strings.HasSuffix(err.Error(), " not found") {
+		t.Fatalf("expected a registry error, got %v", err)
+	}
+	if keys, _ := negativeCache.delete("404:", true); len(keys) > 0 {
+		t.Fatalf("backup miss was recorded as not found: %v", keys)
+	}
+	err := fetchPackageTarballContext(context.Background(), reg, t.TempDir(), name, primary.URL+"/"+name+"/-/"+name+"-1.0.0.tgz")
+	if err == nil || strings.HasPrefix(err.Error(), "tarball of package") {
+		t.Fatalf("expected a download error, got %v", err)
+	}
+}
+
+func TestFetchPackageTarballTimeouts(t *testing.T) {
+	for _, stall := range []bool{false, true} {
+		synctest.Test(t, func(t *testing.T) {
+			transport := http.DefaultTransport
+			t.Cleanup(func() { http.DefaultTransport = transport })
+			tarball := testPackageTarball(`{"name":"slow","version":"1.0.0"}`)
+			http.DefaultTransport = ghTestTransport(func(r *http.Request) (*http.Response, error) {
+				pr, pw := io.Pipe()
+				go func() {
+					pw.Write(tarball[:10])
+					wait := time.After(time.Minute) // slower than a 30s client timeout
+					if stall {
+						wait = nil
+					}
+					select {
+					case <-wait:
+						pw.Write(tarball[10:])
+						pw.Close()
+					case <-r.Context().Done():
+						pw.CloseWithError(r.Context().Err())
+					}
+				}()
+				return &http.Response{StatusCode: 200, Header: http.Header{}, ContentLength: -1, Body: pr}, nil
+			})
+			err := fetchPackageTarballContext(context.Background(), &NpmRegistry{}, t.TempDir(), "slow", "https://example.com/slow.tgz")
+			if stall && !errors.Is(err, context.DeadlineExceeded) {
+				t.Fatalf("expected a stalled body to time out, got %v", err)
+			}
+			if !stall && err != nil {
+				t.Fatalf("expected a slow body to finish, got %v", err)
+			}
+		})
+	}
+}
+
+func TestExtractPackageTarballEntryLimit(t *testing.T) {
+	var buf bytes.Buffer
+	gz, _ := gzip.NewWriterLevel(&buf, gzip.BestSpeed)
+	tw := tar.NewWriter(gz)
+	for i := range maxPackageEntries + 1 {
+		tw.WriteHeader(&tar.Header{Name: fmt.Sprintf("package/%d.bin", i), Mode: 0644})
+	}
+	tw.Close()
+	gz.Close()
+	if err := extractPackageTarball(t.TempDir(), "many-files", &buf); !errors.Is(err, errPackageTooLarge) {
+		t.Fatalf("expected %v, got %v", errPackageTooLarge, err)
+	}
+}
+
+func TestInstallDependenciesConcurrency(t *testing.T) {
+	workDir := config.WorkDir
+	config.WorkDir = t.TempDir()
+	t.Cleanup(func() { config.WorkDir = workDir })
+	npmrc := &NpmRC{globalRegistry: &NpmRegistry{NpmRegistryConfig: NpmRegistryConfig{Registry: npmRegistry}}}
+	var inflight, maxInflight atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := inflight.Add(1)
+		defer inflight.Add(-1)
+		for m := maxInflight.Load(); n > m && !maxInflight.CompareAndSwap(m, n); m = maxInflight.Load() {
+		}
+		time.Sleep(20 * time.Millisecond)
+		name := strings.TrimSuffix(r.URL.Path[1:], ".tgz")
+		w.Write(testPackageTarball(`{"name":"` + name + `","version":"1.0.0"}`))
+	}))
+	defer srv.Close()
+	deps := map[string]string{}
+	for i := range 64 {
+		name := fmt.Sprintf("concurrency-dep-%d", i)
+		deps[name] = "1.0.0"
+		key := "npm:" + name + "@1.0.0"
+		setCacheItem(key, &npm.PackageJSON{Name: name, Version: "1.0.0", Dist: npm.NpmPackageDist{Tarball: srv.URL + "/" + name + ".tgz"}}, time.Minute)
+		t.Cleanup(func() { deleteCacheItem(key) })
+	}
+	wd := t.TempDir()
+	os.Mkdir(filepath.Join(wd, "node_modules"), 0755)
+	if err := npmrc.installDependenciesContext(context.Background(), wd, &npm.PackageJSON{Name: "root", Version: "1.0.0", Dependencies: deps}, false, nil); err != nil {
+		t.Fatal(err)
+	}
+	if n := maxInflight.Load(); n > 16 {
+		t.Fatalf("%d parallel downloads, want at most 16", n)
+	}
+}
+
+func TestInstallDependenciesReplacesDanglingLink(t *testing.T) {
+	workDir := config.WorkDir
+	config.WorkDir = t.TempDir()
+	t.Cleanup(func() { config.WorkDir = workDir })
+	npmrc := &NpmRC{globalRegistry: &NpmRegistry{NpmRegistryConfig: NpmRegistryConfig{Registry: npmRegistry}}}
+	writeStorePackage(t, npmrc, npm.Package{Name: "dangling-a", Version: "1.0.0"}, `{"name":"dangling-a","version":"1.0.0","dependencies":{"dangling-b":"1.1.0"}}`)
+	writeStorePackage(t, npmrc, npm.Package{Name: "dangling-b", Version: "1.1.0"}, `{"name":"dangling-b","version":"1.1.0"}`)
+	wd := t.TempDir()
+	linkDir := filepath.Join(wd, "node_modules", "dangling-b")
+	os.Mkdir(filepath.Dir(linkDir), 0755)
+	// the store copy of the previously linked version has been purged
+	if err := os.Symlink(filepath.Join(npmrc.StoreDir(), "dangling-b@1.0.0", "node_modules", "dangling-b"), linkDir); err != nil {
+		t.Fatal(err)
+	}
+	if err := npmrc.installDependenciesContext(context.Background(), wd, &npm.PackageJSON{Name: "root", Version: "1.0.0", Dependencies: map[string]string{"dangling-a": "1.0.0"}}, false, nil); err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(npmrc.StoreDir(), "dangling-b@1.1.0", "node_modules", "dangling-b")
+	if target, err := os.Readlink(linkDir); err != nil || target != want {
+		t.Fatalf("node_modules/dangling-b -> %q, %v; want %q", target, err, want)
+	}
+}
+
+func TestPackumentCache(t *testing.T) {
+	var requests atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/packument-test" {
+			w.WriteHeader(404)
+			return
+		}
+		requests.Add(1)
+		time.Sleep(20 * time.Millisecond)
+		w.Write([]byte(`{"dist-tags":{"latest":"2.0.0"},"versions":{"1.0.0":{"name":"packument-test","version":"1.0.0"},"1.1.0":{"name":"packument-test","version":"1.1.0"},"2.0.0":{"name":"packument-test","version":"2.0.0"}},"time":{"1.0.0":"2020-01-01T00:00:00Z","1.1.0":"2021-01-01T00:00:00Z","2.0.0":"2022-01-01T00:00:00Z"}}`))
+	}))
+	defer srv.Close()
+	reg := &NpmRegistry{NpmRegistryConfig: NpmRegistryConfig{Registry: srv.URL + "/"}}
+	npmrc := &NpmRC{globalRegistry: reg}
+	t.Cleanup(func() {
+		deleteCacheItemsWithPrefix("npm:packument-test@")
+		deleteCacheItemsWithPrefix(reg.Registry)
+		packumentCache.Remove(reg.Registry + "packument-test")
+	})
+	want := map[string]string{"^1.0.0": "1.1.0", "~1.0.0": "1.0.0", ">=2": "2.0.0", "latest": "2.0.0", "date": "1.1.0"}
+	errs := make(chan error, len(want))
+	for version, expected := range want {
+		go func() {
+			var p *npm.PackageJSON
+			var err error
+			if version == "date" {
+				p, err = npmrc.getPackageInfoByDate("packument-test", time.Date(2021, 6, 1, 0, 0, 0, 0, time.UTC))
+			} else {
+				p, err = npmrc.getPackageInfo("packument-test", version)
+			}
+			if err == nil && p.Version != expected {
+				err = fmt.Errorf("%s resolved to %s, want %s", version, p.Version, expected)
+			}
+			errs <- err
+		}()
+	}
+	for range want {
+		if err := <-errs; err != nil {
+			t.Fatal(err)
+		}
+	}
+	if n := requests.Load(); n != 1 {
+		t.Fatalf("packument fetched %d times, want once", n)
+	}
+}

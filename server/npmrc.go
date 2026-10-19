@@ -23,6 +23,7 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/esm-dev/esm.sh/internal/npm"
+	"github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/ije/gox/term"
 	"github.com/ije/gox/utils"
 )
@@ -30,11 +31,14 @@ import (
 const (
 	npmRegistry = "https://registry.npmjs.org/"
 	jsrRegistry = "https://npm.jsr.io/"
+	// [warning] the unpacked size does not bound the inodes taken by an archive of tiny files
+	maxPackageEntries = 100000
 )
 
 var (
 	defaultNpmRC       *NpmRC
 	installLocks       sync.Map
+	packumentCache     = expirable.NewLRU[string, *npm.PackageMetadata](64, nil, time.Minute)
 	errPackageTooLarge = errors.New("package is too large")
 )
 
@@ -120,11 +124,6 @@ func (npmrc *NpmRC) fetchPackageMetadataContext(ctx context.Context, pkgName str
 	if message := negativeCache.get(missingKey); message != "" {
 		return nil, nil, errors.New(message)
 	}
-	regUrlStr := reg.Registry
-	if reg.isRateLimited() && reg.BackupRegistry != "" {
-		// use backup registry if the global registry is rate limited
-		regUrlStr = reg.BackupRegistry
-	}
 
 	header := http.Header{}
 	if reg.Token != "" {
@@ -133,8 +132,31 @@ func (npmrc *NpmRC) fetchPackageMetadataContext(ctx context.Context, pkgName str
 		header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(reg.User+":"+reg.Password)))
 	}
 
+	packumentKey := reg.Registry + pkgName
+	var unlock func()
+	defer func() {
+		if unlock != nil {
+			unlock()
+		}
+	}()
+	fetchClient := newFetchClient("esmd/"+VERSION, 15)
+	retryTimes := 0
+RETRY:
+	// use backup registry if the global registry is rate limited
+	useBackup := reg.BackupRegistry != "" && reg.isRateLimited()
+	regUrlStr := reg.Registry
+	if useBackup {
+		regUrlStr = reg.BackupRegistry
+	}
 	// [warning] the probe result is kept per registry, so never use the version route of the backup registry
-	useVersionRoute := isWellknownVersion && regUrlStr == reg.Registry && reg.isSupportVersionRoute(ctx, header)
+	useVersionRoute := isWellknownVersion && !useBackup && reg.isSupportVersionRoute(ctx, header)
+	if !useVersionRoute && unlock == nil {
+		// [warning] a packument can be huge, one fetch is shared by the range, tag and date lookups for a while
+		unlock = cacheMutex.Lock("packument:" + packumentKey)
+		if metadata, ok := packumentCache.Get(packumentKey); ok {
+			return metadata, nil, nil
+		}
+	}
 	regUrlStr += pkgName
 	if useVersionRoute {
 		regUrlStr += "/" + version
@@ -149,10 +171,6 @@ func (npmrc *NpmRC) fetchPackageMetadataContext(ctx context.Context, pkgName str
 		fmt.Println(term.Dim(fmt.Sprintf("Fetching %s...", regUrl.String())))
 	}
 
-	fetchClient := newFetchClient("esmd/"+VERSION, 15)
-
-	retryTimes := 0
-RETRY:
 	if err := ctx.Err(); err != nil {
 		return nil, nil, err
 	}
@@ -169,7 +187,8 @@ RETRY:
 	}
 	defer res.Body.Close()
 
-	if res.StatusCode == 404 || res.StatusCode == 401 || res.StatusCode == 403 {
+	// [warning] a lagging backup mirror may miss a new package, so its 404 is not a "not found"
+	if (res.StatusCode == 404 || res.StatusCode == 401 || res.StatusCode == 403) && !useBackup {
 		if res.StatusCode == 404 && !useVersionRoute {
 			negativeCache.put(missingKey, fmt.Sprintf("package '%s' not found", pkgName), packageNotFoundTTL)
 		}
@@ -180,16 +199,16 @@ RETRY:
 		}
 	}
 
-	if res.StatusCode == 429 && reg.BackupRegistry != "" && !reg.isRateLimited() {
+	if res.StatusCode == 429 && reg.BackupRegistry != "" && !useBackup {
 		reg.hitRateLimit()
-		return npmrc.fetchPackageMetadataContext(ctx, pkgName, version, isWellknownVersion)
+		goto RETRY
 	}
 
 	if res.StatusCode != 200 {
 		return nil, nil, fmt.Errorf("%s: %s", regUrl.Hostname(), res.Status)
 	}
 
-	if isWellknownVersion && useVersionRoute {
+	if useVersionRoute {
 		var raw npm.PackageJSONRaw
 		err = json.NewDecoder(res.Body).Decode(&raw)
 		if err != nil {
@@ -208,6 +227,7 @@ RETRY:
 		return nil, nil, fmt.Errorf("version %s of '%s' not found", version, pkgName)
 	}
 
+	packumentCache.Add(packumentKey, &metadata)
 	return &metadata, nil, nil
 }
 
@@ -556,6 +576,8 @@ func (npmrc *NpmRC) installDependenciesContext(ctx context.Context, wd string, p
 	var firstErr error
 	links := map[string]link{}
 	walked := map[string]int{}
+	// [warning] a dependency tree can be huge, cap the parallel registry requests and downloads
+	sema := make(chan struct{}, 16)
 	setErr := func(err error) {
 		if err == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return
@@ -598,6 +620,12 @@ func (npmrc *NpmRC) installDependenciesContext(ctx context.Context, wd string, p
 				}
 				if strings.HasPrefix(pkg.Name, "@types/") {
 					// skip installing `@types/*` packages
+					return
+				}
+				select {
+				case sema <- struct{}{}:
+					defer func() { <-sema }()
+				case <-ctx.Done():
 					return
 				}
 				if pkg.Github {
@@ -650,9 +678,15 @@ func (npmrc *NpmRC) installDependenciesContext(ctx context.Context, wd string, p
 		linkDir := filepath.Join(wd, "node_modules", name)
 		fi, err := os.Lstat(linkDir)
 		if err == nil {
-			// [warning] a direct dependency replaces the deeper one linked by a previous install
-			if l.depth > 0 || fi.Mode()&os.ModeSymlink == 0 {
+			if fi.Mode()&os.ModeSymlink == 0 {
 				continue
+			}
+			// [warning] a direct dependency replaces the deeper one linked by a previous install,
+			// and a link to a removed (purged) store copy is always replaced
+			if l.depth > 0 {
+				if _, err := os.Stat(linkDir); err == nil {
+					continue
+				}
 			}
 			if target, _ := os.Readlink(linkDir); target == l.target {
 				continue
@@ -794,17 +828,16 @@ func fetchPackageTarballContext(ctx context.Context, reg *NpmRegistry, installDi
 		return false
 	}
 
-	useBackup := reg.isRateLimited() && reg.BackupRegistry != "" && strings.HasPrefix(tarballUrlStr, reg.Registry)
+	// [warning] keep the path below the registry root, registries may be mounted under different paths
+	backupUrlStr := ""
+	if reg.BackupRegistry != "" && strings.HasPrefix(tarballUrlStr, reg.Registry) {
+		backupUrlStr = reg.BackupRegistry + tarballUrlStr[len(reg.Registry):]
+	}
+	useBackup := backupUrlStr != "" && reg.isRateLimited()
 	if useBackup {
-		var backupUrl *url.URL
-		backupUrl, err = url.Parse(reg.BackupRegistry)
-		if err != nil {
+		if tarballUrl, err = url.Parse(backupUrlStr); err != nil {
 			return
 		}
-		backupUrl.Path = tarballUrl.Path
-		backupUrl.RawQuery = tarballUrl.RawQuery
-		tarballUrl = backupUrl
-		tarballUrlStr = backupUrl.String()
 	}
 
 	header := http.Header{}
@@ -816,7 +849,10 @@ func fetchPackageTarballContext(ctx context.Context, reg *NpmRegistry, installDi
 		}
 	}
 
-	fetchClient := newFetchClient("esmd/"+VERSION, 30)
+	// [warning] no client timeout: a large tarball streams for long, the transport bounds the header and ctx the body
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
+	fetchClient := newFetchClient("esmd/"+VERSION, 0)
 	checkRedirect := fetchClient.CheckRedirect
 	fetchClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		if !isTrustedOrigin(req.URL) {
@@ -844,21 +880,16 @@ RETRY:
 	}
 	defer res.Body.Close()
 
-	if res.StatusCode == 404 || res.StatusCode == 401 {
+	// [warning] a lagging backup mirror may miss a new tarball, so its 404 is not a "not found"
+	if (res.StatusCode == 404 || res.StatusCode == 401) && !useBackup {
 		err = fmt.Errorf("tarball of package '%s' not found", pkgName)
 		return
 	}
 
-	if res.StatusCode == 429 && !useBackup && reg.BackupRegistry != "" && strings.HasPrefix(tarballUrlStr, reg.Registry) {
-		var backupUrl *url.URL
-		backupUrl, err = url.Parse(reg.BackupRegistry)
-		if err != nil {
+	if res.StatusCode == 429 && !useBackup && backupUrlStr != "" {
+		if tarballUrl, err = url.Parse(backupUrlStr); err != nil {
 			return
 		}
-		backupUrl.Path = tarballUrl.Path
-		backupUrl.RawQuery = tarballUrl.RawQuery
-		tarballUrl = backupUrl
-		tarballUrlStr = backupUrl.String()
 		useBackup = true
 		reg.hitRateLimit()
 		goto RETRY
@@ -927,7 +958,7 @@ func extractPackageTarContext(ctx context.Context, installDir string, pkgName st
 
 	// extract tarball
 	tr := tar.NewReader(&contextReader{ctx: ctx, reader: archive})
-	for {
+	for entries := 0; ; entries++ {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
@@ -937,6 +968,9 @@ func extractPackageTarContext(ctx context.Context, installDir string, pkgName st
 		}
 		if err != nil {
 			return err
+		}
+		if entries == maxPackageEntries {
+			return errPackageTooLarge
 		}
 		if h.Typeflag != tar.TypeReg {
 			continue

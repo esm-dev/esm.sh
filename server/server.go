@@ -12,6 +12,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -163,10 +164,12 @@ func Start() {
 	select {
 	case <-c:
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		httpServer.Shutdown(ctx)
+		var wg sync.WaitGroup
+		wg.Go(func() { httpServer.Shutdown(ctx) })
 		if httpsServer != nil {
-			httpsServer.Shutdown(ctx)
+			wg.Go(func() { httpsServer.Shutdown(ctx) })
 		}
+		wg.Wait()
 		cancel()
 	case err = <-errCh:
 		logger.Error(err)
@@ -235,7 +238,7 @@ func customLandingPage(options *LandingPageOptions, next http.Handler) http.Hand
 			return
 		}
 		fetchClient := newFetchClient(r.UserAgent(), 15)
-		res, err := fetchClient.Fetch(url, nil)
+		res, err := fetchClient.FetchWithContext(r.Context(), url, nil)
 		if err != nil {
 			writeJSONError(w, http.StatusBadGateway, "Failed to fetch custom landing page")
 			return
@@ -269,7 +272,9 @@ func customLandingPage(options *LandingPageOptions, next http.Handler) http.Hand
 			cacheControl = ccMustRevalidate
 		}
 		h.Set("Cache-Control", cacheControl)
-		h.Set("Content-Type", res.Header.Get("Content-Type"))
+		if contentType := res.Header.Get("Content-Type"); contentType != "" {
+			h.Set("Content-Type", contentType)
+		}
 		w.WriteHeader(res.StatusCode)
 		io.Copy(w, res.Body)
 	})

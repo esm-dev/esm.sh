@@ -57,6 +57,8 @@ type BuildContext struct {
 	esmImports  [][2]string
 	cjsRequires [][3]string
 	smOffset    int
+	esmFiles    sync.Map // filename -> isESM, so a file is parsed once per build
+	depArgs     sync.Map // dependency path -> resolved build args
 }
 
 var (
@@ -248,6 +250,10 @@ func (ctx *BuildContext) buildPath() {
 		// workaround for es5-ext "../#/.." path
 		if esm.PkgName == "es5-ext" {
 			name = strings.ReplaceAll(name, "/#/", "/%23/")
+		}
+		// [warning] a name ending with a build flag suffix would be parsed as the flag, the router strips the ".js" mark
+		if endsWith(name, ".bundle", ".nobundle", ".development") {
+			name += ".js"
 		}
 	}
 
@@ -620,6 +626,24 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 						var v any
 						var ok bool
 						v, ok = pkgJson.Imports.Get(specifier)
+						if !ok && strings.HasPrefix(specifier, "#") {
+							// pattern keys like `"#lib/*": "./lib/*.js"`, the longest prefix wins
+							var key, diff string
+							for _, k := range pkgJson.Imports.Keys() {
+								prefix, suffix, found := strings.Cut(k, "*")
+								if found && (key == "" || len(prefix) > strings.IndexByte(key, '*')) && len(specifier) >= len(prefix)+len(suffix) && strings.HasPrefix(specifier, prefix) && strings.HasSuffix(specifier, suffix) {
+									key, diff = k, specifier[len(prefix):len(specifier)-len(suffix)]
+								}
+							}
+							if key != "" {
+								v, ok = pkgJson.Imports.Get(key)
+								if s, isStr := v.(string); isStr {
+									v = strings.ReplaceAll(s, "*", diff)
+								} else if obj, isObj := v.(npm.JSONObject); isObj {
+									v = resloveAsteriskPathMapping(obj, diff)
+								}
+							}
+						}
 						if !ok && !isRelPathSpecifier(specifier) {
 							// check tailing slash
 							pkgName, _, subPath := splitEsmPath(specifier)
@@ -1547,30 +1571,51 @@ REBUILD:
 					}
 				}
 				isEsModule := make([]bool, len(requires))
+				// [warning] specifiers and import urls may come from user input (e.g. `?alias`), always quote them
+				specifierLits := make([][]byte, len(requires))
 				for i, r := range requires {
 					specifier := r[0]
-					importUrl := r[2]
+					specifierLits[i], _ = json.Marshal(specifier)
 					if strings.HasPrefix(specifier, "npm:") {
 						// npm replacements
 						fmt.Fprintf(header, `var __%x$=%s;`, i, r[1])
-					} else if isJsonModuleSpecifier(specifier) {
-						fmt.Fprintf(header, `import __%x$ from"%s";`, i, importUrl)
-						imports.Add(r[1])
 					} else {
-						fmt.Fprintf(header, `import*as __%x$ from"%s";`, i, importUrl)
+						importUrl, _ := json.Marshal(r[2])
+						if isJsonModuleSpecifier(specifier) {
+							fmt.Fprintf(header, `import __%x$ from%s;`, i, importUrl)
+						} else {
+							fmt.Fprintf(header, `import*as __%x$ from%s;`, i, importUrl)
+						}
 						imports.Add(r[1])
 					}
 					// if `require("module").default` found
-					if bytes.Contains(jsContent, fmt.Appendf(nil, `("%s").default`, specifier)) {
+					if bytes.Contains(jsContent, fmt.Appendf(nil, `(%s).default`, specifierLits[i])) {
 						isEsModule[i] = true
 						continue
 					}
 					// `var mod = require("module");...;mod()` -> cjs
 					// `var mod = require("module");...;mod.default` -> es module
-					if j := bytes.Index(jsContent, fmt.Appendf(nil, `("%s")`, specifier)); j >= 0 {
-						if ret := regexpVarDecl.FindSubmatch(jsContent[:j]); len(ret) == 2 {
-							if ret := regexp.MustCompile(`[^\w$]` + regexp.QuoteMeta(string(ret[1])) + `(\(|\.default[^\w$=])`).FindSubmatch(jsContent); len(ret) == 2 {
-								isEsModule[i] = string(ret[1]) != "("
+					if j := bytes.Index(jsContent, fmt.Appendf(nil, `(%s)`, specifierLits[i])); j >= 0 {
+						if ret := regexpVarDecl.FindSubmatch(jsContent[max(0, j-256):j]); len(ret) == 2 {
+							// find the first `mod(` or `mod.default` with a plain scan, a regexp per require is slow on large outputs
+							isIdent := func(c byte) bool {
+								return c == '$' || c == '_' || c >= '0' && c <= '9' || c|0x20 >= 'a' && c|0x20 <= 'z'
+							}
+							id, found := ret[1], false
+							for k := bytes.Index(jsContent, id); k >= 0 && !found; {
+								if k > 0 && !isIdent(jsContent[k-1]) {
+									rest := jsContent[k+len(id):]
+									if found = len(rest) > 0 && rest[0] == '('; !found && len(rest) > 8 && bytes.HasPrefix(rest, []byte(".default")) && !isIdent(rest[8]) && rest[8] != '=' {
+										isEsModule[i], found = true, true
+									}
+								}
+								n := bytes.Index(jsContent[k+1:], id)
+								if n < 0 {
+									break
+								}
+								k += n + 1
+							}
+							if found {
 								continue
 							}
 						}
@@ -1608,12 +1653,11 @@ REBUILD:
 					}
 				}
 				header.WriteString(`var require=n=>{const e=m=>typeof m.default<"u"?m.default:m,c=m=>Object.assign({__esModule:true},m);switch(n){`)
-				for i, r := range requires {
-					specifier := r[0]
+				for i := range requires {
 					if isEsModule[i] {
-						fmt.Fprintf(header, `case"%s":return c(__%x$);`, specifier, i)
+						fmt.Fprintf(header, `case%s:return c(__%x$);`, specifierLits[i], i)
 					} else {
-						fmt.Fprintf(header, `case"%s":return e(__%x$);`, specifier, i)
+						fmt.Fprintf(header, `case%s:return e(__%x$);`, specifierLits[i], i)
 					}
 				}
 				header.WriteString(`default:console.error('module "'+n+'" not found');return null;}};`)

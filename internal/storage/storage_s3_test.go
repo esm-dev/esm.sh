@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/md5"
@@ -9,45 +10,59 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+	"testing/iotest"
 	"testing/synctest"
 	"time"
 )
 
 func TestS3StorageTimeout(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		client := http.DefaultClient
-		defer func() { http.DefaultClient = client }()
-		release := make(chan struct{})
-		http.DefaultClient = &http.Client{Transport: s3TestTransport(func(req *http.Request) (*http.Response, error) {
-			select {
-			case <-req.Context().Done():
-				return nil, req.Context().Err()
-			case <-release:
-				return nil, errors.New("request was still blocked")
+	for _, slowBody := range []bool{false, true} {
+		synctest.Test(t, func(t *testing.T) {
+			srvConn, cliConn := net.Pipe()
+			defer srvConn.Close()
+			defer cliConn.Close()
+			transport := s3Transport.Clone()
+			transport.DialContext = func(context.Context, string, string) (net.Conn, error) { return cliConn, nil }
+			defer transport.CloseIdleConnections()
+			client := http.DefaultClient
+			defer func() { http.DefaultClient = client }()
+			http.DefaultClient = &http.Client{Transport: transport}
+			go func() {
+				if _, err := http.ReadRequest(bufio.NewReader(srvConn)); err != nil || !slowBody {
+					return
+				}
+				io.WriteString(srvConn, "HTTP/1.1 200 OK\r\nContent-Length: 4\r\nLast-Modified: "+time.Now().UTC().Format(http.TimeFormat)+"\r\n\r\nda")
+				time.Sleep(2 * time.Minute)
+				io.WriteString(srvConn, "ta")
+			}()
+			s3 := &s3Storage{apiEndpoint: "http://storage.test"}
+			content, _, err := s3.Get("meta/viem@2.56.6/test")
+			if !slowBody {
+				var netErr net.Error
+				if !errors.As(err, &netErr) || !netErr.Timeout() {
+					t.Fatalf("expected a response header timeout, got %v", err)
+				}
+				return
 			}
-		})}
-		s3 := &s3Storage{apiEndpoint: "https://storage.test"}
-		done := make(chan error, 1)
-		go func() {
-			_, _, err := s3.Get("meta/viem@2.56.6/test")
-			done <- err
-		}()
-		time.Sleep(2 * time.Minute)
-		synctest.Wait()
-		if len(done) == 0 {
-			t.Error("S3 request has no deadline")
-		}
-		close(release)
-		if err := <-done; !errors.Is(err, context.DeadlineExceeded) {
-			t.Fatalf("expected request timeout, got %v", err)
-		}
-	})
+			if err != nil {
+				t.Fatal(err)
+			}
+			data, err := io.ReadAll(content)
+			content.Close()
+			if err != nil || string(data) != "data" {
+				t.Fatalf("slow body was cut: content %q, error %v", data, err)
+			}
+		})
+	}
 }
 
 func TestS3StorageBuildCancellation(t *testing.T) {
@@ -319,12 +334,16 @@ func TestS3StorageCacheRejectSymlinkEscape(t *testing.T) {
 				var content io.ReadCloser
 				content, _, err = s3.Get("link/file.txt")
 				if err == nil {
-					_, err = io.ReadAll(content)
+					var data []byte
+					data, err = io.ReadAll(content)
 					content.Close()
+					if err == nil && string(data) != "replacement" {
+						t.Errorf("Get: content %q", data)
+					}
 				}
 			}
-			if err == nil {
-				t.Errorf("%s followed a symlink outside the cache", operation)
+			if err != nil {
+				t.Errorf("%s failed on a rejected cache key: %v", operation, err)
 			}
 			if data, err := os.ReadFile(victim); err != nil || string(data) != "original" {
 				t.Fatalf("outside file changed: content %q, error %v", data, err)
@@ -606,5 +625,197 @@ func TestS3Storage(t *testing.T) {
 	}
 	if len(keys) != 0 {
 		t.Fatalf("invalid keys length(%d), expected 0", len(keys))
+	}
+}
+
+func TestS3StoragePutEmpty(t *testing.T) {
+	seen := make(chan string, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen <- fmt.Sprint(r.TransferEncoding, r.ContentLength)
+	}))
+	defer srv.Close()
+	cache, err := NewFSStorage(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	s3 := &s3Storage{apiEndpoint: srv.URL, fsCache: cache.(*fsStorage)}
+	if err := s3.Put("meta-purged/pkg@1.0.0", strings.NewReader("")); err != nil {
+		t.Fatal(err)
+	}
+	if got := <-seen; got != "[] 0" {
+		t.Fatalf("empty upload: transfer encoding and length %s, want [] 0", got)
+	}
+	if stat, err := cache.Stat("meta-purged/pkg@1.0.0"); err != nil || stat.Size() != 0 {
+		t.Fatalf("empty cache file: %v", err)
+	}
+}
+
+func TestS3StorageSignsWirePath(t *testing.T) {
+	client := http.DefaultClient
+	t.Cleanup(func() { http.DefaultClient = client })
+	var paths []string
+	http.DefaultClient = &http.Client{Transport: s3TestTransport(func(req *http.Request) (*http.Response, error) {
+		uri, query, _ := strings.Cut(req.URL.RequestURI(), "?")
+		paths = append(paths, req.Method+" "+uri)
+		values, _ := url.ParseQuery(query)
+		_, signed, _ := strings.Cut(req.Header.Get("Authorization"), "SignedHeaders=")
+		signedHeaders, signature, _ := strings.Cut(signed, ", Signature=")
+		var headers strings.Builder
+		for key := range strings.SplitSeq(signedHeaders, ";") {
+			value := strings.Join(req.Header.Values(key), ",")
+			if key == "host" {
+				value = req.Host
+			}
+			headers.WriteString(key + ":" + value + "\n")
+		}
+		datetime := req.Header.Get("X-Amz-Date")
+		canonical := strings.Join([]string{req.Method, uri, values.Encode(), headers.String(), signedHeaders, "UNSIGNED-PAYLOAD"}, "\n")
+		key := hmacSum(hmacSum(hmacSum(hmacSum([]byte("AWS4secret"), datetime[:8]), "us-east-1"), "s3"), "aws4_request")
+		if toHex(hmacSum(key, "AWS4-HMAC-SHA256\n"+datetime+"\n"+datetime[:8]+"/us-east-1/s3/aws4_request\n"+toHex(sha256Sum(canonical)))) != signature {
+			t.Errorf("%s %s: signature does not match the request line", req.Method, req.URL.RequestURI())
+		}
+		if req.Body != nil {
+			io.Copy(io.Discard, req.Body)
+		}
+		body := "data"
+		if values.Has("list-type") {
+			body = "<ListBucketResult><Contents><Key>test/a</Key></Contents></ListBucketResult>"
+		} else if values.Has("delete") {
+			body = "<DeleteResult><Deleted><Key>test/a</Key></Deleted></DeleteResult>"
+		}
+		return &http.Response{StatusCode: 200, Header: http.Header{
+			"Content-Length": {"4"},
+			"Last-Modified":  {time.Now().UTC().Format(http.TimeFormat)},
+		}, Body: io.NopCloser(strings.NewReader(body))}, nil
+	})}
+	s3 := &s3Storage{apiEndpoint: "https://storage.test", region: "us-east-1", accessKeyID: "id", secretAccessKey: "secret"}
+	var want []string
+	for key, path := range map[string]string{
+		"modules/a%zz.mjs":      "/modules/a%25zz.mjs",
+		"modules/\xff.mjs":      "/modules/%FF.mjs",
+		"modules/a?b#c.mjs":     "/modules/a%3Fb%23c.mjs",
+		"test/%23/hello+world!": "/test/%2523/hello%20world%21",
+		"react@19.2.0/x.mjs":    "/react%4019.2.0/x.mjs",
+	} {
+		if _, err := s3.Stat(key); err != nil {
+			t.Fatalf("Stat(%q): %v", key, err)
+		}
+		content, _, err := s3.Get(key)
+		if err != nil {
+			t.Fatalf("Get(%q): %v", key, err)
+		}
+		content.Close()
+		if err := s3.Put(key, strings.NewReader("data")); err != nil {
+			t.Fatalf("Put(%q): %v", key, err)
+		}
+		if err := s3.Delete(key); err != nil {
+			t.Fatalf("Delete(%q): %v", key, err)
+		}
+		want = append(want, "HEAD "+path, "GET "+path, "PUT "+path, "DELETE "+path)
+	}
+	if _, err := s3.DeleteAll("test/"); err != nil {
+		t.Fatal(err)
+	}
+	want = append(want, "GET /", "POST /")
+	if !slices.Equal(paths, want) {
+		t.Fatalf("request paths %q, want %q", paths, want)
+	}
+}
+
+func TestS3StorageCacheFailure(t *testing.T) {
+	cache, err := NewFSStorage(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cache.Put("file", strings.NewReader("")); err != nil {
+		t.Fatal(err)
+	}
+	readErr := errors.New("connection reset")
+	bodies := map[string]*s3TestBody{}
+	var uploaded string
+	client := http.DefaultClient
+	t.Cleanup(func() { http.DefaultClient = client })
+	http.DefaultClient = &http.Client{Transport: s3TestTransport(func(req *http.Request) (*http.Response, error) {
+		if req.Method == http.MethodPut {
+			data, err := io.ReadAll(req.Body)
+			uploaded = string(data)
+			return &http.Response{StatusCode: 200, Body: http.NoBody}, err
+		}
+		var reader io.Reader = strings.NewReader("data")
+		if req.URL.Path == "/broken.mjs" {
+			reader = io.MultiReader(strings.NewReader("da"), iotest.ErrReader(readErr))
+		}
+		body := &s3TestBody{Reader: reader, closed: make(chan struct{})}
+		bodies[req.URL.Path] = body
+		return &http.Response{StatusCode: 200, Header: http.Header{
+			"Content-Length": {"4"},
+			"Last-Modified":  {time.Now().UTC().Format(http.TimeFormat)},
+		}, Body: body}, nil
+	})}
+	s3 := &s3Storage{apiEndpoint: "https://storage.test", fsCache: cache.(*fsStorage)}
+
+	content, _, err := s3.Get("file/a.mjs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := io.ReadAll(content)
+	content.Close()
+	if err != nil || string(data) != "data" {
+		t.Fatalf("Get with a failed cache write: content %q, error %v", data, err)
+	}
+	if err := s3.Put("file/b.mjs", strings.NewReader("data")); err != nil || uploaded != "data" {
+		t.Fatalf("Put with a failed cache write: uploaded %q, error %v", uploaded, err)
+	}
+
+	content, _, err = s3.Get("broken.mjs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err = io.ReadAll(content)
+	content.Close()
+	if !errors.Is(err, readErr) || string(data) != "da" {
+		t.Fatalf("Get of a broken body: content %q, error %v", data, err)
+	}
+	content, _, err = s3.Get("early.mjs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	content.Read(make([]byte, 1))
+	content.Close()
+	for _, key := range []string{"broken.mjs", "early.mjs"} {
+		<-bodies["/"+key].closed
+		if _, err := cache.Stat(key); !errors.Is(err, ErrNotFound) {
+			t.Fatalf("partial read of %s was cached: %v", key, err)
+		}
+	}
+}
+
+func TestS3StorageDeleteDropsInflightCache(t *testing.T) {
+	cache, err := NewFSStorage(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := http.DefaultClient
+	t.Cleanup(func() { http.DefaultClient = client })
+	http.DefaultClient = &http.Client{Transport: s3TestTransport(func(req *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: 200, Header: http.Header{
+			"Content-Length": {"4"},
+			"Last-Modified":  {time.Now().UTC().Format(http.TimeFormat)},
+		}, Body: io.NopCloser(strings.NewReader("data"))}, nil
+	})}
+	s3 := &s3Storage{apiEndpoint: "https://storage.test", fsCache: cache.(*fsStorage)}
+	content, _, err := s3.Get("modules/a.mjs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s3.Delete("modules/a.mjs"); err != nil {
+		t.Fatal(err)
+	}
+	if data, err := io.ReadAll(content); err != nil || string(data) != "data" {
+		t.Fatalf("content %q, error %v", data, err)
+	}
+	content.Close()
+	if _, err := cache.Stat("modules/a.mjs"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("a read that raced with a delete was cached: %v", err)
 	}
 }

@@ -287,6 +287,21 @@ func normalizeConfig(config *Config) {
 			}
 		}
 	}
+	for _, rules := range [][]string{config.AllowList.Packages, config.AllowList.Scopes, config.BanList.Packages} {
+		for i, rule := range rules {
+			if strings.HasPrefix(rule, "gh/") {
+				rules[i] = strings.ToLower(rule)
+			}
+		}
+	}
+	for i, scope := range config.BanList.Scopes {
+		if strings.HasPrefix(scope.Name, "gh/") {
+			config.BanList.Scopes[i].Name = strings.ToLower(scope.Name)
+			for j, exclude := range scope.Excludes {
+				scope.Excludes[j] = strings.ToLower(exclude)
+			}
+		}
+	}
 	purgeAPI := &config.PurgeAPI
 	purgeAPI.Enable = !(bytes.Equal(purgeAPI.EnableRaw, []byte("false")) || os.Getenv("PURGE_CACHE") == "false")
 	if purgeAPI.GithubClientID == "" {
@@ -314,6 +329,13 @@ func normalizeConfig(config *Config) {
 // name              e.g. faker
 // version           e.g. [@1.0.0]
 func extractPackageName(moduleName string) (packageId string, scope string, name string, version string) {
+	// [warning] a pkg.pr.new build follows the rules of its npm package, a github repo is matched in lowercase as
+	// `gh/owner/repo` with the `gh/owner` scope
+	moduleName = strings.TrimPrefix(moduleName, "pr/")
+	rest, gh := strings.CutPrefix(moduleName, "gh/")
+	if gh {
+		moduleName = "@" + strings.ToLower(rest)
+	}
 	paths := strings.Split(moduleName, "/")
 	if strings.HasPrefix(moduleName, "@") && len(paths) > 1 {
 		packageId = paths[0] + "/" + paths[1]
@@ -323,6 +345,9 @@ func extractPackageName(moduleName string) (packageId string, scope string, name
 		// the package has no scope prefix
 		packageId = paths[0]
 		name, version = utils.SplitByFirstByte(packageId, '@')
+	}
+	if gh && scope != "" {
+		packageId, scope = "gh/"+packageId[1:], "gh/"+scope[1:]
 	}
 	return
 }

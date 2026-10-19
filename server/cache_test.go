@@ -2,6 +2,8 @@ package server
 
 import (
 	"fmt"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -61,5 +63,30 @@ func TestLRUCache(t *testing.T) {
 	gc(time.Now())
 	if l := cacheLRU.Len(); l != 1000 {
 		t.Fatalf("expected 1000 items in cache, got %d", l)
+	}
+}
+
+func TestKeyedMutexExclusive(t *testing.T) {
+	var m keyedMutex
+	var holders, violations atomic.Int32
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Go(func() {
+			for range 20000 {
+				unlock := m.Lock("key")
+				if holders.Add(1) != 1 {
+					violations.Add(1)
+				}
+				holders.Add(-1)
+				unlock()
+			}
+		})
+	}
+	wg.Wait()
+	if n := violations.Load(); n > 0 {
+		t.Fatalf("%d concurrent holders of one key", n)
+	}
+	if len(m.locks) != 0 {
+		t.Fatalf("idle locks were retained: %d", len(m.locks))
 	}
 }

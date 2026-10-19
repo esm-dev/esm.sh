@@ -17,10 +17,57 @@ func doOnce(id string, fn func() error) (err error) {
 }
 
 var (
-	cacheMutex sync.KeyedMutex
+	cacheMutex keyedMutex
 	cacheStore sync.Map
 	cacheLRU   *lru.Cache[string, any]
 )
+
+// keyedMutex holds a reference counted RWMutex per key.
+// [warning] the count must change under the same lock as the map, otherwise two holders can get different mutexes for one key
+type keyedMutex struct {
+	mu    sync.Mutex
+	locks map[string]*keyedLock
+}
+
+type keyedLock struct {
+	sync.RWMutex
+	refs int
+}
+
+func (m *keyedMutex) lock(key string, exclusive bool) func() {
+	m.mu.Lock()
+	l := m.locks[key]
+	if l == nil {
+		if m.locks == nil {
+			m.locks = map[string]*keyedLock{}
+		}
+		l = &keyedLock{}
+		m.locks[key] = l
+	}
+	l.refs++
+	m.mu.Unlock()
+	if exclusive {
+		l.Lock()
+	} else {
+		l.RLock()
+	}
+	return func() {
+		if exclusive {
+			l.Unlock()
+		} else {
+			l.RUnlock()
+		}
+		m.mu.Lock()
+		if l.refs--; l.refs == 0 {
+			delete(m.locks, key)
+		}
+		m.mu.Unlock()
+	}
+}
+
+func (m *keyedMutex) Lock(key string) func() {
+	return m.lock(key, true)
+}
 
 type cacheItem struct {
 	exp  int64

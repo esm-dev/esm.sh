@@ -9,7 +9,6 @@ import (
 	"os"
 	"path"
 	"strings"
-	"sync"
 
 	"github.com/esm-dev/esm.sh/internal/storage"
 	lru "github.com/hashicorp/golang-lru/v2"
@@ -41,18 +40,19 @@ func encodeBuildMeta(meta *BuildMeta) []byte {
 	if meta.ExportDefault {
 		buf.Write([]byte{'e', '\n'})
 	}
-	if meta.CSSEntry != "" {
+	// [warning] values are line based, a value with "\n" (e.g. a crafted import specifier) would inject fields
+	if meta.CSSEntry != "" && !strings.ContainsRune(meta.CSSEntry, '\n') {
 		buf.Write([]byte{'.', ':'})
 		buf.WriteString(meta.CSSEntry)
 		buf.WriteByte('\n')
 	}
-	if meta.Dts != "" {
+	if meta.Dts != "" && !strings.ContainsRune(meta.Dts, '\n') {
 		buf.Write([]byte{'d', ':'})
 		buf.WriteString(meta.Dts)
 		buf.WriteByte('\n')
 	}
-	if len(meta.Imports) > 0 {
-		for _, path := range meta.Imports {
+	for _, path := range meta.Imports {
+		if !strings.ContainsRune(path, '\n') {
 			buf.Write([]byte{'i', ':'})
 			buf.WriteString(path)
 			buf.WriteByte('\n')
@@ -108,13 +108,7 @@ func decodeBuildMeta(data []byte) (*BuildMeta, error) {
 type BuildMetaDB struct {
 	cache   *lru.Cache[string, []byte]
 	storage storage.Storage
-	mu      sync.Mutex
-	locks   map[string]*buildMetaLock
-}
-
-type buildMetaLock struct {
-	sync.RWMutex
-	refs int
+	locks   keyedMutex
 }
 
 func NewBuildMetaDB(backStorage storage.Storage) *BuildMetaDB {
@@ -122,37 +116,12 @@ func NewBuildMetaDB(backStorage storage.Storage) *BuildMetaDB {
 	if err != nil {
 		panic(err)
 	}
-	return &BuildMetaDB{cache: cache, storage: backStorage, locks: map[string]*buildMetaLock{}}
+	return &BuildMetaDB{cache: cache, storage: backStorage}
 }
 
 // Metadata operations share the package lock; purges take it exclusively.
 func (db *BuildMetaDB) lockPackage(key string, exclusive bool) func() {
-	db.mu.Lock()
-	lock := db.locks[key]
-	if lock == nil {
-		lock = &buildMetaLock{}
-		db.locks[key] = lock
-	}
-	lock.refs++
-	db.mu.Unlock()
-	if exclusive {
-		lock.Lock()
-	} else {
-		lock.RLock()
-	}
-	return func() {
-		if exclusive {
-			lock.Unlock()
-		} else {
-			lock.RUnlock()
-		}
-		db.mu.Lock()
-		lock.refs--
-		if lock.refs == 0 {
-			delete(db.locks, key)
-		}
-		db.mu.Unlock()
-	}
+	return db.locks.lock(key, exclusive)
 }
 
 func (db *BuildMetaDB) Get(key string) (value []byte, err error) {

@@ -67,12 +67,15 @@ func parseDts(r io.Reader, w *bytes.Buffer, resolve func(specifier string, kind 
 		line, trimedSpaces := trimSpace(line)
 		w.Write(trimedSpaces)
 	CheckCommentScope:
+		commentStart := 0
 		if !multiLineComment && bytes.HasPrefix(line, bytesCommentStart) {
 			multiLineComment = true
+			commentStart = 2 // [warning] `/*/` does not close the comment
 		}
 		if multiLineComment {
-			endIndex := bytes.Index(line, bytesCommentEnd)
+			endIndex := bytes.Index(line[commentStart:], bytesCommentEnd)
 			if endIndex > -1 {
+				endIndex += commentStart
 				multiLineComment = false
 				w.Write(line[:endIndex+2])
 				if rest := line[endIndex+2:]; len(rest) > 0 {
@@ -118,8 +121,14 @@ func parseDts(r io.Reader, w *bytes.Buffer, resolve func(specifier string, kind 
 				stmt, trimedLeftSpaces := trimSpace(rawStmt)
 				w.Write(trimedLeftSpaces)
 				if len(stmt) > 0 {
+					// [warning] a specifier may follow a `from` that ends the previous line
+					afterFrom := false
+					if importOrExportDeclFound && (stmt[0] == '\'' || stmt[0] == '"') {
+						prev := bytes.TrimRight(w.Bytes(), " \t\n")
+						afterFrom = bytes.HasSuffix(prev, []byte("from")) && (len(prev) == 4 || !isDtsIdentifierByte(prev[len(prev)-5]))
+					}
 					if importOrExportDeclFound && importOrExportDeclMayEnd {
-						if findDtsFromSpecifier(stmt) < 0 {
+						if !afterFrom && findDtsFromSpecifier(stmt) < 0 {
 							importOrExportDeclFound = false
 							importOrExportDeclDepth = 0
 						}
@@ -133,6 +142,7 @@ func parseDts(r io.Reader, w *bytes.Buffer, resolve func(specifier string, kind 
 
 					var rewritten bytes.Buffer
 					last := 0
+					braces := 0
 					for i := 0; i < len(stmt); {
 						c := stmt[i]
 						if c == '\'' || c == '"' || c == '`' {
@@ -156,6 +166,11 @@ func parseDts(r io.Reader, w *bytes.Buffer, resolve func(specifier string, kind 
 								i += end + 4
 								continue
 							}
+						}
+						if c == '{' {
+							braces++
+						} else if c == '}' {
+							braces--
 						}
 
 						wordLen := 0
@@ -203,7 +218,7 @@ func parseDts(r io.Reader, w *bytes.Buffer, resolve func(specifier string, kind 
 					}
 
 					if importOrExportDeclFound {
-						importOrExportDeclDepth += bytes.Count(stmt, []byte{'{'}) - bytes.Count(stmt, []byte{'}'})
+						importOrExportDeclDepth += braces
 					}
 
 					wrote := false
@@ -214,6 +229,9 @@ func parseDts(r io.Reader, w *bytes.Buffer, resolve func(specifier string, kind 
 						}
 					} else if importOrExportDeclFound {
 						quoteStart := findDtsFromSpecifier(stmt)
+						if quoteStart < 0 && afterFrom {
+							quoteStart = 0
+						}
 						if quoteStart < 0 && bytes.HasPrefix(stmt, []byte("import")) {
 							if match := regexpImportPathDecl.FindIndex(stmt); match != nil {
 								quoteStart = match[1] - 1
@@ -319,6 +337,7 @@ func isDtsEscaped(data []byte, index int) bool {
 // A split function for bufio.Scanner to split javascript statement
 func splitJSStmt(data []byte, atEOF bool) (advance int, token []byte, err error) {
 	var commentScope bool
+	var commentStart int
 	var lineCommentScope bool
 	var stringScope byte
 	for i := range data {
@@ -336,11 +355,13 @@ func splitJSStmt(data []byte, atEOF bool) (advance int, token []byte, err error)
 				if lineCommentScope {
 					continue
 				} else if commentScope {
-					if prev == '*' {
+					// [warning] `/*/` does not close the comment
+					if prev == '*' && i > commentStart+2 {
 						commentScope = false
 					}
 				} else if next == '*' {
 					commentScope = true
+					commentStart = i
 				} else if next == '/' {
 					lineCommentScope = true
 				}

@@ -8,6 +8,14 @@ import (
 	"time"
 )
 
+func init() {
+	// [warning] all fetches share the default transport: a dependency tree opens many connections to one
+	// registry, and a tarball download has no client timeout, so a stalled server must not hang it
+	transport := http.DefaultTransport.(*http.Transport)
+	transport.MaxIdleConnsPerHost = 16
+	transport.ResponseHeaderTimeout = 30 * time.Second
+}
+
 // fetchClient is a custom HTTP client.
 type fetchClient struct {
 	*http.Client

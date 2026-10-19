@@ -6,10 +6,10 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
-	"sort"
 	"strings"
 	"time"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/ije/gox/utils"
 	"github.com/ije/gox/valid"
 )
@@ -85,6 +85,11 @@ func resolveDependencyVersion(v string) (Package, error) {
 	}
 	if strings.HasPrefix(v, "npm:") {
 		pkgName, pkgVersion := splitPackageVersion(v[4:])
+		// [warning] the registry is picked by the raw name but the store path is cleaned,
+		// so a name like "@private/../react" would install into another package's directory
+		if !ValidatePackageName(pkgName) {
+			return Package{}, errors.New("invalid npm dependency")
+		}
 		return Package{
 			Name:    pkgName,
 			Version: pkgVersion,
@@ -92,21 +97,23 @@ func resolveDependencyVersion(v string) (Package, error) {
 	}
 	if strings.HasPrefix(v, "jsr:") {
 		pkgName, pkgVersion := splitPackageVersion(v[4:])
-		if !strings.HasPrefix(pkgName, "@") || !strings.ContainsRune(pkgName, '/') {
+		scope, name := utils.SplitByFirstByte(pkgName, '/')
+		pkgName = "@jsr/" + strings.TrimPrefix(scope, "@") + "__" + name
+		if !strings.HasPrefix(scope, "@") || name == "" || !ValidatePackageName(pkgName) {
 			return Package{}, errors.New("invalid jsr dependency")
 		}
-		scope, name := utils.SplitByFirstByte(pkgName, '/')
 		return Package{
-			Name:    "@jsr/" + scope[1:] + "__" + name,
+			Name:    pkgName,
 			Version: pkgVersion,
 		}, nil
 	}
 	if after, ok := strings.CutPrefix(v, "github:"); ok {
 		repo, fragment := utils.SplitByLastByte(after, '#')
+		// [warning] keep the escaped `semver:` prefix, the server resolves it against the repo tags
 		return Package{
 			Github:  true,
 			Name:    repo,
-			Version: strings.TrimPrefix(url.QueryEscape(fragment), "semver:"),
+			Version: url.QueryEscape(fragment),
 		}, nil
 	}
 	if strings.HasPrefix(v, "git+ssh://") || strings.HasPrefix(v, "git+https://") || strings.HasPrefix(v, "git://") {
@@ -129,7 +136,7 @@ func resolveDependencyVersion(v string) (Package, error) {
 		return Package{
 			Github:  true,
 			Name:    repo,
-			Version: strings.TrimPrefix(url.QueryEscape(gitUrl.Fragment), "semver:"),
+			Version: url.QueryEscape(gitUrl.Fragment),
 		}, nil
 	}
 	if strings.HasPrefix(v, "https://") || strings.HasPrefix(v, "http://") {
@@ -149,6 +156,11 @@ func resolveDependencyVersion(v string) (Package, error) {
 			if version == "" {
 				return Package{}, errors.New("unsupported http dependency")
 			}
+			for seg := range strings.SplitSeq(pkgName, "/") {
+				if !ValidatePackageName(strings.TrimPrefix(seg, "@")) {
+					return Package{}, errors.New("unsupported http dependency")
+				}
+			}
 			return Package{
 				PkgPrNew: true,
 				Name:     pkgName,
@@ -163,7 +175,7 @@ func resolveDependencyVersion(v string) (Package, error) {
 		return Package{
 			Github:  true,
 			Name:    repo,
-			Version: strings.TrimPrefix(url.QueryEscape(fragment), "semver:"),
+			Version: url.QueryEscape(fragment),
 		}, nil
 	}
 	return Package{}, nil
@@ -324,51 +336,24 @@ func IsStableVersion(version string) bool {
 	return true
 }
 
-// ResolveVersionByTime finds the latest stable version published before or at the given time.
+// ResolveVersionByTime finds the highest stable version published before or at the given time.
 func ResolveVersionByTime(metadata *PackageMetadata, targetTime time.Time) (string, error) {
-	type versionTime struct {
-		version string
-		time    time.Time
-	}
-
-	var validVersions []versionTime
+	var latest *semver.Version
 	for version, timeStr := range metadata.Time {
-		// Skip special entries like "created", "modified"
-		if version == "created" || version == "modified" {
+		if _, exists := metadata.Versions[version]; !exists || !IsStableVersion(version) {
 			continue
 		}
-		// Only include versions that exist in the versions map
-		if _, exists := metadata.Versions[version]; !exists {
-			continue
-		}
-
-		// Skip unstable versions (experimental, beta, alpha, etc.)
-		if !IsStableVersion(version) {
-			continue
-		}
-
 		publishTime, err := time.Parse(time.RFC3339, timeStr)
-		if err != nil {
-			continue // Skip invalid timestamps
+		if err != nil || publishTime.After(targetTime) {
+			continue
 		}
-
-		// Only include versions published before or at the target time
-		if publishTime.Before(targetTime) || publishTime.Equal(targetTime) {
-			validVersions = append(validVersions, versionTime{
-				version: version,
-				time:    publishTime,
-			})
+		// [warning] compare versions instead of publish times, a backport of an older major is published later
+		if v, err := semver.NewVersion(version); err == nil && (latest == nil || v.GreaterThan(latest)) {
+			latest = v
 		}
 	}
-
-	if len(validVersions) == 0 {
+	if latest == nil {
 		return "", errors.New("no stable versions found for the specified date")
 	}
-
-	// Sort by publish time, latest first
-	sort.Slice(validVersions, func(i, j int) bool {
-		return validVersions[i].time.After(validVersions[j].time)
-	})
-
-	return validVersions[0].version, nil
+	return latest.Original(), nil
 }

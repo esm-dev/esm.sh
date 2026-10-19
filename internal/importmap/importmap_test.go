@@ -391,3 +391,116 @@ func TestResolve(t *testing.T) {
 		t.Fatalf("Expected scheduler to be resolved to https://esm.sh/scheduler@0.27.x/es2022/scheduler.mjs, got %s", modUrl)
 	}
 }
+
+func TestResolveRelativeValues(t *testing.T) {
+	baseURL, _ := url.Parse("https://example.com/app/index.html")
+	im, err := Parse(baseURL, []byte(`{
+		"imports": {"app": "./app.js?v=1#main", "space": "./a%20b.js", "lib/": "./lib/", "lib/nested/": "./nested/"},
+		"scopes": {
+			"https://example.com/foo": {"app": "https://cdn.test/exact.js"},
+			"/vendor/": {"app": "https://cdn.test/vendor.js"}
+		}
+	}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct{ specifier, referrer, want string }{
+		{"app", "https://example.com/main.js", "https://example.com/app/app.js?v=1#main"},
+		{"space", "https://example.com/main.js", "https://example.com/app/a%20b.js"},
+		{"lib/nested/deep/file.js", "https://example.com/main.js", "https://example.com/app/nested/deep/file.js"},
+		{"lib/other/file.js", "https://example.com/main.js", "https://example.com/app/lib/other/file.js"},
+		{"app", "https://example.com/foo", "https://cdn.test/exact.js"},
+		{"app", "https://example.com/foobar.js", "https://example.com/app/app.js?v=1#main"},
+		{"app", "https://example.com/vendor/x.js", "https://cdn.test/vendor.js"},
+	} {
+		referrer, _ := url.Parse(tc.referrer)
+		if got, ok := im.Resolve(tc.specifier, referrer); !ok || got != tc.want {
+			t.Errorf("Resolve(%q, %q) = %q, %v; want %q", tc.specifier, tc.referrer, got, ok, tc.want)
+		}
+	}
+}
+
+func BenchmarkResolveTrailingSlash(b *testing.B) {
+	imports := make(map[string]string, 40000)
+	for i := range 40000 {
+		imports[fmt.Sprintf("k%d/", i)] = "https://cdn.test/"
+	}
+	im := Blank()
+	im.Imports = newImports(imports)
+	for b.Loop() {
+		im.Resolve("a/b/c", nil)
+	}
+}
+
+func TestAddImportTarget(t *testing.T) {
+	const origin = "https://importmap-target.test"
+	cacheKey := origin + "/x@1.0.0?meta&target=es2015"
+	fetchCache.Store(cacheKey, ImportMeta{Import: Import{Name: "x", Version: "1.0.0"}, Integrity: "sha384-es2015"})
+	t.Cleanup(func() { fetchCache.Delete(cacheKey) })
+	im := Blank()
+	im.SetConfig(Config{CDN: origin + "/", Target: "ES2015"})
+	meta, err := im.FetchImportMeta(Import{Name: "x", Version: "1.0.0"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, errors := im.AddImport(meta, false); len(errors) > 0 {
+		t.Fatal(errors)
+	}
+	want := origin + "/x@1.0.0/es2015/x.mjs"
+	if got, _ := im.Imports.Get("x"); got != want {
+		t.Fatalf("x = %q, want %q", got, want)
+	}
+	if got, _ := im.Integrity().Get(want); got != "sha384-es2015" {
+		t.Fatalf("integrity = %q, want sha384-es2015", got)
+	}
+}
+
+func TestAddImportConflictsInOneCall(t *testing.T) {
+	const origin = "https://importmap-conflicts.test"
+	for key, meta := range map[string]ImportMeta{
+		"/b@1.0.0":  {Import: Import{Name: "b", Version: "1.0.0"}, Imports: []string{"/c@^1.0.0"}},
+		"/d@1.0.0":  {Import: Import{Name: "d", Version: "1.0.0"}, Imports: []string{"/c@^1.0.0"}},
+		"/c@^1.0.0": {Import: Import{Name: "c", Version: "1.5.0"}},
+		"/e@^2.0.0": {Import: Import{Name: "e", Version: "2.0.0"}},
+	} {
+		fetchCache.Store(origin+key+"?meta", meta)
+		t.Cleanup(func() { fetchCache.Delete(origin + key + "?meta") })
+	}
+	im := Blank()
+	im.SetConfig(Config{CDN: origin})
+	im.Imports.Set("c", origin+"/c@2.0.0/es2022/c.mjs")
+	im.Imports.Set("e", origin+"/e@1.0.0-a_b/es2022/e.mjs")
+	_, errors := im.AddImport(ImportMeta{Import: Import{Name: "root", Version: "1.0.0"}, Imports: []string{"/b@1.0.0", "/d@1.0.0", "/e@^2.0.0"}}, true)
+	if len(errors) > 0 {
+		t.Fatal(errors)
+	}
+	for _, pkg := range []string{"b", "d"} {
+		referrer, _ := url.Parse(origin + "/*" + pkg + "@1.0.0/es2022/" + pkg + ".mjs")
+		if got, _ := im.Resolve("c", referrer); got != origin+"/c@1.5.0/es2022/c.mjs" {
+			t.Errorf("Resolve(c) from %s = %q, want c@1.5.0", pkg, got)
+		}
+	}
+	referrer, _ := url.Parse(origin + "/*root@1.0.0/es2022/root.mjs")
+	if got, _ := im.Resolve("e", referrer); got != origin+"/e@2.0.0/es2022/e.mjs" {
+		t.Errorf("Resolve(e) from root = %q, want e@2.0.0", got)
+	}
+}
+
+func TestParseSpecifier(t *testing.T) {
+	for specifier, want := range map[string]Import{
+		"npm:react@^18":         {Name: "react", Version: "^18"},
+		"react@~18.2.0/client":  {Name: "react", Version: "~18.2.0", SubPath: "client"},
+		"@scope/pkg@>=1 <2/sub": {Name: "@scope/pkg", Version: ">=1 <2", SubPath: "sub"},
+		"jsr:@std/path@1.0.8":   {Name: "@std/path", Version: "1.0.8", Jsr: true},
+		"gh:owner/repo@main":    {Name: "owner/repo", Version: "main", Github: true},
+	} {
+		if got, err := ParseSpecifier(specifier); err != nil || got != want {
+			t.Errorf("ParseSpecifier(%q) = %+v, %v; want %+v", specifier, got, err, want)
+		}
+	}
+	for _, specifier := range []string{"", "@scope", "@scope/", "gh:owner", "npm:", "react@^1.a", "react@1@2"} {
+		if got, err := ParseSpecifier(specifier); err == nil {
+			t.Errorf("ParseSpecifier(%q) = %+v; want an error", specifier, got)
+		}
+	}
+}

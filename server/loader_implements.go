@@ -50,7 +50,10 @@ func compileSvelteLoader(ctx context.Context, npmrc *NpmRC, svelteVersion string
 	loaderJS := `
 	  import { compile } from "svelte/compiler";
 	  const { stdin, stdout } = Deno;
-	  const write = data => stdout.write(new TextEncoder().encode(data));
+	  const write = async data => {
+	    // [warning] stdout.write may write only a part of the buffer
+	    for (let buf = new TextEncoder().encode(data); buf.length > 0;) buf = buf.subarray(await stdout.write(buf));
+	  };
 	  try {
 	    let sourceCode = "";
 	    for await (const text of stdin.readable.pipeThrough(new TextDecoderStream())) {
@@ -108,7 +111,10 @@ func compileVueLoader(ctx context.Context, npmrc *NpmRC, vueVersion string, load
 	  import * as vueCompilerSFC from "@vue/compiler-sfc";
 	  import { transform } from "@esm.sh/vue-compiler";
 	  const { stdin, stdout } = Deno;
-	  const write = data => stdout.write(new TextEncoder().encode(data));
+	  const write = async data => {
+	    // [warning] stdout.write may write only a part of the buffer
+	    for (let buf = new TextEncoder().encode(data); buf.length > 0;) buf = buf.subarray(await stdout.write(buf));
+	  };
 	  try {
 	    let sourceCode = "";
 	    for await (const text of stdin.readable.pipeThrough(new TextDecoderStream())) {

@@ -103,3 +103,17 @@ func TestEncodeBuildMeta(t *testing.T) {
 		t.Fatalf("meta mismatch: %+v != %+v", meta3, metaEmpty)
 	}
 }
+
+func TestEncodeBuildMetaSkipsMultilineValues(t *testing.T) {
+	meta, err := decodeBuildMeta(encodeBuildMeta(&BuildMeta{
+		CSSEntry: "./a.css\nt",
+		Dts:      "/x.d.ts\nt",
+		Imports:  []string{"/a.mjs", "/b.mjs\nt\nd:.evil.com/x.d.ts"},
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if meta.TypesOnly || meta.CSSEntry != "" || meta.Dts != "" || !reflect.DeepEqual(meta.Imports, []string{"/a.mjs"}) {
+		t.Fatalf("a multiline value injected fields: %+v", meta)
+	}
+}
