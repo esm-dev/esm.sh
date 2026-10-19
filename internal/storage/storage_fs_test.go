@@ -6,6 +6,8 @@ import (
 	"io"
 	"os"
 	"path"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/ije/gox/crypto/rand"
@@ -209,6 +211,12 @@ func TestFSStorageRejectPathTraversal(t *testing.T) {
 		if err = fs.Delete(k); err != ErrInvalidStorageKey {
 			t.Fatalf("Delete(%q): want ErrInvalidStorageKey, got %v", k, err)
 		}
+		if _, err = fs.List(k); err != ErrInvalidStorageKey {
+			t.Fatalf("List(%q): want ErrInvalidStorageKey, got %v", k, err)
+		}
+		if _, err = fs.DeleteAll(k); err != ErrInvalidStorageKey {
+			t.Fatalf("DeleteAll(%q): want ErrInvalidStorageKey, got %v", k, err)
+		}
 	}
 
 	err = fs.Put("ok/sub/file.txt", bytes.NewBufferString("hi"))
@@ -223,5 +231,136 @@ func TestFSStorageRejectPathTraversal(t *testing.T) {
 	b, err := io.ReadAll(got)
 	if err != nil || string(b) != "hi" {
 		t.Fatalf("Get ok path: content %q err %v", string(b), err)
+	}
+}
+
+func TestFSStorageRejectSymlinkEscape(t *testing.T) {
+	for _, operation := range []string{"Put", "PutNewDir", "Get", "Stat", "Delete", "List", "DeleteAll"} {
+		t.Run(operation, func(t *testing.T) {
+			root := t.TempDir()
+			outside := t.TempDir()
+			if err := os.Mkdir(filepath.Join(outside, "nested"), 0755); err != nil {
+				t.Fatal(err)
+			}
+			victim := filepath.Join(outside, "nested", "file.txt")
+			if err := os.WriteFile(victim, []byte("original"), 0644); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(outside, filepath.Join(root, "link")); err != nil {
+				t.Fatal(err)
+			}
+			fs, err := NewFSStorage(root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			switch operation {
+			case "Put":
+				err = fs.Put("link/nested/file.txt", strings.NewReader("replacement"))
+			case "PutNewDir":
+				err = fs.Put("link/new/file.txt", strings.NewReader("replacement"))
+			case "Get":
+				var content io.ReadCloser
+				content, _, err = fs.Get("link/nested/file.txt")
+				if content != nil {
+					content.Close()
+				}
+			case "Stat":
+				_, err = fs.Stat("link/nested/file.txt")
+			case "Delete":
+				err = fs.Delete("link/nested/file.txt")
+			case "List":
+				_, err = fs.List("link/nested")
+			case "DeleteAll":
+				_, err = fs.DeleteAll("link/nested")
+			}
+			if err == nil {
+				t.Errorf("%s followed a symlink outside storage", operation)
+			}
+			if data, err := os.ReadFile(victim); err != nil || string(data) != "original" {
+				t.Errorf("outside file changed: content %q, error %v", data, err)
+			}
+			if entries, err := os.ReadDir(outside); err != nil || len(entries) != 1 {
+				t.Errorf("outside directory changed: entries %v, error %v", entries, err)
+			}
+		})
+	}
+}
+
+func TestFSStorageContainedSymlink(t *testing.T) {
+	root := t.TempDir()
+	fs, err := NewFSStorage(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(root, "real"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("real", filepath.Join(root, "link")); err != nil {
+		t.Fatal(err)
+	}
+	if err := fs.Put("link/nested/file.txt", strings.NewReader("data")); err != nil {
+		t.Fatal(err)
+	}
+	content, _, err := fs.Get("link/nested/file.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := io.ReadAll(content)
+	content.Close()
+	if err != nil || string(data) != "data" {
+		t.Fatalf("Get: content %q, error %v", data, err)
+	}
+	if _, err := fs.Stat("link/nested/file.txt"); err != nil {
+		t.Fatal(err)
+	}
+	keys, err := fs.DeleteAll("link/nested/")
+	if err != nil || len(keys) != 1 || keys[0] != "link/nested/file.txt" {
+		t.Fatalf("DeleteAll: keys %v, error %v", keys, err)
+	}
+	for _, prefix := range []string{"", "/", ".", "./", "real/.."} {
+		if _, err := fs.DeleteAll(prefix); err == nil {
+			t.Errorf("DeleteAll(%q) accepted the storage root", prefix)
+		}
+	}
+}
+
+func TestFSStoragePutSymlinkSwap(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	fs, err := NewFSStorage(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader, writer := io.Pipe()
+	defer reader.Close()
+	defer writer.Close()
+	done := make(chan error, 1)
+	go func() { done <- fs.Put("dir/file.txt", reader) }()
+	if _, err := writer.Write([]byte("data")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(filepath.Join(root, "dir"), filepath.Join(root, "moved")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(root, "dir")); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := os.ReadDir(filepath.Join(root, "moved"))
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("temporary file: entries %v, error %v", entries, err)
+	}
+	tmpfile := filepath.Join(outside, entries[0].Name())
+	if err := os.WriteFile(tmpfile, []byte("outside"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	writer.Close()
+	if err := <-done; err == nil {
+		t.Fatal("Put followed a swapped directory symlink")
+	}
+	if data, err := os.ReadFile(tmpfile); err != nil || string(data) != "outside" {
+		t.Fatalf("outside temporary file changed: content %q, error %v", data, err)
+	}
+	if _, err := os.Stat(filepath.Join(outside, "file.txt")); !os.IsNotExist(err) {
+		t.Fatalf("outside destination: %v", err)
 	}
 }
