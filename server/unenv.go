@@ -19,7 +19,7 @@ var (
 	// https://github.com/unjs/unenv
 	unenvPkg = npm.Package{
 		Name:    "unenv",
-		Version: "2.0.0-rc.22",
+		Version: "2.0.0-rc.24",
 	}
 	unenvNodeRuntimeMap = map[string][]byte{
 		"sys.mjs": []byte(`export*from "/node/util.mjs";export{default}from "/node/util.mjs";`),
