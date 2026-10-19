@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/esm-dev/esm.sh/internal/npm"
 	"github.com/esm-dev/esm.sh/internal/storage"
 	esbuild "github.com/ije/esbuild-internal/api"
 	"github.com/ije/gox/log"
@@ -67,7 +68,7 @@ func TestParserDepthLimit(t *testing.T) {
 				res := httptest.NewRecorder()
 				handler.ServeHTTP(res, httptest.NewRequest("POST", "/transform", bytes.NewReader(body)))
 				if source == code {
-					if res.Code != 400 || !strings.Contains(res.Body.String(), "Source nesting is too deep") {
+					if res.Code != 400 || !strings.Contains(res.Body.String(), "Source is too complex") {
 						t.Fatalf("expected nesting error, got HTTP %d: %s", res.Code, res.Body.String())
 					}
 				} else if res.Code != 200 {
@@ -76,9 +77,21 @@ func TestParserDepthLimit(t *testing.T) {
 			}
 		})
 	}
+	t.Run("recursive operators and keywords", func(t *testing.T) {
+		for _, source := range []string{
+			"export default " + strings.Repeat("!", 100000) + "x;",
+			"export default " + strings.Repeat("new ", 100000) + "X;",
+			strings.Repeat("do ", 100000),
+			strings.Repeat("declare ", 100000),
+		} {
+			if _, err := transform(&ResolvedTransformOptions{TransformOptions: TransformOptions{Lang: "ts", Code: source}}); err == nil || !strings.Contains(err.Error(), "Source is too complex") {
+				t.Fatalf("expected source limit error, got %v", err)
+			}
+		}
+	})
 
 	t.Run("minify", func(t *testing.T) {
-		if _, err := minify(code, esbuild.LoaderJS, esbuild.ESNext); err == nil || !strings.Contains(err.Error(), "Source nesting is too deep") {
+		if _, err := minify(code, esbuild.LoaderJS, esbuild.ESNext); err == nil || !strings.Contains(err.Error(), "Source is too complex") {
 			t.Fatalf("expected nesting error, got %v", err)
 		}
 	})
@@ -86,6 +99,11 @@ func TestParserDepthLimit(t *testing.T) {
 	t.Run("export analysis", func(t *testing.T) {
 		if _, err := parseJS("index.mjs", []byte(code)); err == nil {
 			t.Fatal("expected export analysis to reject deep nesting")
+		}
+	})
+	t.Run("tree shaking", func(t *testing.T) {
+		if _, err := treeShake(nil, npm.Package{}, []byte(code), []string{"default"}, esbuild.ESNext); err == nil || !strings.Contains(err.Error(), "Source is too complex") {
+			t.Fatalf("expected source limit error, got %v", err)
 		}
 	})
 
@@ -112,7 +130,7 @@ func TestParserDepthLimit(t *testing.T) {
 			}
 			res := httptest.NewRecorder()
 			handler.ServeHTTP(res, httptest.NewRequest("GET", "/"+name+"@1.0.0?target=esnext&bundle&no-dts", nil))
-			if res.Code != 500 || (!strings.Contains(res.Body.String(), "Source nesting is too deep") && !strings.Contains(res.Body.String(), "invalid syntax")) {
+			if res.Code != 500 || (!strings.Contains(res.Body.String(), "Source is too complex") && !strings.Contains(res.Body.String(), "invalid syntax")) {
 				t.Fatalf("expected build error, got HTTP %d: %s", res.Code, res.Body.String())
 			}
 		})

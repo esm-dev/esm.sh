@@ -42,6 +42,9 @@ type TransformOutput struct {
 
 // transform transforms the given code with the given options.
 func transform(options *ResolvedTransformOptions) (out *TransformOutput, err error) {
+	if err = checkSourceComplexity(options.Code); err != nil {
+		return
+	}
 	target := esbuild.ESNext
 	if options.Target != "" {
 		if t, ok := targets[options.Target]; ok {
@@ -185,6 +188,9 @@ func validateSolidJSX(code []byte, runtimes *set.Set[string]) error {
 	if runtimes.Len() == 0 {
 		return nil
 	}
+	if err := checkSourceComplexity(string(code)); err != nil {
+		return err
+	}
 	log := logger.NewDeferLog(logger.DeferLogNoVerboseOrDebug, nil)
 	ast, ok := js_parser.Parse(log, logger.Source{Contents: string(code)}, js_parser.OptionsFromConfig(&esbuild_config.Options{}))
 	if ok {
@@ -207,9 +213,15 @@ func validateSolidJSX(code []byte, runtimes *set.Set[string]) error {
 
 // treeShake tree-shakes the given javascript code with the given exports.
 func treeShake(npmrc *NpmRC, pkg npm.Package, code []byte, exports []string, target esbuild.Target) ([]byte, error) {
+	if err := checkSourceComplexity(string(code)); err != nil {
+		return nil, err
+	}
 	input := &esbuild.StdinOptions{
 		Contents: fmt.Sprintf(`export { %s } from '.';`, strings.Join(exports, ", ")),
 		Loader:   esbuild.LoaderJS,
+	}
+	if err := checkSourceComplexity(input.Contents); err != nil {
+		return nil, err
 	}
 	installPackage := sync.OnceValues(func() (*npm.PackageJSON, error) {
 		return npmrc.installPackage(pkg)
@@ -262,6 +274,9 @@ func treeShake(npmrc *NpmRC, pkg npm.Package, code []byte, exports []string, tar
 
 // minify minifies the given javascript code.
 func minify(code string, loader esbuild.Loader, target esbuild.Target) ([]byte, error) {
+	if err := checkSourceComplexity(code); err != nil {
+		return nil, err
+	}
 	ret := esbuild.Transform(code, esbuild.TransformOptions{
 		Target:            target,
 		Format:            esbuild.FormatESModule,

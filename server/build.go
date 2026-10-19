@@ -1064,6 +1064,9 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 					contents := strings.Replace(string(code),
 						"var freeRequire = typeof require == 'function' && require;",
 						"var freeRequire = id => id === 'lodash' ? require('lodash') : id === 'platform' ? require('platform') : undefined;", 1)
+					if err := checkSourceComplexity(contents); err != nil {
+						return esbuild.OnLoadResult{}, err
+					}
 					return esbuild.OnLoadResult{Contents: &contents, ResolveDir: path.Dir(args.Path), Loader: esbuild.LoaderJS}, nil
 				},
 			)
@@ -1147,6 +1150,9 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 					if err != nil {
 						return esbuild.OnLoadResult{}, err
 					}
+					if err := checkSourceComplexity(out.Code); err != nil {
+						return esbuild.OnLoadResult{}, err
+					}
 					return esbuild.OnLoadResult{
 						Contents:   &out.Code,
 						ResolveDir: path.Dir(args.Path),
@@ -1183,6 +1189,9 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 					}
 					out, err := transformVue(ctx.Context(), ctx.npmrc, vueVersion, ctx.esmPath.String(), string(code))
 					if err != nil {
+						return esbuild.OnLoadResult{}, err
+					}
+					if err := checkSourceComplexity(out.Code); err != nil {
 						return esbuild.OnLoadResult{}, err
 					}
 					if out.Lang == "ts" {
@@ -1289,13 +1298,16 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 		IgnoreAnnotations: ignoreAnnotations,
 		Conditions:        conditions,
 		Loader:            loaders,
-		Plugins:           []esbuild.Plugin{esmifyPlugin},
+		Plugins:           []esbuild.Plugin{esmifyPlugin, sourceLimitPlugin},
 		Outdir:            "/esbuild",
 		Write:             false,
 	}
 	if entryPoint != "" {
 		options.EntryPoints = []string{entryPoint}
 	} else {
+		if err = checkSourceComplexity(stdin.Contents); err != nil {
+			return
+		}
 		options.Stdin = &stdin
 	}
 	if ctx.isDenoTarget() {

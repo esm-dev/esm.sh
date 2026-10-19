@@ -1514,6 +1514,9 @@ func validateJSFile(filename string) (isESM bool, namedExports []string, err err
 }
 
 func parseJS(filename string, data []byte) (js_ast.AST, error) {
+	if err := checkSourceComplexity(string(data)); err != nil {
+		return js_ast.AST{}, err
+	}
 	log := logger.NewDeferLog(logger.DeferLogNoVerboseOrDebug, nil)
 	parserOpts := js_parser.OptionsFromConfig(&esbuild_config.Options{
 		JSX: esbuild_config.JSXOptions{
