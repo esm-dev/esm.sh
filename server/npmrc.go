@@ -23,14 +23,16 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/esm-dev/esm.sh/internal/npm"
+	"github.com/esm-dev/esm.sh/internal/storage"
 	"github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/ije/gox/term"
 	"github.com/ije/gox/utils"
 )
 
 const (
-	npmRegistry = "https://registry.npmjs.org/"
-	jsrRegistry = "https://npm.jsr.io/"
+	npmRegistry     = "https://registry.npmjs.org/"
+	npmQueryTimeout = 30 * time.Second
+	jsrRegistry     = "https://npm.jsr.io/"
 	// [warning] the unpacked size does not bound the inodes taken by an archive of tiny files
 	maxPackageEntries = 100000
 )
@@ -49,8 +51,9 @@ type NpmRegistry struct {
 }
 
 type NpmRC struct {
-	globalRegistry   *NpmRegistry
-	scopedRegistries map[string]*NpmRegistry
+	resolutionStorage storage.Storage
+	globalRegistry    *NpmRegistry
+	scopedRegistries  map[string]*NpmRegistry
 }
 
 func DefaultNpmRC() *NpmRC {
@@ -118,7 +121,15 @@ func (npmrc *NpmRC) getCachedPackageNotFound(pkg npm.Package) string {
 	return negativeCache.get(key + pkg.String() + "/install")
 }
 
+type npmRegistryError struct {
+	status  int
+	message string
+}
+
+func (e *npmRegistryError) Error() string { return e.message }
+
 func (npmrc *NpmRC) fetchPackageMetadataContext(ctx context.Context, pkgName string, version string, isWellknownVersion bool) (*npm.PackageMetadata, *npm.PackageJSONRaw, error) {
+	epoch := npmResolutionEpoch.Load()
 	reg := npmrc.getRegistryByPackageName(pkgName)
 	missingKey := "404:" + reg.Registry + pkgName + "@"
 	if message := negativeCache.get(missingKey); message != "" {
@@ -133,6 +144,9 @@ func (npmrc *NpmRC) fetchPackageMetadataContext(ctx context.Context, pkgName str
 	}
 
 	packumentKey := reg.Registry + pkgName
+	if reg.Token != "" || reg.User != "" || reg.Password != "" {
+		packumentKey += npmrc.resolutionPrefix(pkgName)
+	}
 	var unlock func()
 	defer func() {
 		if unlock != nil {
@@ -205,7 +219,7 @@ RETRY:
 	}
 
 	if res.StatusCode != 200 {
-		return nil, nil, fmt.Errorf("%s: %s", regUrl.Hostname(), res.Status)
+		return nil, nil, &npmRegistryError{res.StatusCode, fmt.Sprintf("%s: %s", regUrl.Hostname(), res.Status)}
 	}
 
 	if useVersionRoute {
@@ -227,7 +241,11 @@ RETRY:
 		return nil, nil, fmt.Errorf("version %s of '%s' not found", version, pkgName)
 	}
 
-	packumentCache.Add(packumentKey, &metadata)
+	release := cacheMutex.Lock("resolution-persistence")
+	if epoch == npmResolutionEpoch.Load() {
+		packumentCache.Add(packumentKey, &metadata)
+	}
+	release()
 	return &metadata, nil, nil
 }
 
@@ -295,15 +313,14 @@ func (npmrc *NpmRC) getPackageInfoContext(ctx context.Context, pkgName string, v
 		}
 	}
 
-	ttl := time.Duration(config.NpmQueryCacheTTL) * time.Second
-	return withCache("npm:"+pkgName+"@"+version, ttl, func() (_ *npm.PackageJSON, _ string, err error) {
+	return npmrc.cachedResolution(ctx, pkgName, version, "npm:"+pkgName+"@"+version, func(ctx context.Context) (_ *npm.PackageJSONRaw, err error) {
 		key := "404:" + npmrc.getRegistryByPackageName(pkgName).Registry + pkgName + "@"
 		if message := negativeCache.get(key); message != "" {
-			return nil, "", errors.New(message)
+			return nil, errors.New(message)
 		}
 		key += version
 		if message := negativeCache.get(key); message != "" {
-			return nil, "", errors.New(message)
+			return nil, errors.New(message)
 		}
 		defer func() {
 			if err != nil && strings.HasSuffix(err.Error(), " not found") {
@@ -313,24 +330,24 @@ func (npmrc *NpmRC) getPackageInfoContext(ctx context.Context, pkgName string, v
 
 		metadata, raw, err := npmrc.fetchPackageMetadataContext(ctx, pkgName, version, npm.IsExactVersion(version) || npm.IsDistTag(version))
 		if err != nil {
-			return nil, "", err
+			return nil, err
 		}
 
 		if raw != nil {
-			return raw.ToNpmPackage(), "npm:" + pkgName + "@" + raw.Version, nil
+			return raw, nil
 		}
 
 		resolvedVersion, err := resolveSemverVersion(metadata, version)
 		if err != nil {
-			return nil, "", fmt.Errorf("version %s of '%s' not found", version, pkgName)
+			return nil, fmt.Errorf("version %s of '%s' not found", version, pkgName)
 		}
 
 		rawData, ok := metadata.Versions[resolvedVersion]
 		if !ok {
-			return nil, "", fmt.Errorf("version %s of '%s' not found", version, pkgName)
+			return nil, fmt.Errorf("version %s of '%s' not found", version, pkgName)
 		}
 
-		return rawData.ToNpmPackage(), "npm:" + pkgName + "@" + rawData.Version, nil
+		return &rawData, nil
 	})
 }
 
@@ -345,13 +362,22 @@ func invalidateDistTagCacheIfNewer(pkgName string, version string) {
 	if !npm.IsExactVersion(version) || strings.ContainsRune(version, '-') {
 		return
 	}
-	key := "npm:" + pkgName + "@latest"
+	key := DefaultNpmRC().resolutionFreshKey(pkgName, "npm:"+pkgName+"@latest")
 	v, _ := getCacheItem(key)
 	latest, ok := v.(*npm.PackageJSON)
 	if !ok || !semverLessThan(latest.Version, version) {
 		return
 	}
+	unlock := cacheMutex.Lock("resolution-persistence")
+	defer unlock()
+	v, _ = getCacheItem(key)
+	latest, ok = v.(*npm.PackageJSON)
+	if !ok || !semverLessThan(latest.Version, version) {
+		return
+	}
 	deleteCacheItem(key)
+	npmResolutionEpoch.Add(1)
+	DefaultNpmRC().deleteResolution(DefaultNpmRC().resolutionKey(pkgName, "latest"))
 	deleteCacheItem("404:" + pkgName + "@latest")
 	negativeCache.delete("404:"+DefaultNpmRC().getRegistryByPackageName(pkgName).Registry+pkgName+"@latest", false)
 }
@@ -365,24 +391,23 @@ func (npmrc *NpmRC) getPackageInfoByDateContext(ctx context.Context, pkgName str
 	targetTimeStr := targetDate.Format(time.DateOnly)
 	cacheKey := reg.Registry + pkgName + "@date=" + targetTimeStr
 
-	return withCache(cacheKey, time.Duration(config.NpmQueryCacheTTL)*time.Second, func() (*npm.PackageJSON, string, error) {
+	return npmrc.cachedResolution(ctx, pkgName, "date="+targetTimeStr, cacheKey, func(ctx context.Context) (*npm.PackageJSONRaw, error) {
 		metadata, _, err := npmrc.fetchPackageMetadataContext(ctx, pkgName, "", false)
 		if err != nil {
-			return nil, "", err
+			return nil, err
 		}
 
 		resolvedVersion, err := npm.ResolveVersionByTime(metadata, targetDate)
 		if err != nil {
-			return nil, "", fmt.Errorf("date-based version resolution failed for %s@%s: %s", pkgName, targetTimeStr, err.Error())
+			return nil, fmt.Errorf("date-based version resolution failed for %s@%s: %s", pkgName, targetTimeStr, err.Error())
 		}
 
 		raw, ok := metadata.Versions[resolvedVersion]
 		if !ok {
-			return nil, "", fmt.Errorf("resolved version %s of '%s' not found", resolvedVersion, pkgName)
+			return nil, fmt.Errorf("resolved version %s of '%s' not found", resolvedVersion, pkgName)
 		}
 
-		exactVersionCacheKey := reg.Registry + pkgName + "@" + raw.Version
-		return raw.ToNpmPackage(), exactVersionCacheKey, nil
+		return &raw, nil
 	})
 }
 
