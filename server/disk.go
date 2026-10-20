@@ -1,11 +1,13 @@
 package server
 
 import (
+	"errors"
+	"fmt"
+	"io/fs"
 	"os"
+	"path/filepath"
 	"sync"
 	"syscall"
-
-	"github.com/ije/gox/log"
 )
 
 type DiskStatus uint8
@@ -17,51 +19,89 @@ const (
 	DiskStatusFull
 )
 
-// npmStorePurgeLock serializes purge operations on the npm store to avoid
-// concurrent rename/remove races within this process.
-var npmStorePurgeLock sync.Mutex
+var (
+	npmStoreLock       sync.RWMutex
+	npmStoreGeneration uint64
+	diskStatfs         = syscall.Statfs
+)
 
-func purgeNPMCacheWhenDiskIsLowOrFull(npmrc *NpmRC, logger *log.Logger) {
-	if status := checkDiskStatus(); status == DiskStatusOk || status == DiskStatusError {
-		return
+func localCacheDirs() []string {
+	dirs := []string{filepath.Join(config.WorkDir, "npm")}
+	if config.Storage.Type == "s3" && config.Storage.CacheDir != "" {
+		dirs = append(dirs, config.Storage.CacheDir)
 	}
+	return dirs
+}
 
-	npmStorePurgeLock.Lock()
-	defer npmStorePurgeLock.Unlock()
-
-	npmDir := npmrc.StoreDir()
-	oldDir := npmDir + "_old"
-
-	// Ensure any previous backup directory is removed so that the rename is idempotent.
-	if err := os.RemoveAll(oldDir); err != nil {
-		logger.Errorf("failed to remove previous npm cache backup directory %s: %v", oldDir, err)
+func purgeLocalCaches(generation uint64, force bool) (purged bool, err error) {
+	if !force && checkDiskStatus() == DiskStatusOk {
+		return false, nil
 	}
-
-	if err := os.Rename(npmDir, oldDir); err != nil {
-		// If the directory does not exist, there's nothing to purge.
-		if !os.IsNotExist(err) {
-			logger.Errorf("failed to rename npm cache directory %s to %s: %v", npmDir, oldDir, err)
+	npmStoreLock.Lock()
+	defer npmStoreLock.Unlock()
+	if force {
+		if generation != npmStoreGeneration {
+			return false, nil
 		}
-		return
+	} else {
+		switch checkDiskStatus() {
+		case DiskStatusOk:
+			return false, nil
+		case DiskStatusError:
+			return false, errors.New("failed to check local cache disk status")
+		}
 	}
+	npmStoreGeneration++
 
-	if err := os.RemoveAll(oldDir); err != nil {
-		logger.Errorf("failed to remove npm cache directory %s: %v", oldDir, err)
+	err = os.RemoveAll(filepath.Join(config.WorkDir, "npm_old"))
+	for _, dir := range localCacheDirs() {
+		root, openErr := os.OpenRoot(dir)
+		if os.IsNotExist(openErr) {
+			continue
+		}
+		if openErr != nil {
+			err = errors.Join(err, openErr)
+			continue
+		}
+		// [warning] keep the root: S3 cache storage holds an open handle, and renaming can fail on a full disk.
+		entries, readErr := fs.ReadDir(root.FS(), ".")
+		err = errors.Join(err, readErr)
+		for _, entry := range entries {
+			if removeErr := root.RemoveAll(entry.Name()); removeErr != nil {
+				err = errors.Join(err, fmt.Errorf("purge %s: %w", filepath.Join(dir, entry.Name()), removeErr))
+			}
+		}
+		err = errors.Join(err, root.Close())
 	}
+	return true, err
 }
 
 func checkDiskStatus() DiskStatus {
-	var stat syscall.Statfs_t
-	err := syscall.Statfs(config.WorkDir, &stat)
-	if err == nil {
-		avail := stat.Bavail * uint64(stat.Bsize)
-		if avail < 100*MB {
-			return DiskStatusFull
-		} else if avail < 1024*MB {
-			return DiskStatusLow
+	status := DiskStatusOk
+	for _, dir := range localCacheDirs() {
+		var stat syscall.Statfs_t
+		var err error
+		for {
+			err = diskStatfs(dir, &stat)
+			parent := filepath.Dir(dir)
+			if !os.IsNotExist(err) || parent == dir {
+				break
+			}
+			dir = parent
 		}
-	} else {
-		return DiskStatusError
+		if err != nil {
+			if status == DiskStatusOk {
+				status = DiskStatusError
+			}
+			continue
+		}
+		avail := stat.Bavail * uint64(stat.Bsize)
+		if avail < 100*MB || (stat.Files > 0 && (stat.Ffree == 0 || stat.Ffree < stat.Files/100)) {
+			return DiskStatusFull
+		}
+		if avail < 1024*MB || (stat.Files > 0 && stat.Ffree < stat.Files/20) {
+			status = DiskStatusLow
+		}
 	}
-	return DiskStatusOk
+	return status
 }

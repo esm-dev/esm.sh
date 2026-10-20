@@ -92,13 +92,16 @@ func Start() {
 		}
 	}
 
-	// purge npm cache when disk is low or full
 	go func() {
-		purgeNPMCacheWhenDiskIsLowOrFull(npmrc, logger)
-		ticker := time.NewTicker(time.Hour)
+		ticker := time.NewTicker(time.Minute)
 		defer ticker.Stop()
-		for range ticker.C {
-			purgeNPMCacheWhenDiskIsLowOrFull(npmrc, logger)
+		for {
+			if purged, err := purgeLocalCaches(0, false); err != nil {
+				logger.Errorf("local cache purge: %v", err)
+			} else if purged {
+				logger.Warn("purged local caches because disk space or inodes were low")
+			}
+			<-ticker.C
 		}
 	}()
 

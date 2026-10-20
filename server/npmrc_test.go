@@ -20,11 +20,14 @@ import (
 	"slices"
 	"strings"
 	"sync/atomic"
+	"syscall"
 	"testing"
+	"testing/iotest"
 	"testing/synctest"
 	"time"
 
 	"github.com/esm-dev/esm.sh/internal/npm"
+	"github.com/esm-dev/esm.sh/internal/storage"
 )
 
 func TestInstallDependenciesMalformedGitURL(t *testing.T) {
@@ -108,6 +111,10 @@ func TestInstallPackageAtomic(t *testing.T) {
 						first <- err
 					}()
 					synctest.Wait()
+					if npmStoreLock.TryLock() {
+						npmStoreLock.Unlock()
+						t.Error("cache purge can interrupt an active install")
+					}
 					installDir := filepath.Join(npmrc.StoreDir(), pkg.String())
 					staged, err := filepath.Glob(filepath.Join(npmrc.StoreDir(), ".install-*", "node_modules", pkg.Name, "package.json"))
 					if err != nil || len(staged) != 1 {
@@ -162,6 +169,63 @@ func TestInstallPackageAtomic(t *testing.T) {
 				})
 			})
 		}
+	}
+}
+
+func TestInstallPackageDiskRecovery(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		err      error
+		failures int32
+		requests int32
+		purged   bool
+	}{
+		{"recovered", syscall.ENOSPC, 1, 2, true},
+		{"still full", syscall.ENOSPC, 2, 2, true},
+		{"other error", syscall.EIO, 1, 1, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			oldConfig, transport := config, http.DefaultTransport
+			cfg := *config
+			config = &cfg
+			config.WorkDir = t.TempDir()
+			config.Storage = storage.StorageOptions{}
+			t.Cleanup(func() { config, http.DefaultTransport = oldConfig, transport })
+			npmrc := newTestNpmRC()
+			pkg := npm.Package{Name: "disk-recovery", Version: "1.0.0"}
+			key := "npm:" + pkg.String()
+			setCacheItem(key, &npm.PackageJSON{Name: pkg.Name, Version: pkg.Version, Dist: npm.NpmPackageDist{Tarball: npmRegistry + "disk-recovery.tgz"}}, time.Minute)
+			t.Cleanup(func() { deleteCacheItem(key) })
+			oldPackage := filepath.Join(npmrc.StoreDir(), "old-package")
+			if err := os.MkdirAll(oldPackage, 0755); err != nil {
+				t.Fatal(err)
+			}
+			var requests atomic.Int32
+			http.DefaultTransport = ghTestTransport(func(r *http.Request) (*http.Response, error) {
+				var body io.Reader = bytes.NewReader(testPackageTarball(`{"name":"disk-recovery","version":"1.0.0"}`))
+				if requests.Add(1) <= test.failures {
+					body = iotest.ErrReader(&os.PathError{Op: "write", Path: "package.json", Err: test.err})
+				}
+				return &http.Response{StatusCode: 200, Body: io.NopCloser(body)}, nil
+			})
+			_, err := npmrc.installPackage(pkg)
+			if test.failures >= test.requests {
+				if !errors.Is(err, test.err) {
+					t.Fatalf("install error = %v, want %v", err, test.err)
+				}
+			} else if err != nil {
+				t.Fatal(err)
+			}
+			if requests.Load() != test.requests {
+				t.Fatalf("downloads = %d, want %d", requests.Load(), test.requests)
+			}
+			if existsDir(oldPackage) == test.purged {
+				t.Fatalf("old package removed = %v, want %v", !existsDir(oldPackage), test.purged)
+			}
+			if staged, err := filepath.Glob(filepath.Join(npmrc.StoreDir(), ".install-*")); err != nil || len(staged) != 0 {
+				t.Fatalf("staging directories remain: %v, %v", staged, err)
+			}
+		})
 	}
 }
 

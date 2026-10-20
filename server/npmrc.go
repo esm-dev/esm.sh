@@ -19,6 +19,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/Masterminds/semver/v3"
@@ -412,6 +413,26 @@ func lockInstall(ctx context.Context, key string) (func(), error) {
 }
 
 func (npmrc *NpmRC) installPackageContext(ctx context.Context, pkg npm.Package) (packageJson *npm.PackageJSON, err error) {
+	var generation uint64
+	install := func() (*npm.PackageJSON, error) {
+		npmStoreLock.RLock()
+		defer npmStoreLock.RUnlock()
+		generation = npmStoreGeneration
+		return npmrc.installPackageOnce(ctx, pkg)
+	}
+	packageJson, err = install()
+	if !errors.Is(err, syscall.ENOSPC) || ctx.Err() != nil {
+		return
+	}
+	_, purgeErr := purgeLocalCaches(generation, true)
+	packageJson, err = install()
+	if err != nil {
+		err = errors.Join(err, purgeErr)
+	}
+	return
+}
+
+func (npmrc *NpmRC) installPackageOnce(ctx context.Context, pkg npm.Package) (packageJson *npm.PackageJSON, err error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
