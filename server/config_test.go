@@ -2,8 +2,28 @@ package server
 
 import (
 	"encoding/json"
+	"runtime"
 	"testing"
 )
+
+func TestBuildConcurrencyUsesRuntimeLimit(t *testing.T) {
+	previous := runtime.GOMAXPROCS(2)
+	defer runtime.GOMAXPROCS(previous)
+
+	for _, test := range []struct {
+		configured uint16
+		want       uint16
+	}{
+		{0, 2},
+		{4, 4},
+	} {
+		c := &Config{BuildConcurrency: test.configured}
+		normalizeConfig(c)
+		if c.BuildConcurrency != test.want {
+			t.Errorf("buildConcurrency=%d: got %d, want %d", test.configured, c.BuildConcurrency, test.want)
+		}
+	}
+}
 
 func TestTrustedProxiesConfig(t *testing.T) {
 	var c Config
