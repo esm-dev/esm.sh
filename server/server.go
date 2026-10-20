@@ -84,22 +84,27 @@ func Start() {
 	// the default transport keeps only 2 idle connections per host, too few for parallel registry fetches
 	http.DefaultTransport.(*http.Transport).MaxIdleConnsPerHost = 64
 
-	// remove staging dirs left behind by installs interrupted by a crash or restart
-	npmrc := DefaultNpmRC()
-	if dirs, err := filepath.Glob(filepath.Join(npmrc.StoreDir(), ".install-*")); err == nil {
-		for _, dir := range dirs {
-			os.RemoveAll(dir)
+	// remove the dirs left behind by installs and purges interrupted by a crash or restart
+	for _, pattern := range []string{".install-*", ".purge-*"} {
+		if dirs, err := filepath.Glob(filepath.Join(DefaultNpmRC().StoreDir(), pattern)); err == nil {
+			for _, dir := range dirs {
+				os.RemoveAll(dir)
+			}
 		}
 	}
 
 	go func() {
+		// left behind by older versions that moved the npm store away before removing it
+		os.RemoveAll(filepath.Join(config.WorkDir, "npm_old"))
 		ticker := time.NewTicker(time.Minute)
 		defer ticker.Stop()
 		for {
-			if purged, err := purgeLocalCaches(0, false); err != nil {
+			removed, err := purgeLocalCaches()
+			if removed > 0 {
+				logger.Warnf("purged %d unused local cache entries because disk space or inodes were low", removed)
+			}
+			if err != nil {
 				logger.Errorf("local cache purge: %v", err)
-			} else if purged {
-				logger.Warn("purged local caches because disk space or inodes were low")
 			}
 			<-ticker.C
 		}

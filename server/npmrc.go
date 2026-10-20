@@ -413,21 +413,13 @@ func lockInstall(ctx context.Context, key string) (func(), error) {
 }
 
 func (npmrc *NpmRC) installPackageContext(ctx context.Context, pkg npm.Package) (packageJson *npm.PackageJSON, err error) {
-	var generation uint64
-	install := func() (*npm.PackageJSON, error) {
-		npmStoreLock.RLock()
-		defer npmStoreLock.RUnlock()
-		generation = npmStoreGeneration
-		return npmrc.installPackageOnce(ctx, pkg)
-	}
-	packageJson, err = install()
-	if !errors.Is(err, syscall.ENOSPC) || ctx.Err() != nil {
-		return
-	}
-	_, purgeErr := purgeLocalCaches(generation, true)
-	packageJson, err = install()
-	if err != nil {
-		err = errors.Join(err, purgeErr)
+	packageJson, err = npmrc.installPackageOnce(ctx, pkg)
+	// the purge keeps recently used packages, so the packages of running builds survive it
+	if errors.Is(err, syscall.ENOSPC) && ctx.Err() == nil {
+		_, purgeErr := purgeLocalCaches()
+		if packageJson, err = npmrc.installPackageOnce(ctx, pkg); err != nil {
+			err = errors.Join(err, purgeErr)
+		}
 	}
 	return
 }
@@ -439,8 +431,15 @@ func (npmrc *NpmRC) installPackageOnce(ctx context.Context, pkg npm.Package) (pa
 	if message := npmrc.getCachedPackageNotFound(pkg); message != "" {
 		return nil, errors.New(message)
 	}
-	installDir := filepath.Join(npmrc.StoreDir(), pkg.String())
-	packageJsonPath := filepath.Join(installDir, "node_modules", pkg.Name, "package.json")
+	finalDir := filepath.Join(npmrc.StoreDir(), pkg.String())
+	packageJsonPath := filepath.Join(finalDir, "node_modules", pkg.Name, "package.json")
+	defer func() {
+		// [warning] the purge removes the packages not used within a build timeout, mark this one as used
+		if err == nil {
+			now := time.Now()
+			os.Chtimes(finalDir, now, now)
+		}
+	}()
 
 	// check if the package has been installed
 	var raw npm.PackageJSONRaw
@@ -477,11 +476,10 @@ func (npmrc *NpmRC) installPackageOnce(ctx context.Context, pkg npm.Package) (pa
 			negativeCache.put(missingKey, err.Error(), packageNotFoundTTL)
 		}
 	}()
-	finalDir := installDir
 	if err = ensureDir(npmrc.StoreDir()); err != nil {
 		return nil, err
 	}
-	installDir, err = os.MkdirTemp(npmrc.StoreDir(), ".install-")
+	installDir, err := os.MkdirTemp(npmrc.StoreDir(), ".install-")
 	if err != nil {
 		return nil, err
 	}
