@@ -1,5 +1,28 @@
 # Server Changelog
 
+## v140
+
+* Add one-day `stale-if-error` and `stale-while-revalidate` cache windows for package responses and floating versions. (#1426, #1428, #1429)
+* Prevent code injection through dependency aliases and cache collisions from malformed build arguments. (#1480)
+* Restrict filesystem storage and relative declaration references to their roots. (#1478, #1480)
+* Serve raw HTML, SVG, and XML files with a sandbox CSP and `nosniff` headers. (#1480)
+* Fix conditional and wildcard exports, private package imports, and extensionless module entries. (#1440, #1442, #1444, #1446, #1447, #1450)
+* Fix dependency aliases, overrides, version conflicts, and imports of published pnpm files. (#1443, #1445, #1451, #1469)
+* Prefer active npm versions for semver ranges and fix date-based version selection. (#1441, #1480)
+* Fix CommonJS export names and dependency retries for `node-fetch`, `vscode-textmate`, `prop-types`, and other packages. (#1448, #1452, #1453, #1460)
+* Preserve optional peer dependencies as lazy imports and fix Benchmark dependency resolution. (#1461, #1462)
+* Fix nested `export *`, preserve public export names and class identity, and reduce export traversal cost. (#1459, #1465, #1468, #1472, #1476)
+* Fix Node polyfills and browser environment detection across browser and Deno targets. (#1427, #1431, #1432, #1435, #1439, #1464)
+* Fix TypeScript declaration imports and exports for Electron, Shopify rich text, `sanitize-html`, and other packages. (#1433, #1438, #1455, #1458, #1463, #1474)
+* Remove the `X-TypeScript-Types` header for `?no-dts` without a module change. (#1475)
+* Fix WASM query imports, raw asset exports, Svelte relative imports, and shared CSS imports. (#1436, #1437, #1449, #1467)
+* Keep the TSX loader functional when `localStorage` access fails and reject unsupported Solid JSX transforms. (#1434, #1454)
+* Preserve package license and notice files. (#1466)
+* Fix package installation, S3 requests and cache consistency, and cache purge races. (#1474, #1480)
+* Limit concurrent installs, Git requests, and loader processes, and reduce import map lookup and CommonJS analysis costs. (#1474, #1480)
+* Upgrade `cjs-module-lexer` to `1.2.1` and include it in Docker images. (#1430, #1456)
+* Upgrade `unenv` to `2.0.0-rc.24`. (#1479)
+
 ## v139_3
 
 * Support PBF asset files. (#1415)
