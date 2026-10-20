@@ -101,6 +101,7 @@ func esmLegacyRouter(fs storage.Storage, next http.Handler) http.Handler {
 					h := w.Header()
 					h.Set("Content-Type", ctJavaScript)
 					h.Set("Cache-Control", ccImmutable)
+					appendVaryHeader(h, "User-Agent")
 					writeBody(w, []byte(`throw new Error("[esm.sh] The deno CLI has been deprecated, please use our vscode extension instead: https://marketplace.visualstudio.com/items?itemName=ije.esm-vscode")`))
 					return
 				}
@@ -117,6 +118,7 @@ func esmLegacyRouter(fs storage.Storage, next http.Handler) http.Handler {
 
 		// packages created by the `/build` API
 		if len(pathname) == 42 && strings.HasPrefix(pathname, "/~") && valid.IsHexString(pathname[2:]) {
+			appendVaryHeader(w.Header(), "User-Agent")
 			redirect(w, fmt.Sprintf("/v135%s@0.0.0/%s/mod.mjs", pathname, getBuildTargetByUA(r.UserAgent())), true)
 			return
 		}
@@ -146,15 +148,18 @@ func legacyESM(w http.ResponseWriter, r *http.Request, fs storage.Storage, build
 	if (strings.HasPrefix(pathname, "/node_") && strings.HasSuffix(pathname, ".js")) || pathname == "/node.ns.d.ts" {
 		isStatic = true
 	} else {
-		if strings.HasPrefix(pathname, "/gh/") {
+		// [warning] keep `pathname` as is, `/gh/owner/repo` must not be redirected to the npm package `@owner/repo`
+		specifier := pathname
+		isGh := strings.HasPrefix(pathname, "/gh/")
+		if isGh {
 			if !strings.ContainsRune(pathname[4:], '/') {
 				writeStatus(w, 400, "invalid path")
 				return true
 			}
 			// add a leading `@` to the package name
-			pathname = "/@" + pathname[4:]
+			specifier = "/@" + pathname[4:]
 		}
-		pkgName, pkgVersion, subPath := splitEsmPath(pathname)
+		pkgName, pkgVersion, subPath := splitEsmPath(specifier)
 		_, target, _ := parseSubPath(subPath)
 		var asteriskFlag bool
 		if len(pkgName) > 1 && pkgName[0] == '*' {
@@ -172,7 +177,8 @@ func legacyESM(w http.ResponseWriter, r *http.Request, fs storage.Storage, build
 				pkgVersion = v
 			}
 		}
-		if !npm.IsExactVersion(pkgVersion) {
+		// gh refs are resolved by the esm router after the legacy prefix is stripped
+		if !npm.IsExactVersion(pkgVersion) && !isGh {
 			npmrc := DefaultNpmRC()
 			pkgInfo, err := npmrc.getPackageInfo(pkgName, pkgVersion)
 			if err != nil {
@@ -236,6 +242,7 @@ func legacyESM(w http.ResponseWriter, r *http.Request, fs storage.Storage, build
 						}
 						data = bytes.ReplaceAll(data, []byte("https://esm.sh/v"), []byte(origin+"/v"))
 						data = bytes.ReplaceAll(data, []byte("https://legacy.esm.sh/v"), []byte(origin+"/v"))
+						h.Set("Cache-Control", ccImmutable)
 						writeBody(w, data)
 						return true
 					}
@@ -255,11 +262,11 @@ func legacyESM(w http.ResponseWriter, r *http.Request, fs storage.Storage, build
 			return true
 		}
 	} else {
-		varyUA := false
 		if query != "" {
 			if !r.URL.Query().Has("target") {
-				varyUA = true
 				savePath += "." + getBuildTargetByUA(r.UserAgent())
+				// the redirect below on a miss also depends on the user agent
+				appendVaryHeader(w.Header(), "User-Agent")
 			}
 			h := xxhash.New()
 			h.Write([]byte(query))
@@ -278,9 +285,6 @@ func legacyESM(w http.ResponseWriter, r *http.Request, fs storage.Storage, build
 				h := w.Header()
 				h.Set("Content-Type", ctJavaScript)
 				h.Set("Cache-Control", ccImmutable)
-				if varyUA {
-					appendVaryHeader(h, "User-Agent")
-				}
 				if ret.EsmId != "" {
 					h.Set("X-ESM-Id", ret.EsmId)
 				}

@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"strings"
@@ -45,6 +46,42 @@ func TestListRepoRefs(t *testing.T) {
 	}
 	if headSha == "" {
 		t.Fatal("HEAD not found")
+	}
+}
+
+func TestListRepoRefsPeelsTags(t *testing.T) {
+	repo := t.TempDir()
+	for _, args := range [][]string{
+		{"init", "-q"},
+		{"-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "init"},
+		{"-c", "user.name=t", "-c", "user.email=t@t", "tag", "-a", "v1.0.0", "-m", "v1.0.0"},
+		{"tag", "v2.0.0"},
+		{"update-ref", "refs/pull/1/head", "HEAD"},
+	} {
+		if out, err := exec.Command("git", append([]string{"-C", repo}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v %s", args, err, out)
+		}
+	}
+	out, err := exec.Command("git", "-C", repo, "rev-parse", "HEAD").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	commit := strings.TrimSpace(string(out))
+	refs, err := listGhRepoRefsContext(context.Background(), repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for _, ref := range refs {
+		got[ref.Ref] = ref.Sha
+	}
+	for _, ref := range []string{"HEAD", "refs/tags/v1.0.0", "refs/tags/v2.0.0"} {
+		if got[ref] != commit {
+			t.Errorf("%s -> %q, want commit %s", ref, got[ref], commit)
+		}
+	}
+	if len(got) != 4 {
+		t.Errorf("unexpected refs: %v", got)
 	}
 }
 

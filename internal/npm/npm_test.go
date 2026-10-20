@@ -35,9 +35,23 @@ func TestValidatePackageName(t *testing.T) {
 }
 
 func TestResolveDependencyVersionRejectsEscapingName(t *testing.T) {
-	for _, version := range []string{"npm:../escape@1.0.0", "../../escape#v1.0.0"} {
+	for _, version := range []string{
+		"npm:../escape@1.0.0", "../../escape#v1.0.0", "npm:", "npm:foo/bar@1.0.0", "npm:@private/../react@18.2.0",
+		"jsr:@luca", "jsr:luca/flag", "jsr:@luca/flag/../../react@1.0.0", "https://pkg.pr.new/a/../react@abc1234",
+	} {
 		if _, err := ResolveDependencyVersion(version); err == nil {
 			t.Errorf("ResolveDependencyVersion(%q) returned no error", version)
+		}
+	}
+
+	for version, want := range map[string]Package{
+		"npm:@scope/pkg@^1.0.0":                         {Name: "@scope/pkg", Version: "^1.0.0"},
+		"jsr:@luca/flag@0.0.1":                          {Name: "@jsr/luca__flag", Version: "0.0.1"},
+		"https://pkg.pr.new/owner/repo/@scope/pkg@abc1": {Name: "owner/repo/@scope/pkg", Version: "abc1", PkgPrNew: true},
+		"github:owner/repo#semver:^1.2.0":               {Name: "owner/repo", Version: "semver%3A%5E1.2.0", Github: true},
+	} {
+		if got, err := ResolveDependencyVersion(version); err != nil || got != want {
+			t.Errorf("ResolveDependencyVersion(%q) = %+v, %v; want %+v", version, got, err, want)
 		}
 	}
 
@@ -210,5 +224,16 @@ func TestResolveVersionByTime(t *testing.T) {
 				t.Errorf("ResolveVersionByTime() = %v, want %v", got, tt.wantVersion)
 			}
 		})
+	}
+}
+
+func TestResolveVersionByTimeHighestVersion(t *testing.T) {
+	metadata := &PackageMetadata{
+		Time:     map[string]string{"3.3.13": "2023-12-19T10:13:56.132Z", "2.7.16": "2023-12-24T15:02:21.257Z"},
+		Versions: map[string]PackageJSONRaw{"3.3.13": {}, "2.7.16": {}},
+	}
+	got, err := ResolveVersionByTime(metadata, time.Date(2023, 12, 25, 0, 0, 0, 0, time.UTC))
+	if err != nil || got != "3.3.13" {
+		t.Fatalf("ResolveVersionByTime() = %q, %v; want 3.3.13", got, err)
 	}
 }

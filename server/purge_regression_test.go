@@ -185,7 +185,7 @@ func TestPurgeWaitsForMetadataLookup(t *testing.T) {
 	if _, err := NewBuildMetaDB(fs).Get(key); !errors.Is(err, storage.ErrNotFound) {
 		t.Errorf("metadata survived purge: %v", err)
 	}
-	if len(metaDB.locks) != 0 {
+	if len(metaDB.locks.locks) != 0 {
 		t.Error("idle package locks were retained")
 	}
 }
@@ -251,7 +251,13 @@ func TestPurgeRouteRegressions(t *testing.T) {
 	t.Run("spoofed forwarded address", func(t *testing.T) {
 		t.Cleanup(func() { deleteCacheItemsWithPrefix("purge-rate:ip:") })
 		for i := range 6 {
-			req := httptest.NewRequest(http.MethodPost, "https://esm.sh/purge", strings.NewReader("{}"))
+			// the quota is counted after the proof-of-work, the invalid url fails later with 400
+			challenge, err := newPowChallenge("purge")
+			if err != nil {
+				t.Fatal(err)
+			}
+			body, _ := json.Marshal(purgeRequest{URL: "", Challenge: challenge.ID, Nonce: solvePowForTest(challenge)})
+			req := httptest.NewRequest(http.MethodPost, "https://esm.sh/purge", strings.NewReader(string(body)))
 			req.RemoteAddr = "192.0.2.101:1234"
 			req.Header.Set("X-Real-IP", "198.51.100."+string(rune('1'+i)))
 			req.Header.Set("X-Forwarded-For", "198.51.100."+string(rune('1'+i)))

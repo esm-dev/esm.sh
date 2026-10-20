@@ -32,6 +32,19 @@ func writeStatus(w http.ResponseWriter, code int, message string) {
 	w.Write([]byte(message))
 }
 
+// setRawFileContentType sets the content type of an untrusted package file.
+// [warning] package files are served on the CDN origin, never let them be sniffed or run as documents
+func setRawFileContentType(h http.Header, contentType string) {
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+	h.Set("Content-Type", contentType)
+	h.Set("X-Content-Type-Options", "nosniff")
+	if strings.HasPrefix(contentType, "text/html") || strings.Contains(contentType, "xml") {
+		h.Set("Content-Security-Policy", "sandbox")
+	}
+}
+
 // writeBody replies to the request with the given data using the headers already
 // set by the caller.
 func writeBody(w http.ResponseWriter, data []byte) {

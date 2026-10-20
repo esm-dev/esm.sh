@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"runtime"
 	"strings"
 	"sync"
 
@@ -205,8 +206,13 @@ func validateSolidJSX(code []byte, runtimes *set.Set[string]) error {
 	return nil
 }
 
+// `?exports` runs on the request goroutine, limit the concurrent esbuild runs
+var treeShakeSema = make(chan struct{}, runtime.NumCPU())
+
 // treeShake tree-shakes the given javascript code with the given exports.
 func treeShake(npmrc *NpmRC, pkg npm.Package, code []byte, exports []string, target esbuild.Target) ([]byte, error) {
+	treeShakeSema <- struct{}{}
+	defer func() { <-treeShakeSema }()
 	input := &esbuild.StdinOptions{
 		Contents: fmt.Sprintf(`export { %s } from '.';`, strings.Join(exports, ", ")),
 		Loader:   esbuild.LoaderJS,

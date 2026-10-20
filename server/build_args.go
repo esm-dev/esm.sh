@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"maps"
 	"path"
@@ -270,7 +271,13 @@ func walkDeps(npmrc *NpmRC, installDir string, pkg npm.Package, overrides map[st
 			p = raw.ToNpmPackage()
 		}
 	} else if pkg.Github || pkg.PkgPrNew {
-		p, err = npmrc.installPackage(pkg)
+		// a gh ref (branch, tag or semver range) must be pinned to a commit before installing
+		if pkg.Github {
+			err = pinGhDependency(context.Background(), &pkg)
+		}
+		if err == nil {
+			p, err = npmrc.installPackage(pkg)
+		}
 	} else {
 		p, err = npmrc.getPackageInfo(pkg.Name, pkg.Version)
 	}

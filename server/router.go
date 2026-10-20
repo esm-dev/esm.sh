@@ -20,8 +20,10 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/esm-dev/esm.sh/internal/importmap"
+	"github.com/esm-dev/esm.sh/internal/npm"
 	"github.com/esm-dev/esm.sh/internal/storage"
 	esbuild "github.com/ije/esbuild-internal/api"
 	"github.com/ije/esbuild-internal/ast"
@@ -108,7 +110,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 					return
 				}
 				if len(options.Code) > MB {
-					writeJSONError(w, 429, "Code is too large")
+					writeJSONError(w, 413, "Code is too large")
 					return
 				}
 				if targets[options.Target] == 0 {
@@ -200,10 +202,6 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 					}
 					limiterKey = "user:" + session.Login
 				}
-				if !purgeRateAllowed(limiterKey) {
-					writeJSONError(w, 429, "too many purge requests, please try again later")
-					return
-				}
 				var req purgeRequest
 				err := json.NewDecoder(io.LimitReader(r.Body, MB)).Decode(&req)
 				r.Body.Close()
@@ -213,6 +211,11 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 				}
 				if !powVerify("purge", req.Challenge, req.Nonce) {
 					writeJSONError(w, 400, "invalid or expired proof-of-work challenge")
+					return
+				}
+				// count the quota after the proof-of-work, cheap invalid requests must not use up a shared IP's quota
+				if !purgeRateAllowed(limiterKey) {
+					writeJSONError(w, 429, "too many purge requests, please try again later")
 					return
 				}
 				pathname, err := parsePurgeInput(req.URL)
@@ -302,6 +305,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 			return
 
 		case "/":
+			appendVaryHeader(header, "User-Agent")
 			if strings.HasPrefix(r.UserAgent(), "Deno/") {
 				header.Set("Content-Type", ctJavaScript)
 				writeBody(w, []byte(`throw new Error("[esm.sh] The deno CLI has been deprecated, please use our vscode extension instead: https://marketplace.visualstudio.com/items?itemName=ije.esm-vscode")`))
@@ -593,7 +597,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 			name := pathname[6:]
 			js, ok := getNodeRuntimeJS(name)
 			if !ok {
-				if !nodeBuiltinModules[name] {
+				if !nodeBuiltinModules[strings.TrimSuffix(name, ".mjs")] {
 					header.Set("Cache-Control", ccImmutable)
 					writeStatus(w, 404, "Not Found")
 					return
@@ -624,15 +628,14 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 				writeStatus(w, 404, "not found")
 				return
 			}
-			if !DEBUG {
+			if DEBUG {
 				header.Set("Cache-Control", ccMustRevalidate)
 			} else {
-				etag := fmt.Sprintf(`W/"%d%d"`, startTime.Unix(), len(data))
-				if ifNoneMatch := r.Header.Get("If-None-Match"); ifNoneMatch == etag {
+				if r.Header.Get("If-None-Match") == globalETag {
 					w.WriteHeader(http.StatusNotModified)
 					return
 				}
-				header.Set("Etag", etag)
+				header.Set("Etag", globalETag)
 				header.Set("Cache-Control", ccOneDay)
 			}
 			contentType := getContentType(pathname)
@@ -986,7 +989,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 			} else if contentType == "" {
 				contentType = res.Header.Get("Content-Type")
 			}
-			header.Set("Content-Type", contentType)
+			setRawFileContentType(header, contentType)
 			if res.ContentLength < 0 {
 				if r.Method == http.MethodHead {
 					w.WriteHeader(200)
@@ -1220,16 +1223,11 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 					return
 				}
 				if endsWith(esmPath.SubPath, ".js", ".mjs", ".cjs") {
-					header.Set("Content-Type", ctJavaScript)
+					setRawFileContentType(header, ctJavaScript)
 				} else if endsWith(esmPath.SubPath, ".ts", ".mts", ".cts", ".tsx") {
-					header.Set("Content-Type", ctTypeScript)
-				} else if strings.HasSuffix(esmPath.SubPath, ".jsx") {
-					header.Set("Content-Type", "text/jsx; charset=utf-8")
+					setRawFileContentType(header, ctTypeScript)
 				} else {
-					contentType := getContentType(esmPath.SubPath)
-					if contentType != "" {
-						header.Set("Content-Type", contentType)
-					}
+					setRawFileContentType(header, getContentType(esmPath.SubPath))
 				}
 				header.Set("Content-Length", fmt.Sprintf("%d", stat.Size()))
 				header.Set("Etag", etag)
@@ -1407,6 +1405,16 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 			}
 			redirect(w, fmt.Sprintf("%s%s/%s@%s%s%s", origin, registryPrefix, pkgName, pkgVersion, subPath, qs), false)
 			return
+		}
+
+		// [warning] build args are joined by "\n" into the build path, a control char in a value would collide with other args;
+		// each `deps` entry may fetch the registry, so cap the list size
+		for _, key := range []string{"alias", "deps", "conditions", "external"} {
+			if v := query.Get(key); strings.ContainsFunc(v, unicode.IsControl) || strings.Count(v, ",") >= 64 {
+				header.Set("Cache-Control", ccImmutable)
+				writeStatus(w, 400, "Invalid "+key+" query")
+				return
+			}
 		}
 
 		// check `?alias` query
@@ -1614,6 +1622,9 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 				esmPath.SubPath = before
 				dev = true
 			}
+			if before, ok := strings.CutSuffix(esmPath.SubPath, ".js"); ok && endsWith(before, ".bundle", ".nobundle", ".development") {
+				esmPath.SubPath = before
+			}
 			basename := strings.TrimSuffix(path.Base(esmPath.PkgName), ".js")
 			switch esmPath.SubPath {
 			case basename:
@@ -1727,12 +1738,20 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 			if esmPath.PrPrefix {
 				metaJson["pr"] = true
 			}
-			if esmPath.SubPath == "" {
-				packageJson, err := npmrc.getPackageInfo(esmPath.PkgName, esmPath.PkgVersion)
+			var packageJson *npm.PackageJSON
+			if esmPath.SubPath == "" || buildMeta.Imports != nil {
+				// gh/pr packages are not in the npm registry
+				if esmPath.GhPrefix || esmPath.PrPrefix {
+					packageJson, err = npmrc.installPackage(esmPath.Package())
+				} else {
+					packageJson, err = npmrc.getPackageInfo(esmPath.PkgName, esmPath.PkgVersion)
+				}
 				if err != nil {
 					writePackageError(w, err)
 					return
 				}
+			}
+			if esmPath.SubPath == "" {
 				var exports []string
 				for _, key := range packageJson.Exports.Keys() {
 					if strings.HasPrefix(key, "./") && key != "./package.json" {
@@ -1745,11 +1764,6 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 				metaJson["dts"] = buildMeta.Dts
 			}
 			if buildMeta.Imports != nil {
-				packageJson, err := npmrc.getPackageInfo(esmPath.PkgName, esmPath.PkgVersion)
-				if err != nil {
-					writePackageError(w, err)
-					return
-				}
 				var imports []string
 				var peerImports []string
 				for _, p := range buildMeta.Imports {

@@ -767,7 +767,7 @@ func TestRouterPathRegressions(t *testing.T) {
 	})
 	const pkg = "asset-url-test"
 	dir := filepath.Join(config.WorkDir, "npm", pkg+"@1.0.0", "node_modules", pkg)
-	for _, filename := range []string{"package.json", "node/foo.wasm", "b.wasm", "lib/ab.wasm"} {
+	for _, filename := range []string{"package.json", "node/foo.wasm", "b.wasm", "lib/ab.wasm", "x.html", "x.svg", "x.pbf"} {
 		if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, filename)), 0755); err != nil {
 			t.Fatal(err)
 		}
@@ -796,6 +796,9 @@ func TestRouterPathRegressions(t *testing.T) {
 		{"/react@18?dev/jsx-runtime", "Deno/2.0.0", 302, "/react@18.3.1/jsx-runtime?dev"},
 		{"/+" + strings.Repeat("a", 40) + ".mjs", "", 404, ""},
 		{"/v135/react@18.2.0/es2022/../../../../modules/x.mjs", "", 404, ""},
+		// a legacy gh path must not be resolved as the npm package `@owner/repo`
+		{"/v135/gh/owner/repo@main/foo.json", "", 301, "/gh/owner/repo@main/foo.json"},
+		{"/v135/gh/owner/repo@abcdef0/foo.json", "", 301, "/gh/owner/repo@abcdef0/foo.json"},
 	} {
 		req := httptest.NewRequest("GET", "http://localhost"+test.path, nil)
 		req.Header.Set("User-Agent", test.ua)
@@ -809,6 +812,32 @@ func TestRouterPathRegressions(t *testing.T) {
 		}
 		if test.status == 200 && res.Body.String() != "node/foo.wasm" {
 			t.Fatalf("%s: unexpected body %q", test.path, res.Body.String())
+		}
+	}
+
+	// package files are untrusted, they must never run as documents on the CDN origin
+	for _, test := range []struct{ path, contentType, csp string }{
+		{"/" + pkg + "@1.0.0/x.html", "text/html; charset=utf-8", "sandbox"},
+		{"/" + pkg + "@1.0.0/x.svg", "image/svg+xml; charset=utf-8", "sandbox"},
+		{"/" + pkg + "@1.0.0/x.pbf", "application/x-protobuf", ""},
+		{"/" + pkg + "@1.0.0/b.wasm", "application/wasm", ""},
+	} {
+		req := httptest.NewRequest("GET", "http://localhost"+test.path, nil)
+		res := httptest.NewRecorder()
+		handler.ServeHTTP(res, req)
+		h := res.Header()
+		if res.Code != 200 || h.Get("Content-Type") != test.contentType || h.Get("Content-Security-Policy") != test.csp || h.Get("X-Content-Type-Options") != "nosniff" {
+			t.Fatalf("%s: HTTP %d, headers %v", test.path, res.Code, h)
+		}
+	}
+
+	// a control char in a build arg would collide with the other args in the build path
+	for _, query := range []string{"alias=react:preact/compat%0Adpreact@10", "conditions=x%0Ak", "external=a%0Ar"} {
+		req := httptest.NewRequest("GET", "http://localhost/"+pkg+"@1.0.0?"+query, nil)
+		res := httptest.NewRecorder()
+		handler.ServeHTTP(res, req)
+		if res.Code != 400 {
+			t.Fatalf("%s: HTTP %d, want 400: %s", query, res.Code, res.Body.String())
 		}
 	}
 }

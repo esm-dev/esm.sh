@@ -364,3 +364,25 @@ func TestFSStoragePutSymlinkSwap(t *testing.T) {
 		t.Fatalf("outside destination: %v", err)
 	}
 }
+
+func TestFSStorageDirectoryIsNotFound(t *testing.T) {
+	fs, err := NewFSStorage(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := fs.Put("a/b.mjs/c.mjs", strings.NewReader("x")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fs.Stat("a/b.mjs"); err != ErrNotFound {
+		t.Fatalf("Stat(dir): %v", err)
+	}
+	if content, _, err := fs.Get("a/b.mjs"); err != ErrNotFound {
+		if content != nil {
+			content.Close()
+		}
+		t.Fatalf("Get(dir): %v", err)
+	}
+	if _, err := fs.Stat("a/b.mjs/c.mjs"); err != nil {
+		t.Fatal(err)
+	}
+}

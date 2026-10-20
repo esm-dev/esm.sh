@@ -18,6 +18,7 @@ import (
 	"github.com/ije/esbuild-internal/js_ast"
 	"github.com/ije/esbuild-internal/js_parser"
 	"github.com/ije/esbuild-internal/logger"
+	"github.com/ije/gox/set"
 	"github.com/ije/gox/utils"
 )
 
@@ -132,7 +133,19 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 					exportEntry = ctx.resolveConditionExportEntry(obj, pkgJson.Type)
 				}
 			} else {
-				for _, name := range pkgJson.Exports.Keys() {
+				// like Node, the pattern with the longest prefix wins
+				keys := slices.Clone(pkgJson.Exports.Keys())
+				slices.SortStableFunc(keys, func(a, b string) int {
+					i, j := strings.IndexByte(a, '*'), strings.IndexByte(b, '*')
+					if i < 0 {
+						i = len(a)
+					}
+					if j < 0 {
+						j = len(b)
+					}
+					return j - i
+				})
+				for _, name := range keys {
 					conditions, _ := pkgJson.Exports.Get(name)
 					name = stripEntryModuleExt(name)
 					if name == "./"+subPath {
@@ -428,11 +441,16 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 	// resolve entry main from `browser` field if it's defined
 	if len(pkgJson.Browser) > 0 && ctx.isBrowserTarget() {
 		if entry.main != "" {
-			if path, ok := pkgJson.Browser[entry.main]; ok {
-				browserEntry := BuildEntry{main: path, module: pkgJson.Type == "module"}
-				ctx.finalizeBuildEntry(&browserEntry)
-				if browserEntry.main != "" {
-					entry.update(browserEntry.main, browserEntry.module)
+			// `browser` keys may be written as "lib/index", "./lib/index" or "./lib/index.js"
+			main := normalizeEntryPath(entry.main)
+			for _, key := range []string{entry.main, main, main + ".js", stripModuleExt(main)} {
+				if path, ok := pkgJson.Browser[key]; ok {
+					browserEntry := BuildEntry{main: path, module: pkgJson.Type == "module"}
+					ctx.finalizeBuildEntry(&browserEntry)
+					if browserEntry.main != "" {
+						entry.update(browserEntry.main, browserEntry.module)
+					}
+					break
 				}
 			}
 		}
@@ -533,8 +551,11 @@ func (ctx *BuildContext) finalizeBuildEntry(entry *BuildEntry) {
 			}
 		} else if !entry.module && endsWith(entry.main, ".js", ".ts") {
 			// check if the cjs entry is an ESM
-			isESM, _, err := validateJSFile(path.Join(ctx.wd, "node_modules", ctx.esmPath.PkgName, entry.main))
-			if err == nil {
+			filename := path.Join(ctx.wd, "node_modules", ctx.esmPath.PkgName, entry.main)
+			if v, ok := ctx.esmFiles.Load(filename); ok {
+				entry.module = v.(bool)
+			} else if isESM, _, err := validateJSFile(filename); err == nil {
+				ctx.esmFiles.Store(filename, isESM)
 				entry.module = isESM
 			}
 		}
@@ -613,8 +634,10 @@ func (ctx *BuildContext) resolveConditionExportEntry(conditions npm.JSONObject, 
 				entry.update(s, preferedModuleType == "module")
 				return true
 			} else if obj, ok := condition.(npm.JSONObject); ok {
-				entry = ctx.resolveConditionExportEntry(obj, preferedModuleType)
-				return entry.main != ""
+				if e := ctx.resolveConditionExportEntry(obj, preferedModuleType); e.main != "" {
+					entry = e
+					return true
+				}
 			}
 		}
 		return false
@@ -642,13 +665,13 @@ func (ctx *BuildContext) resolveConditionExportEntry(conditions npm.JSONObject, 
 
 	if len(ctx.args.Conditions) > 0 {
 		for _, conditionName := range ctx.args.Conditions {
-			conditionFound = applyCondition(conditionName)
-			if conditionFound {
+			if applyCondition(conditionName) {
+				conditionFound = true
 				break
 			}
 		}
-	} else if ctx.dev {
-		conditionFound = applyCondition("development")
+	} else if ctx.dev && applyCondition("development") {
+		conditionFound = true
 	}
 
 LOOP:
@@ -819,7 +842,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 			sideEffects = esbuild.SideEffectsFalse
 		} else if ctx.pkgJson.SideEffects.Len() > 0 {
 			entry := ctx.resolveEntry(esmPath)
-			if entry.main != "" && !ctx.pkgJson.SideEffects.Has(entry.main) && !ctx.pkgJson.SideEffects.Has(strings.TrimPrefix(entry.main, "./")) {
+			if entry.main != "" && !hasSideEffects(ctx.pkgJson.SideEffects, entry.main) {
 				sideEffects = esbuild.SideEffectsFalse
 			}
 		}
@@ -857,7 +880,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 				sideEffects = esbuild.SideEffectsFalse
 			} else if ctx.pkgJson.SideEffects.Len() > 0 {
 				entry := ctx.resolveEntry(subModule)
-				if entry.main != "" && !ctx.pkgJson.SideEffects.Has(entry.main) && !ctx.pkgJson.SideEffects.Has(strings.TrimPrefix(entry.main, "./")) {
+				if entry.main != "" && !hasSideEffects(ctx.pkgJson.SideEffects, entry.main) {
 					sideEffects = esbuild.SideEffectsFalse
 				}
 			}
@@ -873,9 +896,8 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 				resolvedPath += "?module"
 			} else {
 				resolvedPath = ctx.getImportPath(subModule, ctx.getBuildArgsPrefix(false), ctx.externalAll)
-				if ctx.bundleMode == BundleFalse {
-					n, e := utils.SplitByLastByte(resolvedPath, '.')
-					resolvedPath = n + ".nobundle." + e
+				if ctx.bundleMode == BundleFalse && strings.HasSuffix(resolvedPath, ".mjs") {
+					resolvedPath = strings.TrimSuffix(resolvedPath, ".mjs") + ".nobundle.mjs"
 				}
 			}
 			return
@@ -949,7 +971,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 		}
 		for _, ref := range refs {
 			if ref.Ref == "HEAD" {
-				dep.PkgVersion = ref.Sha[:16]
+				dep.PkgVersion = ref.Sha[:7]
 				break
 			}
 		}
@@ -996,15 +1018,22 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 		return
 	}
 
-	args := BuildArgs{
-		Alias:      ctx.args.Alias,
-		Deps:       ctx.args.Deps,
-		External:   ctx.args.External,
-		Conditions: ctx.args.Conditions,
-	}
-	err = resolveBuildArgs(ctx.npmrc, ctx.wd, &args, dep)
-	if err != nil {
-		return
+	// the resolved args are reused by every import of the dependency, `resolveBuildArgs` may walk the whole dependency tree
+	var args BuildArgs
+	if v, ok := ctx.depArgs.Load(dep.String()); ok {
+		args = v.(BuildArgs)
+	} else {
+		args = BuildArgs{
+			Alias:      ctx.args.Alias,
+			Deps:       ctx.args.Deps,
+			External:   ctx.args.External,
+			Conditions: ctx.args.Conditions,
+		}
+		err = resolveBuildArgs(ctx.npmrc, ctx.wd, &args, dep)
+		if err != nil {
+			return
+		}
+		ctx.depArgs.Store(dep.String(), args)
 	}
 
 	var exactVersion bool
@@ -1031,10 +1060,11 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 	}
 	params := []string{}
 	if len(args.Alias) > 0 {
-		var alias []string
+		var alias sort.StringSlice
 		for k, v := range args.Alias {
-			alias = append(alias, fmt.Sprintf("%s:%s", k, v))
+			alias = append(alias, k+":"+v)
 		}
+		alias.Sort()
 		params = append(params, "alias="+strings.Join(alias, ","))
 	}
 	if len(args.Deps) > 0 {
@@ -1162,6 +1192,10 @@ func (ctx *BuildContext) getImportPath(esm EsmPath, buildArgsPrefix string, exte
 		if esm.PkgName == "es5-ext" {
 			name = strings.ReplaceAll(name, "/#/", "/%23/")
 		}
+		// [warning] a name ending with a build flag suffix would be parsed as the flag, the router strips the ".js" mark
+		if endsWith(name, ".bundle", ".nobundle", ".development") {
+			name += ".js"
+		}
 	}
 	if ctx.dev {
 		name += ".development"
@@ -1220,9 +1254,9 @@ func (ctx *BuildContext) resloveSubModule(subPath string) (string, bool) {
 		if ctx.existsPkgFile(subPath) {
 			return subPath, true
 		}
-		preferExt := ".mjs"
+		preferExt := "mjs"
 		if ctx.pkgJson.Type == "commonjs" {
-			preferExt = ".cjs"
+			preferExt = "cjs"
 		}
 		for _, ext := range []string{preferExt, "js", "mts", "ts", "cts"} {
 			if ctx.existsPkgFile(subPath + "." + ext) {
@@ -1444,6 +1478,46 @@ func stripEntryModuleExt(s string) string {
 		return s[:len(s)-3]
 	}
 	return s
+}
+
+// hasSideEffects matches a module path against the `sideEffects` globs of package.json,
+// a pattern without "/" matches in any directory (same as webpack and esbuild).
+func hasSideEffects(patterns set.ReadOnlySet[string], modulePath string) bool {
+	var match func(p, n []string) bool
+	match = func(p, n []string) bool {
+		for len(p) > 0 {
+			if p[0] == "**" {
+				for len(p) > 0 && p[0] == "**" {
+					p = p[1:]
+				}
+				for i := range len(n) + 1 {
+					if match(p, n[i:]) {
+						return true
+					}
+				}
+				return false
+			}
+			if len(n) == 0 {
+				return false
+			}
+			if ok, _ := path.Match(p[0], n[0]); !ok {
+				return false
+			}
+			p, n = p[1:], n[1:]
+		}
+		return len(n) == 0
+	}
+	name := strings.Split(strings.TrimPrefix(modulePath, "./"), "/")
+	for _, pattern := range patterns.Values() {
+		pattern = strings.TrimPrefix(pattern, "./")
+		if !strings.Contains(pattern, "/") {
+			pattern = "**/" + pattern
+		}
+		if match(strings.Split(pattern, "/"), name) {
+			return true
+		}
+	}
+	return false
 }
 
 func normalizeEntryPath(path string) string {

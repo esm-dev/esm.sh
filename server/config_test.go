@@ -399,3 +399,31 @@ func TestBanList_IsPackageBanned(t *testing.T) {
 		})
 	}
 }
+
+func TestPackageRulesOfPrefixedPackages(t *testing.T) {
+	cfg := &Config{
+		AllowList: AllowList{Packages: []string{"gh/Owner/Repo"}, Scopes: []string{"gh/org"}},
+		BanList:   BanList{Packages: []string{"gh/evil/repo", "evil"}, Scopes: []BanScope{{Name: "gh/Bad", Excludes: []string{"Good"}}}},
+	}
+	normalizeConfig(cfg)
+	for _, test := range []struct {
+		id              string
+		allowed, banned bool
+	}{
+		{"gh/owner/repo@abcdef0", true, false},
+		{"gh/OWNER/Repo@abcdef0", true, false},
+		{"gh/org/any@1.0.0", true, false},
+		{"gh/other/repo@1.0.0", false, false},
+		{"gh/Evil/Repo@abcdef0", false, true},
+		{"gh/bad/x@1.0.0", false, true},
+		{"gh/bad/good@1.0.0", false, false},
+		{"pr/evil@abcdef0", false, true},
+	} {
+		if got := cfg.AllowList.IsPackageAllowed(test.id); got != test.allowed {
+			t.Errorf("IsPackageAllowed(%s) = %v, want %v", test.id, got, test.allowed)
+		}
+		if got := cfg.BanList.IsPackageBanned(test.id); got != test.banned {
+			t.Errorf("IsPackageBanned(%s) = %v, want %v", test.id, got, test.banned)
+		}
+	}
+}

@@ -157,3 +157,46 @@ func TestDtsWalkerBOMAndLongLine(t *testing.T) {
 		t.Fatalf("transformed dts not match, got prefix:\n%.80s", buf.String())
 	}
 }
+
+func TestDtsWalkerCommentsAndMultiLineDecls(t *testing.T) {
+	const rawDts = `/*/ import x from "in-comment";
+*/
+type A = 1; /*/ ; import("in-comment") */ type B = 2;
+import {
+  a, // }
+  b
+} from "x";
+export {
+  c
+} from
+  "y";
+import {
+  "d" as d,
+} from "z";
+`
+	const expectedDts = `/*/ import x from "in-comment";
+*/
+type A = 1; /*/ ; import("in-comment") */ type B = 2;
+import {
+  a, // }
+  b
+} from "/resolved/x";
+export {
+  c
+} from
+  "/resolved/y";
+import {
+  "d" as d,
+} from "/resolved/z";
+`
+	buf := bytes.NewBuffer(nil)
+	err := parseDts(bytes.NewBufferString(rawDts), buf, func(specifier string, kind TsImportKind, position int) (string, error) {
+		return "/resolved/" + specifier, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if buf.String() != expectedDts {
+		t.Fatalf("transformed dts not match, want:\n%s\ngot:\n%s", expectedDts, buf.String())
+	}
+}

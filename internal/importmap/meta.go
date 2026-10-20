@@ -9,18 +9,22 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/esm-dev/esm.sh/internal/npm"
-	"github.com/ije/gox/sync"
 	"github.com/ije/gox/utils"
 )
 
 var (
-	keyedMutex sync.KeyedMutex
 	fetchCache sync.Map
+	fetchLocks sync.Map
+	fetchLimit = make(chan struct{}, 8)
+	httpClient = &http.Client{Timeout: time.Minute}
 )
 
 // Import represents an import from esm.sh CDN.
@@ -53,6 +57,13 @@ func (im Import) Specifier(withVersion bool) string {
 	return b.String()
 }
 
+func (im Import) npmName() string {
+	if im.Jsr && strings.HasPrefix(im.Name, "@") {
+		return "@jsr/" + strings.Replace(im.Name[1:], "/", "__", 1)
+	}
+	return im.Name
+}
+
 func (im Import) RegistryPrefix() string {
 	if im.Github {
 		return "gh/"
@@ -79,7 +90,7 @@ func (imp *ImportMeta) HasExternalImports() bool {
 		return true
 	}
 	for _, importPath := range imp.Imports {
-		if !strings.HasPrefix(importPath, "/node/") && !strings.HasPrefix(importPath, "/"+imp.Name+"@") {
+		if !strings.HasPrefix(importPath, "/node/") && !strings.HasPrefix(importPath, "/"+imp.npmName()+"@") {
 			return true
 		}
 	}
@@ -89,14 +100,11 @@ func (imp *ImportMeta) HasExternalImports() bool {
 // EsmSpecifier returns the esm specifier of the import meta.
 func (imp *ImportMeta) EsmSpecifier() string {
 	b := strings.Builder{}
-	if imp.Github {
-		b.WriteString("gh/")
-	} else if imp.Jsr {
-		b.WriteString("jsr/")
-	}
 	if imp.HasExternalImports() {
 		b.WriteString("*") // add "external all" modifier of esm.sh
 	}
+	// [warning] the server doesn't support the "jsr/*" form, the "*" must come before the registry prefix
+	b.WriteString(imp.RegistryPrefix())
 	b.WriteString(imp.Name)
 	b.WriteByte('@')
 	b.WriteString(imp.Version)
@@ -132,10 +140,20 @@ func fetchImportMeta(cdnOrigin string, imp Import, target string) (meta ImportMe
 	}
 
 	// only one fetch at a time for the same url
-	unlock := keyedMutex.Lock(url)
-	defer unlock()
+	done := make(chan struct{})
+	for {
+		v, loaded := fetchLocks.LoadOrStore(url, done)
+		if !loaded {
+			break
+		}
+		<-v.(chan struct{})
+	}
+	defer func() {
+		fetchLocks.Delete(url)
+		close(done)
+	}()
 
-	// check memory cache again after acquiring the lock state
+	// check memory cache again after acquiring the lock
 	if v, ok := fetchCache.Load(url); ok {
 		meta, _ = v.(ImportMeta)
 		return
@@ -155,66 +173,57 @@ func fetchImportMeta(cdnOrigin string, imp Import, target string) (meta ImportMe
 	cachePath := filepath.Join(appDir, "meta", hex.EncodeToString(sha[:]))
 
 	// if the version is exact, check the cache on disk
+	var jsonData []byte
 	if npm.IsExactVersion(imp.Version) {
-		f, err := os.Open(cachePath)
-		if err == nil {
-			defer f.Close()
-			err = json.NewDecoder(f).Decode(&meta)
-			if err == nil {
-				meta.SubPath = imp.SubPath
-				meta.Github = imp.Github
-				meta.Jsr = imp.Jsr
-				meta.External = imp.External
-				meta.Dev = imp.Dev
-				fetchCache.Store(url, meta)
-				return meta, nil
-			}
-			// if decode error, remove the cache file and try to fetch again
-			_ = os.Remove(cachePath)
+		jsonData, _ = os.ReadFile(cachePath)
+	}
+	if jsonData == nil || json.Unmarshal(jsonData, &meta) != nil {
+		meta = ImportMeta{}
+		fetchLimit <- struct{}{}
+		defer func() { <-fetchLimit }()
+
+		var resp *http.Response
+		resp, err = httpClient.Get(url)
+		if err != nil {
+			return
 		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode == 404 {
+			err = fmt.Errorf("package not found: %s", imp.Specifier(true))
+			return
+		}
+
+		if resp.StatusCode != 200 {
+			msg, _ := io.ReadAll(resp.Body)
+			err = fmt.Errorf("unexpected http status %d: %s", resp.StatusCode, msg)
+			return
+		}
+
+		jsonData, err = io.ReadAll(resp.Body)
+		if err != nil {
+			err = fmt.Errorf("could not read %s: %s", url, err.Error())
+			return
+		}
+
+		err = json.Unmarshal(jsonData, &meta)
+		if err != nil {
+			err = fmt.Errorf("could not decode %s: %s", url, err.Error())
+			return
+		}
+
+		// cache the metadata on disk
+		os.MkdirAll(filepath.Dir(cachePath), 0755)
+		os.WriteFile(cachePath, jsonData, 0644)
 	}
 
-	resp, err := http.Get(url)
-	if err != nil {
-		return
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == 404 {
-		err = fmt.Errorf("package not found: %s", imp.Specifier(true))
-		return
-	}
-
-	if resp.StatusCode != 200 {
-		msg, _ := io.ReadAll(resp.Body)
-		err = fmt.Errorf("unexpected http status %d: %s", resp.StatusCode, msg)
-		return
-	}
-
-	jsonData, err := io.ReadAll(resp.Body)
-	if err != nil {
-		err = fmt.Errorf("could not read %s: %s", url, err.Error())
-		return
-	}
-
-	err = json.Unmarshal(jsonData, &meta)
-	if err != nil {
-		err = fmt.Errorf("could not decode %s: %s", url, err.Error())
-		return
-	}
-
+	// [warning] keep the requested name, the CDN returns a jsr package as "@jsr/scope__name"
+	meta.Name = imp.Name
 	meta.SubPath = imp.SubPath
 	meta.Github = imp.Github
 	meta.Jsr = imp.Jsr
 	meta.External = imp.External
 	meta.Dev = imp.Dev
-
-	// cache the metadata on disk
-	dirname := filepath.Dir(cachePath)
-	if _, err := os.Lstat(dirname); err != nil && os.IsNotExist(err) {
-		os.MkdirAll(dirname, 0755)
-	}
-	os.WriteFile(cachePath, jsonData, 0644)
 
 	// cache the metadata in memory
 	fetchCache.Store(url, meta)
@@ -294,7 +303,7 @@ func ParseEsmPath(pathnameOrUrl string) (imp Import, err error) {
 			if hasTargetSegment && strings.HasSuffix(pathname, ".mjs") {
 				subPath := strings.TrimSuffix(strings.Join(segs, "/"), ".mjs")
 				subPath, imp.Dev = strings.CutSuffix(subPath, ".development")
-				if strings.ContainsRune(subPath, '/') || (subPath != imp.Name && !strings.HasSuffix(imp.Name, "/"+subPath)) {
+				if strings.ContainsRune(subPath, '/') || subPath != path.Base(imp.npmName()) {
 					imp.SubPath = subPath
 				}
 			} else {

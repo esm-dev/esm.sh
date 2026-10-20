@@ -100,8 +100,18 @@ func cjsModuleLexer(b *BuildContext, cjsEntry string) (ret cjsModuleLexerResult,
 		if err != nil {
 			return
 		}
-		js := path.Join(b.wd, "reveal_"+strings.ReplaceAll(cjsEntry[2:], "/", "_"))
-		err = os.WriteFile(js, fmt.Appendf(nil, `console.log(JSON.stringify(Object.keys((await import(%s)).default)))`, specifier), 0644)
+		// a unique `.mjs` file: concurrent builds must not share it, and deno treats a `.cjs` script as CommonJS
+		var f *os.File
+		f, err = os.CreateTemp(b.wd, "reveal-*.mjs")
+		if err != nil {
+			return
+		}
+		js := f.Name()
+		defer os.Remove(js)
+		_, err = fmt.Fprintf(f, `console.log(JSON.stringify(Object.keys((await import(%s)).default)))`, specifier)
+		if e := f.Close(); err == nil {
+			err = e
+		}
 		if err != nil {
 			return
 		}
@@ -113,7 +123,7 @@ func cjsModuleLexer(b *BuildContext, cjsEntry string) (ret cjsModuleLexerResult,
 			"--allow-env",
 			// This child imports an untrusted package: withhold the variables
 			// server/config.go reads esm.sh's own credentials from.
-			"--deny-env=NPM_TOKEN,NPM_USER,NPM_PASSWORD,STORAGE_ACCESS_KEY_ID,STORAGE_SECRET_ACCESS_KEY",
+			"--deny-env=NPM_TOKEN,NPM_USER,NPM_PASSWORD,NPM_REGISTRY,STORAGE_ACCESS_KEY_ID,STORAGE_SECRET_ACCESS_KEY,PURGE_GITHUB_CLIENT_SECRET,PURGE_CLOUDFLARE_API_TOKEN,AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY,AWS_SESSION_TOKEN",
 			"--no-prompt",
 			"--no-config",
 			"--no-lock",

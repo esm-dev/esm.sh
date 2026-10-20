@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -15,6 +16,8 @@ import (
 	"github.com/esm-dev/esm.sh/internal/storage"
 	"github.com/ije/gox/utils"
 )
+
+var maxDtsFiles = 50000
 
 type dtsFile struct {
 	ready   chan struct{}
@@ -50,15 +53,23 @@ func (t *dtsTransform) stat(savePath string) *dtsFile {
 	}
 	file := &dtsFile{ready: make(chan struct{})}
 	t.files[savePath] = file
+	// [warning] the cap also bounds the recursion depth of `transformDTS`
+	if len(t.files) > maxDtsFiles {
+		file.statErr = errors.New("too many declaration files")
+		close(file.ready)
+		return file
+	}
+	// [warning] take the slot before spawning, a goroutine per pending file exhausts memory on large graphs
+	select {
+	case t.slots <- struct{}{}:
+	case <-t.ctx.Done():
+		file.statErr = t.ctx.Err()
+		close(file.ready)
+		return file
+	}
 	t.pending.Go(func() {
 		defer close(file.ready)
-		select {
-		case t.slots <- struct{}{}:
-			defer func() { <-t.slots }()
-		case <-t.ctx.Done():
-			file.statErr = t.ctx.Err()
-			return
-		}
+		defer func() { <-t.slots }()
 		if file.statErr = t.ctx.Err(); file.statErr != nil {
 			return
 		}
@@ -219,6 +230,10 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, transfo
 			if !isRelPathSpecifier(specifier) {
 				specifier = "./" + specifier
 			}
+			// [warning] the specifier names both the file to read and the storage key to write, keep it inside the package
+			if p := path.Join(path.Dir(dts), specifier); p == ".." || strings.HasPrefix(p, "../") {
+				return specifier, nil
+			}
 			dtsDir := path.Dir(dtsFilename)
 			specifier = strings.TrimSuffix(specifier, ".d")
 			if !endsWith(specifier, ".d.ts", ".d.mts", ".d.cts") {
@@ -278,6 +293,10 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, transfo
 		}
 
 		depPkgName, depPkgVersion, subPath := splitEsmPath(specifier)
+		// [warning] names from untrusted declarations (e.g. `declare module "*.svg"`) must not reach the registry
+		if !npm.ValidatePackageName(depPkgName) {
+			return rawSpecifier, nil
+		}
 		specifier = depPkgName
 		if depPkgVersion != "" {
 			specifier += "@" + depPkgVersion
@@ -310,7 +329,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, transfo
 				}
 			}
 			// virtual module
-			return "https://esm.sh/" + specifier, nil
+			return "{ESM_CDN_ORIGIN}/" + specifier, nil
 		}
 
 		// respect `?alias` query

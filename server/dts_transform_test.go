@@ -262,6 +262,56 @@ export * from 'node:original-fs';
 		}
 	})
 
+	t.Run("keeps invalid package names and virtual self modules", func(t *testing.T) {
+		transport := http.DefaultTransport
+		t.Cleanup(func() { http.DefaultTransport = transport })
+		http.DefaultTransport = ghTestTransport(func(req *http.Request) (*http.Response, error) {
+			t.Errorf("unexpected registry request: %s", req.URL)
+			return &http.Response{StatusCode: 400, Status: "400 Bad Request", Body: http.NoBody}, nil
+		})
+		root := t.TempDir()
+		pkgDir := filepath.Join(root, "node_modules", "pkg")
+		if err := os.MkdirAll(pkgDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		const entry = `declare module "*.svg" {
+  const src: string;
+  export default src;
+}
+export type A = import("@x/..").A;
+export * from "pkg/virtual";
+`
+		if err := os.WriteFile(filepath.Join(pkgDir, "index.d.ts"), []byte(entry), 0644); err != nil {
+			t.Fatal(err)
+		}
+		fs, err := storage.NewFSStorage(filepath.Join(root, "storage"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		ctx := &BuildContext{
+			storage: fs,
+			esmPath: EsmPath{PkgName: "pkg", PkgVersion: "1.0.0"},
+			wd:      root,
+			pkgJson: &npm.PackageJSON{},
+			npmrc:   &NpmRC{globalRegistry: &NpmRegistry{NpmRegistryConfig: NpmRegistryConfig{Registry: npmRegistry}}},
+		}
+		if _, err := transformDTS(ctx, "./index.d.ts", "", nil); err != nil {
+			t.Fatal(err)
+		}
+		content, _, err := fs.Get("types/pkg@1.0.0/index.d.ts")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer content.Close()
+		data, err := io.ReadAll(content)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if want := strings.Replace(entry, `"pkg/virtual"`, `"{ESM_CDN_ORIGIN}/pkg/virtual"`, 1); string(data) != want {
+			t.Fatalf("transformed dts = %s, want %s", data, want)
+		}
+	})
+
 	t.Run("does not publish a parent when a dependency fails", func(t *testing.T) {
 		root := t.TempDir()
 		pkgDir := filepath.Join(root, "node_modules", "pkg")
@@ -513,5 +563,101 @@ export * from "https://example.com//types.d.ts";`,
 	}
 	if len(seen) != len(files) {
 		t.Fatalf("visited %d declaration URLs, want %d", len(seen), len(files))
+	}
+}
+
+func TestTransformDTSConfinedToPackage(t *testing.T) {
+	root := t.TempDir()
+	pkgDir := filepath.Join(root, "node_modules", "pkg")
+	const entry = `/// <reference path="../../outside.d.ts" />
+export * from "../../outside.d.ts";
+export * from "#outside";
+export * from "./sub";
+`
+	files := map[string]string{
+		"../../outside.d.ts": "export const OUTSIDE: 1;",
+		"index.d.ts":         entry,
+		"sub/package.json":   `{"types":"../../../outside.d.ts"}`,
+	}
+	for name, content := range files {
+		filename := filepath.Join(pkgDir, name)
+		if err := os.MkdirAll(filepath.Dir(filename), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filename, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	p := &npm.PackageJSON{}
+	if err := p.Imports.UnmarshalJSON([]byte(`{"#outside":"../../outside.d.ts"}`)); err != nil {
+		t.Fatal(err)
+	}
+	storageDir := filepath.Join(root, "storage")
+	fs, err := storage.NewFSStorage(storageDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := &BuildContext{storage: fs, wd: root, esmPath: EsmPath{PkgName: "pkg", PkgVersion: "1.0.0"}, pkgJson: p}
+	if _, err := transformDTS(ctx, "./index.d.ts", "", nil); err != nil {
+		t.Fatal(err)
+	}
+	var keys []string
+	filepath.WalkDir(storageDir, func(name string, d os.DirEntry, err error) error {
+		if err == nil && !d.IsDir() {
+			keys = append(keys, filepath.ToSlash(strings.TrimPrefix(name, storageDir+string(filepath.Separator))))
+		}
+		return err
+	})
+	if len(keys) != 1 || keys[0] != "types/pkg@1.0.0/index.d.ts" {
+		t.Fatalf("stored keys = %v, want only the entry", keys)
+	}
+	content, _, err := fs.Get(keys[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer content.Close()
+	data, err := io.ReadAll(content)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const want = `/// <reference path="../../outside.d.ts" />
+export * from "../../outside.d.ts";
+export * from "../../outside.d.ts";
+export * from "./outside.d.ts";
+`
+	if string(data) != want {
+		t.Fatalf("transformed dts = %s, want %s", data, want)
+	}
+}
+
+func TestTransformDTSFileCap(t *testing.T) {
+	limit := maxDtsFiles
+	maxDtsFiles = 3
+	t.Cleanup(func() { maxDtsFiles = limit })
+	root := t.TempDir()
+	pkgDir := filepath.Join(root, "node_modules", "pkg")
+	if err := os.MkdirAll(pkgDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	var entry strings.Builder
+	for i := range 4 {
+		fmt.Fprintf(&entry, "export * from \"./child%d.d.ts\";\n", i)
+		if err := os.WriteFile(filepath.Join(pkgDir, fmt.Sprintf("child%d.d.ts", i)), []byte("export {};"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(pkgDir, "index.d.ts"), []byte(entry.String()), 0644); err != nil {
+		t.Fatal(err)
+	}
+	fs, err := storage.NewFSStorage(filepath.Join(root, "storage"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := &BuildContext{storage: fs, wd: root, esmPath: EsmPath{PkgName: "pkg", PkgVersion: "1.0.0"}, pkgJson: &npm.PackageJSON{}}
+	if _, err := transformDTS(ctx, "./index.d.ts", "", nil); err == nil || err.Error() != "too many declaration files" {
+		t.Fatalf("expected the file cap error, got %v", err)
+	}
+	if _, err := fs.Stat("types/pkg@1.0.0/index.d.ts"); !errors.Is(err, storage.ErrNotFound) {
+		t.Fatalf("published entry after hitting the file cap: %v", err)
 	}
 }

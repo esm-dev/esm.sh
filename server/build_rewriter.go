@@ -28,7 +28,7 @@ func (ctx *BuildContext) rewriteJS(in []byte) (out []byte, dropSourceMap bool) {
 			data, err := os.ReadFile(preflightCSSFile)
 			if err == nil {
 				str, _ := json.Marshal(string(data))
-				return regReadTailwindPreflightCSS.ReplaceAll(in, str), true // drop breaking source map
+				return regReadTailwindPreflightCSS.ReplaceAllLiteral(in, str), true // drop breaking source map
 			}
 		}
 

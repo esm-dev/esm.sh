@@ -18,7 +18,10 @@ import (
 
 const ghInstallTimeout = 30 * time.Second
 
-var errRepoTooLarge = errors.New("repo is too large")
+var (
+	errRepoTooLarge = errors.New("repo is too large")
+	gitSema         = make(chan struct{}, 16)
+)
 
 type GitRef struct {
 	Ref string
@@ -30,9 +33,16 @@ func listGhRepoRefsContext(ctx context.Context, repo string) (refs []GitRef, err
 	return withCache("git ls-remote "+repo, time.Duration(config.NpmQueryCacheTTL)*time.Second, func() ([]GitRef, string, error) {
 		stdout := &bytes.Buffer{}
 		errout := &bytes.Buffer{}
+		select {
+		case gitSema <- struct{}{}:
+			defer func() { <-gitSema }()
+		case <-ctx.Done():
+			return nil, "", ctx.Err()
+		}
 		cancelCtx, cancel := context.WithTimeout(ctx, time.Minute)
 		defer cancel()
-		cmd := exec.CommandContext(cancelCtx, "git", "ls-remote", repo)
+		// [warning] list only HEAD, branches and tags, the pull request refs of a popular repo take megabytes
+		cmd := exec.CommandContext(cancelCtx, "git", "ls-remote", repo, "HEAD", "refs/heads/*", "refs/tags/*")
 		// git asks for credentials on missing or private repos, never block on a prompt
 		cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GCM_INTERACTIVE=never")
 		cmd.Stdout = stdout
@@ -57,6 +67,13 @@ func listGhRepoRefsContext(ctx context.Context, repo string) (refs []GitRef, err
 				return nil, "", err
 			}
 			sha, ref := utils.SplitByLastByte(string(bytes.TrimSpace(line)), '\t')
+			// [warning] an annotated tag points to a tag object, the peeled `^{}` line that follows it has the commit
+			if tag, ok := strings.CutSuffix(ref, "^{}"); ok {
+				if n := len(refs); n > 0 && refs[n-1].Ref == tag {
+					refs[n-1].Sha = sha
+				}
+				continue
+			}
 			refs = append(refs, GitRef{
 				Ref: ref,
 				Sha: sha,

@@ -1784,12 +1784,16 @@ func TestBuildModuleEmptyOutput(t *testing.T) {
 
 func TestBuildModuleRequireUsage(t *testing.T) {
 	for _, tt := range []struct {
-		name string
-		code string
-		want string
+		name  string
+		code  string
+		want  string
+		alias map[string]string
 	}{
-		{"default", `var a$ = require("dep"); export const run = () => a$.default;`, `case"dep":return c(`},
-		{"call", `var a$ = require("dep"); export const run = () => a$();`, `case"dep":return e(`},
+		{"default", `var a$ = require("dep"); export const run = () => a$.default;`, `case"dep":return c(`, nil},
+		{"call", `var a$ = require("dep"); export const run = () => a$();`, `case"dep":return e(`, nil},
+		{"default after other uses", `var a$ = require("dep"); var b = a$x; export const run = () => [b, a$.default];`, `case"dep":return c(`, nil},
+		// an alias target is user input, it must stay inside the string literal
+		{"quoted alias", `var a$ = require("dep"); export const run = () => a$();`, `x\";alert(1);//`, map[string]string{"dep": `dep/x";alert(1);//`}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			wd := t.TempDir()
@@ -1819,6 +1823,7 @@ func TestBuildModuleRequireUsage(t *testing.T) {
 			ctx := &BuildContext{
 				wd: wd, target: "es2022", dev: true, storage: fs, logger: logger, npmrc: &NpmRC{},
 				esmPath: EsmPath{PkgName: "example", PkgVersion: "1.0.0"},
+				args:    BuildArgs{Alias: tt.alias},
 				pkgJson: &npm.PackageJSON{
 					Name: "example", Version: "1.0.0", Type: "module", Main: "./index.js", Types: "./index.d.ts",
 					Dependencies: map[string]string{"dep": "1.0.0"},
@@ -1838,6 +1843,9 @@ func TestBuildModuleRequireUsage(t *testing.T) {
 			}
 			if !strings.Contains(string(output), tt.want) {
 				t.Fatalf("missing %q in:\n%s", tt.want, output)
+			}
+			if ret := esbuild.Transform(string(output), esbuild.TransformOptions{Format: esbuild.FormatESModule}); len(ret.Errors) > 0 || strings.Contains(string(output), `es2022/x";alert`) {
+				t.Fatalf("invalid or injected output %v:\n%s", ret.Errors, output)
 			}
 		})
 	}
@@ -1953,5 +1961,86 @@ func TestBuildModuleExportStarDepth(t *testing.T) {
 	}
 	if !slices.Contains(meta.Imports, "/example@1.0.0/es2022/f0.mjs") {
 		t.Fatalf("deep external export star was not preserved: %v", meta.Imports)
+	}
+}
+
+func TestBuildPathFlagSuffix(t *testing.T) {
+	paths := map[string]string{}
+	for _, tt := range []struct {
+		subPath string
+		mode    BundleMode
+		dev     bool
+	}{
+		{"dist/app.bundle", BundleDefault, false},
+		{"dist/app", BundleDeps, false},
+		{"dist/app.nobundle", BundleDefault, false},
+		{"dist/app", BundleFalse, false},
+		{"dist/app.development", BundleDefault, false},
+		{"dist/app", BundleDefault, true},
+		{"dist/app.development", BundleDefault, true},
+	} {
+		esm := EsmPath{PkgName: "foo", PkgVersion: "1.0.0", SubPath: tt.subPath}
+		ctx := &BuildContext{esmPath: esm, bundleMode: tt.mode, dev: tt.dev, target: "es2022"}
+		p := ctx.Path()
+		if other, ok := paths[p]; ok {
+			t.Fatalf("%+v and %s share the build path %s", tt, other, p)
+		}
+		paths[p] = fmt.Sprintf("%+v", tt)
+		// a dependency import (no bundle flag) must point to the same build path
+		if ip := ctx.getImportPath(esm, "", false); tt.mode == BundleDefault && ip != p {
+			t.Fatalf("import path %s, build path %s", ip, p)
+		}
+	}
+}
+
+func TestBuildModuleImportsPattern(t *testing.T) {
+	wd := t.TempDir()
+	pkgJson := `{"name":"example","version":"1.0.0","type":"module","main":"./index.js","types":"./index.d.ts","imports":{"#lib/*":"./lib/*.js","#lib/internal/*":"./internal/*.js"}}`
+	for name, content := range map[string]string{
+		"example/package.json":   pkgJson,
+		"example/index.js":       `export { a } from "#lib/a"; export { b } from "#lib/internal/b";`,
+		"example/lib/a.js":       `export const a = "lib-a";`,
+		"example/internal/b.js":  `export const b = "internal-b";`,
+		"example/lib/internal/b": `export const b = "wrong";`,
+	} {
+		filename := filepath.Join(wd, "node_modules", name)
+		if err := os.MkdirAll(filepath.Dir(filename), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filename, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var raw npm.PackageJSONRaw
+	if err := json.Unmarshal([]byte(pkgJson), &raw); err != nil {
+		t.Fatal(err)
+	}
+	fs, err := storage.NewFSStorage(filepath.Join(wd, "storage"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	logger, err := log.New("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	logger.SetOutput(io.Discard)
+	ctx := &BuildContext{
+		wd: wd, target: "es2022", storage: fs, logger: logger, npmrc: &NpmRC{},
+		esmPath: EsmPath{PkgName: "example", PkgVersion: "1.0.0"}, pkgJson: raw.ToNpmPackage(),
+	}
+	if _, _, err := ctx.buildModule(false); err != nil {
+		t.Fatal(err)
+	}
+	f, _, err := fs.Get(ctx.getSavePath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	output, err := io.ReadAll(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(output), "lib-a") || !strings.Contains(string(output), "internal-b") || strings.Contains(string(output), "#lib") {
+		t.Fatalf("unresolved `imports` pattern:\n%s", output)
 	}
 }

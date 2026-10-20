@@ -16,10 +16,17 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
-
-	"github.com/ije/gox/sync"
 )
+
+// [warning] only the wait for response headers is bounded, a body stream may take longer than any fixed timeout.
+var s3Transport = func() *http.Transport {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.MaxIdleConnsPerHost = 64
+	transport.ResponseHeaderTimeout = time.Minute
+	return transport
+}()
 
 // A S3-compatible storage.
 type s3Storage struct {
@@ -28,7 +35,8 @@ type s3Storage struct {
 	accessKeyID     string
 	secretAccessKey string
 	fsCache         *fsStorage
-	fsCacheLock     sync.KeyedMutex
+	// [warning] bumped after every S3 delete, a cache write that started before it must be dropped
+	fsCacheEpoch atomic.Uint64
 }
 
 // NewS3Storage creates a new S3-compatible storage.
@@ -128,7 +136,7 @@ func (s3 *s3Storage) StatContext(ctx context.Context, name string) (stat Stat, e
 		}
 		// ignore error
 	}
-	req, err := http.NewRequestWithContext(ctx, "HEAD", s3.apiEndpoint+"/"+name, nil)
+	req, err := http.NewRequestWithContext(ctx, "HEAD", s3.apiEndpoint+"/"+escapePath(name), nil)
 	if err != nil {
 		return
 	}
@@ -183,7 +191,11 @@ func (s3 *s3Storage) Get(name string) (content io.ReadCloser, stat Stat, err err
 		}
 		// ignore error
 	}
-	req, _ := http.NewRequest("GET", s3.apiEndpoint+"/"+name, nil)
+	epoch := s3.fsCacheEpoch.Load()
+	req, err := http.NewRequest("GET", s3.apiEndpoint+"/"+escapePath(name), nil)
+	if err != nil {
+		return
+	}
 	resp, err := s3.do(req)
 	if err != nil {
 		return
@@ -229,15 +241,14 @@ func (s3 *s3Storage) Get(name string) (content io.ReadCloser, stat Stat, err err
 		pr, pw := io.Pipe()
 		go func() {
 			defer resp.Body.Close()
-			unlock := s3.fsCacheLock.Lock(name)
-			defer unlock()
-			_, err := s3.fsCache.Stat(cacheKey)
-			if err == nil {
+			err := s3.fsCache.Put(cacheKey, io.TeeReader(resp.Body, pw))
+			if err != nil {
+				// [warning] the tee already passed every byte it read, so stream the rest when the cache write fails.
+				// A read error of the response body is sticky, so the copy ends with it too.
 				_, err = io.Copy(pw, resp.Body)
-				pw.CloseWithError(err)
-				return
+			} else if s3.fsCacheEpoch.Load() != epoch {
+				s3.fsCache.Delete(cacheKey)
 			}
-			err = s3.fsCache.Put(cacheKey, io.TeeReader(resp.Body, pw))
 			pw.CloseWithError(err)
 		}()
 		content = pr
@@ -295,28 +306,33 @@ func (s3 *s3Storage) PutContext(ctx context.Context, name string, content io.Rea
 	}
 	if s3.shouldUseFSCache(name) {
 		cacheKey := s3.fsCacheKey(name)
+		epoch := s3.fsCacheEpoch.Load()
 		pr, pw := io.Pipe()
-		done := make(chan error, 1)
+		done := make(chan struct{})
 		defer func() {
 			pw.CloseWithError(err)
-			if cacheErr := <-done; err == nil {
-				err = cacheErr
-			}
+			<-done
 		}()
 		go func() {
-			unlock := s3.fsCacheLock.Lock(name)
-			defer unlock()
-			err := s3.fsCache.Put(cacheKey, pr)
-			pr.CloseWithError(err)
-			done <- err
+			defer close(done)
+			if err := s3.fsCache.Put(cacheKey, pr); err != nil {
+				// [warning] drain the pipe, a failed cache write must not abort the upload
+				io.Copy(io.Discard, pr)
+			} else if s3.fsCacheEpoch.Load() != epoch {
+				s3.fsCache.Delete(cacheKey)
+			}
 		}()
 		content = io.TeeReader(content, pw)
 	}
-	req, err := http.NewRequestWithContext(ctx, "PUT", s3.apiEndpoint+"/"+name, content)
+	req, err := http.NewRequestWithContext(ctx, "PUT", s3.apiEndpoint+"/"+escapePath(name), content)
 	if err != nil {
 		return
 	}
 	req.ContentLength = contentLength
+	if contentLength == 0 {
+		// [warning] a body of unknown length is sent chunked, which S3 rejects
+		req.Body = http.NoBody
+	}
 	resp, err := s3.do(req)
 	if err != nil {
 		return
@@ -332,10 +348,10 @@ func (s3 *s3Storage) Delete(name string) (err error) {
 	if name == "" {
 		return errors.New("key is required")
 	}
-	if s3.shouldUseFSCache(name) {
-		go s3.fsCache.Delete(s3.fsCacheKey(name))
+	req, err := http.NewRequest("DELETE", s3.apiEndpoint+"/"+escapePath(name), nil)
+	if err != nil {
+		return err
 	}
-	req, _ := http.NewRequest("DELETE", s3.apiEndpoint+"/"+name, nil)
 	resp, err := s3.do(req)
 	if err != nil {
 		return err
@@ -343,6 +359,10 @@ func (s3 *s3Storage) Delete(name string) (err error) {
 	defer resp.Body.Close()
 	if resp.StatusCode >= 400 {
 		return errors.New("unexpected status code: " + resp.Status)
+	}
+	if s3.shouldUseFSCache(name) {
+		s3.fsCacheEpoch.Add(1)
+		s3.fsCache.Delete(s3.fsCacheKey(name))
 	}
 	return nil
 }
@@ -355,7 +375,10 @@ func (s3 *s3Storage) List(prefix string) (keys []string, err error) {
 	}
 	keys = []string{}
 	for {
-		req, _ := http.NewRequest("GET", s3.apiEndpoint+"?"+query.Encode(), nil)
+		req, err := http.NewRequest("GET", s3.apiEndpoint+"?"+query.Encode(), nil)
+		if err != nil {
+			return keys, err
+		}
 		resp, err := s3.do(req)
 		if err != nil {
 			return keys, err
@@ -387,12 +410,15 @@ func (s3 *s3Storage) DeleteAll(prefix string) (deletedKeys []string, err error) 
 	if prefix == "" {
 		return nil, errors.New("prefix is required")
 	}
-	if s3.fsCache != nil {
-		go s3.fsCache.DeleteAll(prefix)
-	}
 	keysToDelete, err := s3.List(prefix)
 	if err != nil {
 		return
+	}
+	if s3.fsCache != nil {
+		defer func() {
+			s3.fsCacheEpoch.Add(1)
+			s3.fsCache.DeleteAll(prefix)
+		}()
 	}
 	if len(keysToDelete) == 0 {
 		return []string{}, nil
@@ -407,7 +433,10 @@ func (s3 *s3Storage) DeleteAll(prefix string) (deletedKeys []string, err error) 
 		}
 		buf.WriteString("</Delete>")
 		checksum := md5.Sum(buf.Bytes())
-		req, _ := http.NewRequest("POST", s3.apiEndpoint+"?delete", buf)
+		req, err := http.NewRequest("POST", s3.apiEndpoint+"?delete", buf)
+		if err != nil {
+			return deletedKeys, err
+		}
 		req.Header.Set("Content-MD5", base64.StdEncoding.EncodeToString(checksum[:]))
 		resp, err := s3.do(req)
 		if err != nil {
@@ -439,8 +468,9 @@ func (s3 *s3Storage) DeleteAll(prefix string) (deletedKeys []string, err error) 
 func (s3 *s3Storage) do(req *http.Request) (*http.Response, error) {
 	s3.sign(req)
 	client := *http.DefaultClient
-	if client.Timeout <= 0 || client.Timeout > time.Minute {
-		client.Timeout = time.Minute
+	// [warning] keep a custom transport of the default client (tests, proxies)
+	if client.Transport == nil || client.Transport == http.DefaultTransport {
+		client.Transport = s3Transport
 	}
 	return client.Do(req)
 }
@@ -472,7 +502,11 @@ func (s3 *s3Storage) sign(req *http.Request) {
 			canonicalHeaders[i] = key + ":" + strings.Join(req.Header.Values(key), ",")
 		}
 	}
-	canonicalRequest := strings.Join([]string{req.Method, escapePath(req.URL.Path), req.URL.Query().Encode(), strings.Join(canonicalHeaders, "\n") + "\n", strings.Join(signedHeaders, ";"), req.Header.Get("X-Amz-Content-Sha256")}, "\n")
+	uri := req.URL.EscapedPath()
+	if uri == "" {
+		uri = "/"
+	}
+	canonicalRequest := strings.Join([]string{req.Method, uri, req.URL.Query().Encode(), strings.Join(canonicalHeaders, "\n") + "\n", strings.Join(signedHeaders, ";"), req.Header.Get("X-Amz-Content-Sha256")}, "\n")
 	stringToSign := strings.Join([]string{"AWS4-HMAC-SHA256", datetime, scope, toHex(sha256Sum(canonicalRequest))}, "\n")
 	signingKey := hmacSum(hmacSum(hmacSum(hmacSum([]byte("AWS4"+s3.secretAccessKey), date), s3.region), "s3"), "aws4_request")
 	signature := hmacSum(signingKey, stringToSign)
