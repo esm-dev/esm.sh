@@ -57,6 +57,10 @@ func (p EsmPath) String() string {
 }
 
 func parseEsmPath(npmrc *NpmRC, pathname string) (esm EsmPath, extraQuery string, exactVersion bool, target string, xArgs *BuildArgs, err error) {
+	return parseEsmPathContext(context.Background(), npmrc, pathname)
+}
+
+func parseEsmPathContext(ctx context.Context, npmrc *NpmRC, pathname string) (esm EsmPath, extraQuery string, exactVersion bool, target string, xArgs *BuildArgs, err error) {
 	esm, extraQuery, exactVersion, target, xArgs, err = parseEsmPathSyntax(pathname)
 	if err != nil || exactVersion {
 		return
@@ -67,8 +71,10 @@ func parseEsmPath(npmrc *NpmRC, pathname string) (esm EsmPath, extraQuery string
 			err = errors.New("pkg.pr.new: tag or branch not found")
 		}
 	} else if esm.GhPrefix {
-		esm.PkgVersion, err = resolveGhPackageVersion(context.Background(), esm)
+		esm.PkgVersion, err = resolveGhPackageVersion(ctx, esm)
 	} else {
+		ctx, cancel := context.WithTimeout(ctx, npmQueryTimeout)
+		defer cancel()
 		var date time.Time
 		var isDateVersion bool
 		date, isDateVersion, err = npm.IsDateVersion(esm.PkgVersion)
@@ -77,9 +83,9 @@ func parseEsmPath(npmrc *NpmRC, pathname string) (esm EsmPath, extraQuery string
 		}
 		var p *npm.PackageJSON
 		if isDateVersion {
-			p, err = npmrc.getPackageInfoByDate(esm.PkgName, date)
+			p, err = npmrc.getPackageInfoByDateContext(ctx, esm.PkgName, date)
 		} else {
-			p, err = npmrc.getPackageInfo(esm.PkgName, esm.PkgVersion)
+			p, err = npmrc.getPackageInfoContext(ctx, esm.PkgName, esm.PkgVersion)
 		}
 		if err == nil {
 			esm.PkgVersion = p.Version
