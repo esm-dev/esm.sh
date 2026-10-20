@@ -235,8 +235,11 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 					return
 				}
 				cacheKeys = append(cacheKeys, keys...)
-				esmPath, _, exactVersion, _, _, err := parseEsmPath(npmrc, pathname)
+				esmPath, _, exactVersion, _, _, err := parseEsmPathContext(r.Context(), npmrc, pathname)
 				if err != nil {
+					if writePathResolutionError(w, r, err, true) {
+						return
+					}
 					writeJSONError(w, 400, err.Error())
 					return
 				}
@@ -665,8 +668,11 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 			pathname = "/pr/" + pathname[13:]
 		}
 
-		esmPath, extraQuery, isExactVersion, target, xArgs, err := parseEsmPath(npmrc, pathname)
+		esmPath, extraQuery, isExactVersion, target, xArgs, err := parseEsmPathContext(r.Context(), npmrc, pathname)
 		if err != nil {
+			if writePathResolutionError(w, r, err, false) {
+				return
+			}
 			status := 500
 			message := err.Error()
 			if strings.HasPrefix(message, "invalid") {
@@ -1439,8 +1445,11 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 			for v := range strings.SplitSeq(query.Get("deps"), ",") {
 				v = strings.TrimSpace(v)
 				if v != "" {
-					esm, _, _, _, _, err := parseEsmPath(npmrc, v)
+					esm, _, _, _, _, err := parseEsmPathContext(r.Context(), npmrc, v)
 					if err != nil {
+						if writePathResolutionError(w, r, err, true) {
+							return
+						}
 						status := 500
 						message := err.Error()
 						if strings.HasPrefix(message, "invalid") {
@@ -1994,6 +2003,22 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 		}
 		writeBody(w, buf.Bytes())
 	})
+}
+
+func writePathResolutionError(w http.ResponseWriter, r *http.Request, err error, asJSON bool) bool {
+	if r.Context().Err() != nil {
+		return true
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	if asJSON {
+		writeJSONError(w, http.StatusRequestTimeout, err.Error())
+	} else {
+		writeStatus(w, http.StatusRequestTimeout, err.Error())
+	}
+	return true
 }
 
 func getOrigin(r *http.Request) string {

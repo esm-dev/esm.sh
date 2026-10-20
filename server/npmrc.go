@@ -26,11 +26,13 @@ import (
 	"github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/ije/gox/term"
 	"github.com/ije/gox/utils"
+	"golang.org/x/sync/singleflight"
 )
 
 const (
-	npmRegistry = "https://registry.npmjs.org/"
-	jsrRegistry = "https://npm.jsr.io/"
+	npmRegistry     = "https://registry.npmjs.org/"
+	npmQueryTimeout = 30 * time.Second
+	jsrRegistry     = "https://npm.jsr.io/"
 	// [warning] the unpacked size does not bound the inodes taken by an archive of tiny files
 	maxPackageEntries = 100000
 )
@@ -51,6 +53,7 @@ type NpmRegistry struct {
 type NpmRC struct {
 	globalRegistry   *NpmRegistry
 	scopedRegistries map[string]*NpmRegistry
+	metadataLoads    singleflight.Group
 }
 
 func DefaultNpmRC() *NpmRC {
@@ -118,7 +121,39 @@ func (npmrc *NpmRC) getCachedPackageNotFound(pkg npm.Package) string {
 	return negativeCache.get(key + pkg.String() + "/install")
 }
 
+type packageMetadataResult struct {
+	metadata *npm.PackageMetadata
+	raw      *npm.PackageJSONRaw
+}
+
 func (npmrc *NpmRC) fetchPackageMetadataContext(ctx context.Context, pkgName string, version string, isWellknownVersion bool) (*npm.PackageMetadata, *npm.PackageJSONRaw, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, nil, err
+	}
+	key := npmrc.getRegistryByPackageName(pkgName).Registry + pkgName
+	if isWellknownVersion {
+		key += "@" + version
+	}
+	result := npmrc.metadataLoads.DoChan(key, func() (any, error) {
+		// One client's departure must not abort a registry fill shared by other callers.
+		fetchCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), npmQueryTimeout)
+		defer cancel()
+		metadata, raw, err := npmrc.fetchPackageMetadata(fetchCtx, pkgName, version, isWellknownVersion)
+		return packageMetadataResult{metadata, raw}, err
+	})
+	select {
+	case <-ctx.Done():
+		return nil, nil, ctx.Err()
+	case result := <-result:
+		if result.Err != nil {
+			return nil, nil, result.Err
+		}
+		value := result.Val.(packageMetadataResult)
+		return value.metadata, value.raw, nil
+	}
+}
+
+func (npmrc *NpmRC) fetchPackageMetadata(ctx context.Context, pkgName string, version string, isWellknownVersion bool) (*npm.PackageMetadata, *npm.PackageJSONRaw, error) {
 	reg := npmrc.getRegistryByPackageName(pkgName)
 	missingKey := "404:" + reg.Registry + pkgName + "@"
 	if message := negativeCache.get(missingKey); message != "" {
@@ -152,7 +187,11 @@ RETRY:
 	useVersionRoute := isWellknownVersion && !useBackup && reg.isSupportVersionRoute(ctx, header)
 	if !useVersionRoute && unlock == nil {
 		// [warning] a packument can be huge, one fetch is shared by the range, tag and date lookups for a while
-		unlock = cacheMutex.Lock("packument:" + packumentKey)
+		var err error
+		unlock, err = cacheMutex.LockContext(ctx, "packument:"+packumentKey)
+		if err != nil {
+			return nil, nil, err
+		}
 		if metadata, ok := packumentCache.Get(packumentKey); ok {
 			return metadata, nil, nil
 		}
@@ -296,7 +335,7 @@ func (npmrc *NpmRC) getPackageInfoContext(ctx context.Context, pkgName string, v
 	}
 
 	ttl := time.Duration(config.NpmQueryCacheTTL) * time.Second
-	return withCache("npm:"+pkgName+"@"+version, ttl, func() (_ *npm.PackageJSON, _ string, err error) {
+	return withCacheContext(ctx, "npm:"+pkgName+"@"+version, ttl, func() (_ *npm.PackageJSON, _ string, err error) {
 		key := "404:" + npmrc.getRegistryByPackageName(pkgName).Registry + pkgName + "@"
 		if message := negativeCache.get(key); message != "" {
 			return nil, "", errors.New(message)
@@ -365,7 +404,7 @@ func (npmrc *NpmRC) getPackageInfoByDateContext(ctx context.Context, pkgName str
 	targetTimeStr := targetDate.Format(time.DateOnly)
 	cacheKey := reg.Registry + pkgName + "@date=" + targetTimeStr
 
-	return withCache(cacheKey, time.Duration(config.NpmQueryCacheTTL)*time.Second, func() (*npm.PackageJSON, string, error) {
+	return withCacheContext(ctx, cacheKey, time.Duration(config.NpmQueryCacheTTL)*time.Second, func() (*npm.PackageJSON, string, error) {
 		metadata, _, err := npmrc.fetchPackageMetadataContext(ctx, pkgName, "", false)
 		if err != nil {
 			return nil, "", err
