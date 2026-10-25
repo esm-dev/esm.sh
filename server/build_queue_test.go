@@ -134,8 +134,8 @@ func TestBuildQueueWaitCancellation(t *testing.T) {
 				time.Sleep(time.Second)
 				synctest.Wait()
 				for _, item := range q.Snapshot() {
-					if item["path"] == path && item["waitClients"] != 0 {
-						t.Fatalf("timed out waiter retained: %+v", item)
+					if item["path"] == path && (pending || item["waitClients"] != 0) {
+						t.Fatalf("abandoned task or waiter retained: %+v", item)
 					}
 				}
 				if !pending && build.Context().Err() != nil {
@@ -145,7 +145,7 @@ func TestBuildQueueWaitCancellation(t *testing.T) {
 				finished := make(chan struct{}, clients)
 				for range clients {
 					go func() {
-						meta, err := q.Build(context.Background(), &BuildContext{path: path})
+						meta, err := q.Build(context.Background(), &BuildContext{path: path, metaDB: build.metaDB})
 						if err != nil || meta == nil || !meta.ExportDefault {
 							t.Errorf("shared result: meta=%+v, err=%v", meta, err)
 						}
@@ -248,6 +248,57 @@ func TestBuildQueueFailure(t *testing.T) {
 			})
 		})
 	}
+}
+
+func TestBuildQueueAbandonedPending(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		q := NewBuildQueue(1, time.Minute)
+		release := make(chan struct{})
+		blocker := newBuildQueueTestContext("/"+t.Name()+"/blocker", func() (*BuildMeta, error) {
+			<-release
+			return &BuildMeta{}, nil
+		})
+		go func() {
+			if _, err := q.Build(context.Background(), blocker); err != nil {
+				t.Error(err)
+			}
+		}()
+		synctest.Wait()
+		path := "/" + t.Name() + "/pending"
+		build := newBuildQueueTestContext(path, func() (*BuildMeta, error) {
+			t.Error("started an abandoned pending build")
+			return &BuildMeta{}, nil
+		})
+		cancels := make([]context.CancelFunc, 3)
+		for i := range cancels {
+			ctx, cancel := context.WithCancel(context.Background())
+			cancels[i] = cancel
+			go func() {
+				if _, err := q.Build(ctx, build); !errors.Is(err, context.Canceled) {
+					t.Errorf("expected canceled waiter, got %v", err)
+				}
+			}()
+		}
+		synctest.Wait()
+		for i, cancel := range cancels {
+			cancel()
+			synctest.Wait()
+			remaining := len(cancels) - i - 1
+			task := q.tasks[path]
+			if remaining > 0 {
+				if task == nil || task.waitClients != remaining {
+					t.Fatalf("lost shared pending build with %d waiters", remaining)
+				}
+			} else if task != nil || q.pending.Len() != 0 {
+				t.Fatal("retained pending build after its last waiter left")
+			}
+		}
+		close(release)
+		synctest.Wait()
+		if len(q.Snapshot()) != 0 || q.running != 0 {
+			t.Fatalf("queue did not drain: %+v", q.Snapshot())
+		}
+	})
 }
 
 func TestBuildQueuePathChange(t *testing.T) {

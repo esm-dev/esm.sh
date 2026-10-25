@@ -138,6 +138,9 @@ func (ctx *BuildContext) analyzeSplitting() {
 
 		refs := map[string]Ref{}
 		for _, exportName := range exportNames.Values() {
+			if ctx.checkCanceled() != nil {
+				return
+			}
 			esmPath := ctx.esmPath
 			esmPath.SubPath = exportName
 			b := &BuildContext{
@@ -155,6 +158,9 @@ func (ctx *BuildContext) analyzeSplitting() {
 				ctx:         ctx.ctx,
 			}
 			_, includes, err := b.buildModule(true)
+			if ctx.checkCanceled() != nil {
+				return
+			}
 			if err != nil {
 				// splitting is an optimization, so ignore an export that can't be analyzed,
 				// like an asset esbuild has no loader for
@@ -207,6 +213,9 @@ func (ctx *BuildContext) analyzeSplitting() {
 		if shared.Len() > 0 {
 			splitting := set.New[string]()
 			for _, modulePath := range shared.Values() {
+				if ctx.checkCanceled() != nil {
+					return
+				}
 				refBy := set.New[string]()
 				bubble(modulePath, func(importer string) { refBy.Add(importer) }, nil)
 				if refBy.Len() > 1 {

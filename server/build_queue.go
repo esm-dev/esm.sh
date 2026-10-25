@@ -1,6 +1,7 @@
 package server
 
 import (
+	"container/list"
 	"context"
 	"errors"
 	"fmt"
@@ -13,7 +14,7 @@ import (
 type BuildQueue struct {
 	lock        sync.Mutex
 	tasks       map[string]*buildTask
-	pending     []*buildTask
+	pending     list.List
 	running     int
 	concurrency int
 	timeout     time.Duration
@@ -28,6 +29,7 @@ type buildTask struct {
 	waitClients int
 	createdAt   time.Time
 	startedAt   time.Time
+	elem        *list.Element
 }
 
 func NewBuildQueue(concurrency int, timeout time.Duration) *BuildQueue {
@@ -44,7 +46,7 @@ func NewBuildQueue(concurrency int, timeout time.Duration) *BuildQueue {
 	}
 }
 
-// Build waits for a shared build. Canceling the wait leaves the build running.
+// Build waits for a shared build. Canceling the wait leaves an active build running.
 func (q *BuildQueue) Build(ctx context.Context, build *BuildContext) (*BuildMeta, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -67,7 +69,7 @@ func (q *BuildQueue) Build(ctx context.Context, build *BuildContext) (*BuildMeta
 		}
 		build.status.Store("pending")
 		q.tasks[path] = task
-		q.pending = append(q.pending, task)
+		task.elem = q.pending.PushBack(task)
 	}
 	task.waitClients++
 	q.scheduleLocked()
@@ -76,6 +78,10 @@ func (q *BuildQueue) Build(ctx context.Context, build *BuildContext) (*BuildMeta
 	defer func() {
 		q.lock.Lock()
 		task.waitClients--
+		if task.waitClients == 0 && task.startedAt.IsZero() {
+			delete(q.tasks, task.path)
+			q.pending.Remove(task.elem)
+		}
 		q.lock.Unlock()
 	}()
 
@@ -116,13 +122,8 @@ func (q *BuildQueue) Snapshot() []map[string]any {
 
 // scheduleLocked starts pending tasks while capacity is available.
 func (q *BuildQueue) scheduleLocked() {
-	for q.running < q.concurrency && len(q.pending) > 0 {
-		task := q.pending[0]
-		q.pending[0] = nil
-		q.pending = q.pending[1:]
-		if len(q.pending) == 0 {
-			q.pending = nil
-		}
+	for q.running < q.concurrency && q.pending.Len() > 0 {
+		task := q.pending.Remove(q.pending.Front()).(*buildTask)
 		task.startedAt = time.Now()
 		task.ctx.status.Store("build")
 		q.running++

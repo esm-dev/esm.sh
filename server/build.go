@@ -458,6 +458,9 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 				parents := map[string]string{filename: ""}
 				pending := []string{filename}
 				for len(pending) > 0 {
+					if ctx.checkCanceled() != nil {
+						return false
+					}
 					filename = pending[len(pending)-1]
 					pending = pending[:len(pending)-1]
 					if v, ok := exportStarExternal.Load(filename); ok {
@@ -512,6 +515,9 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 			build.OnResolve(
 				esbuild.OnResolveOptions{Filter: ".*"},
 				func(args esbuild.OnResolveArgs) (esbuild.OnResolveResult, error) {
+					if err := ctx.checkCanceled(); err != nil {
+						return esbuild.OnResolveResult{}, err
+					}
 					if args.PluginData == nativeResolve {
 						return esbuild.OnResolveResult{}, nil
 					}
@@ -1367,10 +1373,16 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 	defer esbCtx.Dispose()
 
 REBUILD:
+	if err = ctx.checkCanceled(); err != nil {
+		return
+	}
 	includes = nil
 	ctx.esmImports = nil
 	ctx.cjsRequires = nil
 	res := esbCtx.Rebuild()
+	if err = ctx.checkCanceled(); err != nil {
+		return
+	}
 	if len(res.Errors) > 0 {
 		retry := false
 		for _, e := range res.Errors {
