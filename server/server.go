@@ -101,7 +101,7 @@ func Start() {
 		for {
 			removed, err := purgeLocalCaches()
 			if removed > 0 {
-				logger.Warnf("purged %d unused local cache entries because disk space or inodes were low", removed)
+				logger.Infof("purged %d least recently used local cache entries", removed)
 			}
 			if err != nil {
 				logger.Errorf("local cache purge: %v", err)
