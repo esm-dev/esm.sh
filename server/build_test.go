@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"crypto/sha1"
 	"encoding/base64"
 	"encoding/json"
@@ -25,6 +26,52 @@ import (
 	"github.com/ije/gox/log"
 	"github.com/ije/gox/set"
 )
+
+func TestBuildModuleCancellation(t *testing.T) {
+	for _, analyze := range []bool{false, true} {
+		t.Run(fmt.Sprintf("analyze=%v", analyze), func(t *testing.T) {
+			wd := t.TempDir()
+			pkgDir := filepath.Join(wd, "node_modules", "build-cancel")
+			if err := os.MkdirAll(pkgDir, 0755); err != nil {
+				t.Fatal(err)
+			}
+			for name, code := range map[string]string{
+				"index.js":      `export { default } from "./component.vue";`,
+				"component.vue": `<template><div /></template>`,
+			} {
+				if err := os.WriteFile(filepath.Join(pkgDir, name), []byte(code), 0644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			logger, err := log.New("")
+			if err != nil {
+				t.Fatal(err)
+			}
+			logger.SetOutput(io.Discard)
+			transport := http.DefaultTransport
+			defer func() { http.DefaultTransport = transport }()
+			buildCtx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			requested := false
+			http.DefaultTransport = ghTestTransport(func(r *http.Request) (*http.Response, error) {
+				requested = true
+				cancel()
+				<-r.Context().Done()
+				return nil, r.Context().Err()
+			})
+			ctx := &BuildContext{
+				ctx: buildCtx, wd: wd, target: "es2022", logger: logger,
+				npmrc:   &NpmRC{globalRegistry: &NpmRegistry{NpmRegistryConfig: NpmRegistryConfig{Registry: fmt.Sprintf("https://build-cancel-%t.test/", analyze)}}},
+				esmPath: EsmPath{PkgName: "build-cancel", PkgVersion: "1.0.0"},
+				pkgJson: &npm.PackageJSON{Name: "build-cancel", Version: "1.0.0", Type: "module", Main: "./index.js"},
+			}
+			_, _, err = ctx.buildModule(analyze)
+			if !requested || !errors.Is(err, context.Canceled) {
+				t.Fatalf("expected cancellation during esbuild, requested=%v, err=%v", requested, err)
+			}
+		})
+	}
+}
 
 func TestBuildModuleConditionalExportSplitting(t *testing.T) {
 	for _, tt := range []struct {

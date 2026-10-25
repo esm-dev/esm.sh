@@ -1542,7 +1542,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 				}
 				if errors.Is(err, context.DeadlineExceeded) {
 					header.Set("Cache-Control", ccMustRevalidate)
-					writeStatus(w, http.StatusRequestTimeout, "timeout, the types is waiting to be built, please try refreshing the page.")
+					writeStatus(w, http.StatusRequestTimeout, "timeout, the types are not built yet, please try refreshing the page.")
 					return
 				}
 				if err != nil {
@@ -1661,7 +1661,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 			}
 			if errors.Is(err, context.DeadlineExceeded) {
 				header.Set("Cache-Control", ccMustRevalidate)
-				writeStatus(w, http.StatusRequestTimeout, "timeout, the module is waiting to be built, please try refreshing the page.")
+				writeStatus(w, http.StatusRequestTimeout, "timeout, the module is not built yet, please try refreshing the page.")
 				return
 			}
 			if err != nil {
