@@ -45,7 +45,7 @@ var (
 	purgeLock   sync.Mutex
 	diskStatfs  = syscall.Statfs
 	cacheUsages = map[string]*cacheUsage{}
-	evicted     usage
+	evicted     = map[syscall.Fsid]usage{}
 )
 
 func localCaches() []localCache {
@@ -96,16 +96,19 @@ func purgeLocalCaches() (removed int, err error) {
 		}
 		// [warning] the same share of the inodes too, a cache of tiny files runs out of inodes long before bytes
 		limit := usage{int64(share * float64(fsSize)), int64(share * float64(stat.Files))}
-		used := usage{int64(fsSize-stat.Bfree*uint64(stat.Bsize)) + evicted.bytes, int64(stat.Files-stat.Ffree) + evicted.inodes}
+		// [warning] the evictions of the other caches on the same filesystem must not lower the estimate
+		ev := evicted[stat.Fsid]
+		used := usage{int64(fsSize-stat.Bfree*uint64(stat.Bsize)) + ev.bytes, int64(stat.Files-stat.Ffree) + ev.inodes}
 		u := cacheUsages[c.dir]
 		var est usage
 		if u != nil {
 			est = usage{u.bytes + used.bytes - u.base.bytes, u.inodes + used.inodes - u.base.inodes}
 		}
 		low := status != DiskStatusOk
-		over := u != nil && (est.bytes > limit.bytes || stat.Files > 0 && est.inodes > limit.inodes)
-		// [warning] the estimate may be over the max size because of the other writers, check it by a scan, at most hourly
-		rescan := u == nil || over && time.Since(u.scanned) >= time.Hour
+		over := u != nil && (fsSize > 0 && est.bytes > limit.bytes || stat.Files > 0 && est.inodes > limit.inodes)
+		// [warning] the estimate counts the other writers too, check it by a scan, at most hourly,
+		// or every 10 minutes on a low filesystem to find the entries added after the last scan
+		rescan := u == nil || over && time.Since(u.scanned) >= time.Hour || low && time.Since(u.scanned) >= 10*time.Minute
 		if !rescan && !low {
 			continue
 		}
@@ -169,8 +172,12 @@ func purgeLocalCaches() (removed int, err error) {
 			est = u.usage
 		}
 		// evict to 90% of the max size, and until the filesystem has twice the low limits free
-		need := usage{est.bytes - limit.bytes*9/10, 0}
-		if stat.Files > 0 {
+		// [warning] the max size by a fresh scan only, the estimate may be inflated by the other writers
+		var need usage
+		if rescan && fsSize > 0 {
+			need.bytes = est.bytes - limit.bytes*9/10
+		}
+		if rescan && stat.Files > 0 {
 			need.inodes = est.inodes - limit.inodes*9/10
 		}
 		if low {
@@ -235,8 +242,7 @@ func purgeLocalCaches() (removed int, err error) {
 			err = errors.Join(err, walkErr)
 			u.bytes -= freed.bytes
 			u.inodes -= freed.inodes
-			evicted.bytes += freed.bytes
-			evicted.inodes += freed.inodes
+			evicted[stat.Fsid] = usage{ev.bytes + freed.bytes, ev.inodes + freed.inodes}
 		}
 		err = errors.Join(err, root.Close())
 	}

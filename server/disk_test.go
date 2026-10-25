@@ -18,6 +18,7 @@ import (
 	"testing"
 	"testing/iotest"
 	"time"
+	"unsafe"
 
 	"github.com/esm-dev/esm.sh/internal/npm"
 	"github.com/esm-dev/esm.sh/internal/storage"
@@ -229,10 +230,10 @@ func TestPurgeLocalCachesMaxSize(t *testing.T) {
 	t.Cleanup(func() { config, diskStatfs = oldConfig, oldStatfs })
 	// a healthy 100GB filesystem, the inodes are counted when files is set
 	var fsUsed uint64 = 51200 * MB
-	statfs := func(files uint64) func(string, *syscall.Statfs_t) error {
+	statfs := func(files, ffree uint64) func(string, *syscall.Statfs_t) error {
 		return func(_ string, stat *syscall.Statfs_t) error {
 			free := (102400*MB - fsUsed) / 4096
-			*stat = syscall.Statfs_t{Bsize: 4096, Blocks: 102400 * MB / 4096, Bfree: free, Bavail: free, Files: files, Ffree: files * 9 / 10}
+			*stat = syscall.Statfs_t{Bsize: 4096, Blocks: 102400 * MB / 4096, Bfree: free, Bavail: free, Files: files, Ffree: ffree}
 			return nil
 		}
 	}
@@ -254,7 +255,7 @@ func TestPurgeLocalCachesMaxSize(t *testing.T) {
 
 	t.Run("bytes", func(t *testing.T) {
 		config = &Config{WorkDir: t.TempDir(), NpmStoreMaxSize: "3MB"}
-		diskStatfs = statfs(0)
+		diskStatfs = statfs(0, 0)
 		// the least recently used package goes first, not the first by name
 		writePackage("a@1.0.0", 1, MB, now.Add(-3*time.Hour))
 		writePackage("b@1.0.0", 1, MB, now.Add(-30*time.Hour))
@@ -269,7 +270,7 @@ func TestPurgeLocalCachesMaxSize(t *testing.T) {
 		}
 		// the writes of another cache on the filesystem push the estimate over the max size,
 		// it is checked by a scan after an hour, which finds the real usage
-		fsUsed += 2*MB - MB
+		fsUsed += MB
 		u := cacheUsages[DefaultNpmRC().StoreDir()]
 		u.scanned = now
 		if removed, err := purgeLocalCaches(); err != nil || removed != 0 || u != cacheUsages[DefaultNpmRC().StoreDir()] {
@@ -290,11 +291,85 @@ func TestPurgeLocalCachesMaxSize(t *testing.T) {
 	t.Run("inodes", func(t *testing.T) {
 		// 1% of 1000 inodes allows 10, and the package with many tiny files goes
 		config = &Config{WorkDir: t.TempDir(), NpmStoreMaxSize: "1%"}
-		diskStatfs = statfs(1000)
+		diskStatfs = statfs(1000, 900)
 		writePackage("tiny@1.0.0", 20, 1, now.Add(-30*time.Hour))
 		writePackage("used@1.0.0", 1, 1, now.Add(-2*time.Hour))
 		if removed, err := purgeLocalCaches(); err != nil || removed != 1 || existsDir(filepath.Join(DefaultNpmRC().StoreDir(), "tiny@1.0.0")) || !existsDir(filepath.Join(DefaultNpmRC().StoreDir(), "used@1.0.0")) {
 			t.Fatalf("purge = %d, %v, want tiny@1.0.0 removed only", removed, err)
+		}
+	})
+
+	t.Run("low", func(t *testing.T) {
+		// 20% of 1000 inodes allows 200, the store has 4 packages of 31 inodes
+		config = &Config{WorkDir: t.TempDir(), NpmStoreMaxSize: "20%"}
+		diskStatfs = statfs(1000, 500)
+		store := DefaultNpmRC().StoreDir()
+		for i, name := range []string{"a@1.0.0", "b@1.0.0", "c@1.0.0", "d@1.0.0"} {
+			writePackage(name, 30, 1, now.Add(-time.Duration(40-i)*time.Hour))
+		}
+		if removed, err := purgeLocalCaches(); err != nil || removed != 0 {
+			t.Fatalf("purge = %d, %v, want 0 removed", removed, err)
+		}
+		// the other writers push the estimate over the max size, but the low filesystem needs 60 inodes only
+		diskStatfs = statfs(1000, 40)
+		if removed, err := purgeLocalCaches(); err != nil || removed != 2 || existsDir(filepath.Join(store, "b@1.0.0")) || !existsDir(filepath.Join(store, "c@1.0.0")) {
+			t.Fatalf("purge on a low filesystem = %d, %v, want a@1.0.0 and b@1.0.0 removed", removed, err)
+		}
+		// a package added after the scan is found by the next scan of the low filesystem
+		writePackage("e@1.0.0", 30, 1, now.Add(-50*time.Hour))
+		cacheUsages[store].scanned = now.Add(-10 * time.Minute)
+		if removed, err := purgeLocalCaches(); err != nil || removed != 2 || existsDir(filepath.Join(store, "e@1.0.0")) || !existsDir(filepath.Join(store, "d@1.0.0")) {
+			t.Fatalf("purge after the next scan = %d, %v, want e@1.0.0 and c@1.0.0 removed", removed, err)
+		}
+	})
+
+	t.Run("no block count", func(t *testing.T) {
+		config = &Config{WorkDir: t.TempDir(), NpmStoreMaxSize: "50%"}
+		diskStatfs = func(_ string, stat *syscall.Statfs_t) error {
+			*stat = syscall.Statfs_t{Bsize: 4096, Bavail: 4096 * MB / 4096}
+			return nil
+		}
+		writePackage("a@1.0.0", 1, MB, now.Add(-30*time.Hour))
+		if removed, err := purgeLocalCaches(); err != nil || removed != 0 {
+			t.Fatalf("purge = %d, %v, want 0 removed", removed, err)
+		}
+	})
+
+	t.Run("separate filesystems", func(t *testing.T) {
+		config = &Config{WorkDir: t.TempDir(), NpmStoreMaxSize: "3MB"}
+		config.Storage = storage.StorageOptions{Type: "s3", CacheDir: t.TempDir(), CacheMaxSize: "2MB"}
+		var cacheUsed uint64
+		storeStatfs := statfs(0, 0)
+		diskStatfs = func(path string, stat *syscall.Statfs_t) error {
+			if !strings.HasPrefix(path, config.Storage.CacheDir) {
+				return storeStatfs(path, stat)
+			}
+			free := (102400*MB - cacheUsed) / 4096
+			*stat = syscall.Statfs_t{Bsize: 4096, Blocks: 102400 * MB / 4096, Bfree: free, Bavail: free}
+			*(*[2]int32)(unsafe.Pointer(&stat.Fsid)) = [2]int32{1, 1}
+			return nil
+		}
+		writePackage("a@1.0.0", 1, MB, now.Add(-30*time.Hour))
+		writePackage("b@1.0.0", 1, MB, now.Add(-30*time.Hour))
+		if removed, err := purgeLocalCaches(); err != nil || removed != 0 {
+			t.Fatalf("purge = %d, %v, want 0 removed", removed, err)
+		}
+		for i := range 4 {
+			name := filepath.Join(config.Storage.CacheDir, strconv.Itoa(i))
+			if err := os.WriteFile(name, make([]byte, MB), 0644); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Chtimes(name, now.Add(-time.Duration(40-i)*time.Hour), now.Add(-time.Duration(40-i)*time.Hour)); err != nil {
+				t.Fatal(err)
+			}
+		}
+		cacheUsed += 4 * MB
+		u := cacheUsages[DefaultNpmRC().StoreDir()]
+		u.scanned = now.Add(-2 * time.Hour)
+		cacheUsages[config.Storage.CacheDir].scanned = now.Add(-2 * time.Hour)
+		// the S3 cache evictions on its own filesystem leave the store estimate as is
+		if removed, err := purgeLocalCaches(); err != nil || removed != 3 || u != cacheUsages[DefaultNpmRC().StoreDir()] {
+			t.Fatalf("purge = %d, %v, want 3 S3 cache files removed and no store scan", removed, err)
 		}
 	})
 }
