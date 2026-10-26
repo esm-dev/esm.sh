@@ -15,6 +15,7 @@ type BuildQueue struct {
 	lock        sync.Mutex
 	tasks       map[string]*buildTask
 	pending     list.List
+	resumes     []chan struct{} // released builds waiting to take a slot back
 	running     int
 	concurrency int
 	timeout     time.Duration
@@ -31,6 +32,9 @@ type buildTask struct {
 	startedAt   time.Time
 	elem        *list.Element
 }
+
+// buildQueueKey is the context key of the queue running a build.
+type buildQueueKey struct{}
 
 func NewBuildQueue(concurrency int, timeout time.Duration) *BuildQueue {
 	if concurrency <= 0 {
@@ -120,8 +124,31 @@ func (q *BuildQueue) Snapshot() []map[string]any {
 	return items
 }
 
-// scheduleLocked starts pending tasks while capacity is available.
+// release frees the slot of a running build that waits for another build.
+func (q *BuildQueue) release() {
+	q.lock.Lock()
+	q.running--
+	q.scheduleLocked()
+	q.lock.Unlock()
+}
+
+// acquire takes a slot back for a released build, before the pending tasks.
+func (q *BuildQueue) acquire() {
+	resume := make(chan struct{})
+	q.lock.Lock()
+	q.resumes = append(q.resumes, resume)
+	q.scheduleLocked()
+	q.lock.Unlock()
+	<-resume
+}
+
+// scheduleLocked resumes released builds, then starts pending tasks while capacity is available.
 func (q *BuildQueue) scheduleLocked() {
+	for q.running < q.concurrency && len(q.resumes) > 0 {
+		close(q.resumes[0])
+		q.resumes = slices.Delete(q.resumes, 0, 1)
+		q.running++
+	}
 	for q.running < q.concurrency && q.pending.Len() > 0 {
 		task := q.pending.Remove(q.pending.Front()).(*buildTask)
 		task.startedAt = time.Now()
@@ -152,7 +179,7 @@ func (q *BuildQueue) run(task *buildTask) {
 		q.lock.Unlock()
 	}()
 
-	ctx, cancel := context.WithTimeout(context.Background(), q.timeout)
+	ctx, cancel := context.WithTimeout(context.WithValue(context.Background(), buildQueueKey{}, q), q.timeout)
 	defer cancel()
 	task.meta, task.err = task.ctx.Build(ctx)
 	if errors.Is(task.err, context.DeadlineExceeded) {

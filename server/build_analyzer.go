@@ -94,7 +94,16 @@ func (ctx *BuildContext) analyzeSplitting() {
 		}
 
 		// only one analyze process is allowed at the same time for the same package
+		// [warning] a waiting build frees its slot, or the waiters of a slow analysis would fill the build queue
+		q, _ := ctx.Context().Value(buildQueueKey{}).(*BuildQueue)
+		_, wait := installLocks.Load(splittingTxtPath)
+		if q != nil && wait {
+			q.release()
+		}
 		unlock, err := lockInstall(ctx.Context(), splittingTxtPath)
+		if q != nil && wait {
+			q.acquire()
+		}
 		if err != nil {
 			return
 		}
@@ -166,7 +175,11 @@ func (ctx *BuildContext) analyzeSplitting() {
 				// like an asset esbuild has no loader for
 				if err.Error() != "could not resolve build entry" {
 					ctx.logger.Warnf("build(%s): failed to analyze %s: %v", ctx.esmPath.String(), esmPath.String(), err)
-					partial = true
+					// [warning] a partial analysis is not cached, so each build of the package would redo it,
+					// the export build fails with a code error too, so the analysis is still complete
+					if _, ok := err.(codeError); !ok {
+						partial = true
+					}
 				}
 				continue
 			}
