@@ -18,6 +18,7 @@ type StorageOptions struct {
 	AccessKeyID     string `json:"accessKeyID"`
 	SecretAccessKey string `json:"secretAccessKey"`
 	CacheDir        string `json:"cacheDir"`
+	CacheMaxSize    string `json:"cacheMaxSize"`
 }
 
 type Storage interface {

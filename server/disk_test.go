@@ -11,12 +11,14 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"syscall"
 	"testing"
 	"testing/iotest"
 	"time"
+	"unsafe"
 
 	"github.com/esm-dev/esm.sh/internal/npm"
 	"github.com/esm-dev/esm.sh/internal/storage"
@@ -73,15 +75,15 @@ func TestCheckDiskStatus(t *testing.T) {
 		if got := checkDiskStatus(); got != DiskStatusFull {
 			t.Fatalf("S3 cache filesystem is full, got %v", got)
 		}
-		if want := []string{filepath.Join(config.WorkDir, "npm"), config.WorkDir, config.Storage.CacheDir}; !slices.Equal(paths, want) {
+		if want := []string{config.Storage.CacheDir, filepath.Join(config.WorkDir, "npm"), config.WorkDir}; !slices.Equal(paths, want) {
 			t.Fatalf("checked %v, want %v", paths, want)
 		}
 	})
 	t.Run("S3 cache holding the work dir", func(t *testing.T) {
 		for _, cacheDir := range []string{config.WorkDir, filepath.Dir(config.WorkDir)} {
 			config.Storage = storage.StorageOptions{Type: "s3", CacheDir: cacheDir}
-			if dirs := localCacheDirs(); len(dirs) != 1 {
-				t.Fatalf("cache dirs = %v, want the npm store only", dirs)
+			if caches := localCaches(); len(caches) != 1 {
+				t.Fatalf("caches = %v, want the npm store only", caches)
 			}
 		}
 	})
@@ -89,7 +91,7 @@ func TestCheckDiskStatus(t *testing.T) {
 
 func TestPurgeLocalCaches(t *testing.T) {
 	oldConfig, oldStatfs := config, diskStatfs
-	config = &Config{WorkDir: t.TempDir()}
+	config = &Config{WorkDir: t.TempDir(), NpmStoreMaxSize: "50%"}
 	t.Cleanup(func() { config, diskStatfs = oldConfig, oldStatfs })
 	var requests []string
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -108,7 +110,7 @@ func TestPurgeLocalCaches(t *testing.T) {
 	}))
 	defer upstream.Close()
 	config.Storage = storage.StorageOptions{
-		Type: "s3", CacheDir: t.TempDir(), Endpoint: upstream.URL,
+		Type: "s3", CacheDir: t.TempDir(), CacheMaxSize: "20%", Endpoint: upstream.URL,
 		AccessKeyID: "test", SecretAccessKey: "test",
 	}
 	s3, err := storage.New(&config.Storage)
@@ -160,10 +162,13 @@ func TestPurgeLocalCaches(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	diskStatfs = func(_ string, stat *syscall.Statfs_t) error {
-		*stat = syscall.Statfs_t{Bsize: 4096, Bavail: 512 * MB / 4096}
-		return nil
+	statfs := func(avail uint64, err error) func(string, *syscall.Statfs_t) error {
+		return func(_ string, stat *syscall.Statfs_t) error {
+			*stat = syscall.Statfs_t{Bsize: 4096, Blocks: 10240 * MB / 4096, Bfree: avail / 4096, Bavail: avail / 4096}
+			return err
+		}
 	}
+	diskStatfs = statfs(512*MB, nil)
 	if removed, err := purgeLocalCaches(); err != nil || removed != 4 {
 		t.Fatalf("purge = %d, %v, want 4 removed", removed, err)
 	}
@@ -183,8 +188,8 @@ func TestPurgeLocalCaches(t *testing.T) {
 	if leftovers, _ := filepath.Glob(filepath.Join(store, ".purge-*")); len(leftovers) != 0 {
 		t.Fatalf("purge leftovers: %v", leftovers)
 	}
-	if existsFile(filepath.Join(cache, key)) {
-		t.Fatal("old S3 cache file remains")
+	if existsFile(filepath.Join(cache, key)) || existsDir(filepath.Join(cache, "meta")) {
+		t.Fatal("old S3 cache file or its empty dirs remain")
 	}
 	if after, err := os.Stat(cache); err != nil || !os.SameFile(cacheRoot, after) {
 		t.Fatalf("S3 cache root was replaced: %v", err)
@@ -204,34 +209,191 @@ func TestPurgeLocalCaches(t *testing.T) {
 		t.Fatalf("remote objects or cache reuse affected: %v", requests)
 	}
 
-	// stop once the disk has enough free space
-	for _, name := range []string{"a@1.0.0", "b@1.0.0"} {
-		if err := os.MkdirAll(filepath.Join(store, name), 0755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.Chtimes(filepath.Join(store, name), old, old); err != nil {
-			t.Fatal(err)
-		}
+	// a healthy or unknown filesystem below the max sizes is left as is
+	idle := filepath.Join(store, "idle@1.0.0")
+	if err := os.MkdirAll(idle, 0755); err != nil {
+		t.Fatal(err)
 	}
-	var calls int
-	diskStatfs = func(_ string, stat *syscall.Statfs_t) error {
-		calls++
-		*stat = syscall.Statfs_t{Bsize: 4096, Bavail: 4096 * MB / 4096}
-		if calls == 1 {
-			stat.Bavail = 512 * MB / 4096
-		}
-		return nil
-	}
-	if removed, err := purgeLocalCaches(); err != nil || removed != 1 || existsDir(filepath.Join(store, "a@1.0.0")) || !existsDir(filepath.Join(store, "b@1.0.0")) {
-		t.Fatalf("purge = %d, %v, want the first old package removed only", removed, err)
+	if err := os.Chtimes(idle, old, old); err != nil {
+		t.Fatal(err)
 	}
 	for _, err := range []error{nil, syscall.EIO} {
+		diskStatfs = statfs(4096*MB, err)
+		if removed, purgeErr := purgeLocalCaches(); purgeErr != nil || removed != 0 || !existsDir(idle) {
+			t.Fatalf("purged a healthy or unknown filesystem (%v): %d, %v", err, removed, purgeErr)
+		}
+	}
+}
+
+func TestPurgeLocalCachesMaxSize(t *testing.T) {
+	oldConfig, oldStatfs := config, diskStatfs
+	t.Cleanup(func() { config, diskStatfs = oldConfig, oldStatfs })
+	// a healthy 100GB filesystem, the inodes are counted when files is set
+	var fsUsed uint64 = 51200 * MB
+	statfs := func(files, ffree uint64) func(string, *syscall.Statfs_t) error {
+		return func(_ string, stat *syscall.Statfs_t) error {
+			free := (102400*MB - fsUsed) / 4096
+			*stat = syscall.Statfs_t{Bsize: 4096, Blocks: 102400 * MB / 4096, Bfree: free, Bavail: free, Files: files, Ffree: ffree}
+			return nil
+		}
+	}
+	writePackage := func(name string, files int, size int, lastUse time.Time) {
+		dir := filepath.Join(DefaultNpmRC().StoreDir(), name)
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		for i := range files {
+			if err := os.WriteFile(filepath.Join(dir, strconv.Itoa(i)), make([]byte, size), 0644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := os.Chtimes(dir, lastUse, lastUse); err != nil {
+			t.Fatal(err)
+		}
+	}
+	now := time.Now()
+
+	t.Run("bytes", func(t *testing.T) {
+		config = &Config{WorkDir: t.TempDir(), NpmStoreMaxSize: "3MB"}
+		diskStatfs = statfs(0, 0)
+		// the least recently used package goes first, not the first by name
+		writePackage("a@1.0.0", 1, MB, now.Add(-3*time.Hour))
+		writePackage("b@1.0.0", 1, MB, now.Add(-30*time.Hour))
+		writePackage("c@1.0.0", 1, MB, now.Add(-2*time.Hour))
+		if removed, err := purgeLocalCaches(); err != nil || removed != 1 {
+			t.Fatalf("purge = %d, %v, want 1 removed", removed, err)
+		}
+		for name, want := range map[string]bool{"a@1.0.0": true, "b@1.0.0": false, "c@1.0.0": true} {
+			if existsDir(filepath.Join(DefaultNpmRC().StoreDir(), name)) != want {
+				t.Fatalf("%s kept = %v, want %v", name, !want, want)
+			}
+		}
+		// the writes of another cache on the filesystem push the estimate over the max size,
+		// it is checked by a scan after an hour, which finds the real usage
+		fsUsed += MB
+		u := cacheUsages[DefaultNpmRC().StoreDir()]
+		u.scanned = now
+		if removed, err := purgeLocalCaches(); err != nil || removed != 0 || u != cacheUsages[DefaultNpmRC().StoreDir()] {
+			t.Fatalf("purge within the hour = %d, %v, want no scan", removed, err)
+		}
+		u.scanned = now.Add(-2 * time.Hour)
+		if removed, err := purgeLocalCaches(); err != nil || removed != 0 || u == cacheUsages[DefaultNpmRC().StoreDir()] {
+			t.Fatalf("purge after the hour = %d, %v, want a scan and 0 removed", removed, err)
+		}
+		writePackage("d@1.0.0", 2, MB, now.Add(-30*time.Hour))
+		fsUsed += 2 * MB
+		cacheUsages[DefaultNpmRC().StoreDir()].scanned = now.Add(-2 * time.Hour)
+		if removed, err := purgeLocalCaches(); err != nil || removed != 1 || existsDir(filepath.Join(DefaultNpmRC().StoreDir(), "d@1.0.0")) {
+			t.Fatalf("purge after the next scan = %d, %v, want d@1.0.0 removed", removed, err)
+		}
+	})
+
+	t.Run("inodes", func(t *testing.T) {
+		// 1% of 1000 inodes allows 10, and the package with many tiny files goes
+		config = &Config{WorkDir: t.TempDir(), NpmStoreMaxSize: "1%"}
+		diskStatfs = statfs(1000, 900)
+		writePackage("tiny@1.0.0", 20, 1, now.Add(-30*time.Hour))
+		writePackage("used@1.0.0", 1, 1, now.Add(-2*time.Hour))
+		if removed, err := purgeLocalCaches(); err != nil || removed != 1 || existsDir(filepath.Join(DefaultNpmRC().StoreDir(), "tiny@1.0.0")) || !existsDir(filepath.Join(DefaultNpmRC().StoreDir(), "used@1.0.0")) {
+			t.Fatalf("purge = %d, %v, want tiny@1.0.0 removed only", removed, err)
+		}
+	})
+
+	t.Run("low", func(t *testing.T) {
+		// 20% of 1000 inodes allows 200, the store has 4 packages of 31 inodes
+		config = &Config{WorkDir: t.TempDir(), NpmStoreMaxSize: "20%"}
+		diskStatfs = statfs(1000, 500)
+		store := DefaultNpmRC().StoreDir()
+		for i, name := range []string{"a@1.0.0", "b@1.0.0", "c@1.0.0", "d@1.0.0"} {
+			writePackage(name, 30, 1, now.Add(-time.Duration(40-i)*time.Hour))
+		}
+		if removed, err := purgeLocalCaches(); err != nil || removed != 0 {
+			t.Fatalf("purge = %d, %v, want 0 removed", removed, err)
+		}
+		// the other writers push the estimate over the max size, but the low filesystem needs 60 inodes only
+		diskStatfs = statfs(1000, 40)
+		if removed, err := purgeLocalCaches(); err != nil || removed != 2 || existsDir(filepath.Join(store, "b@1.0.0")) || !existsDir(filepath.Join(store, "c@1.0.0")) {
+			t.Fatalf("purge on a low filesystem = %d, %v, want a@1.0.0 and b@1.0.0 removed", removed, err)
+		}
+		// a package added after the scan is found by the next scan of the low filesystem
+		writePackage("e@1.0.0", 30, 1, now.Add(-50*time.Hour))
+		cacheUsages[store].scanned = now.Add(-10 * time.Minute)
+		if removed, err := purgeLocalCaches(); err != nil || removed != 2 || existsDir(filepath.Join(store, "e@1.0.0")) || !existsDir(filepath.Join(store, "d@1.0.0")) {
+			t.Fatalf("purge after the next scan = %d, %v, want e@1.0.0 and c@1.0.0 removed", removed, err)
+		}
+	})
+
+	t.Run("no block count", func(t *testing.T) {
+		config = &Config{WorkDir: t.TempDir(), NpmStoreMaxSize: "50%"}
 		diskStatfs = func(_ string, stat *syscall.Statfs_t) error {
 			*stat = syscall.Statfs_t{Bsize: 4096, Bavail: 4096 * MB / 4096}
-			return err
+			return nil
 		}
-		if removed, purgeErr := purgeLocalCaches(); purgeErr != nil || removed != 0 || !existsDir(filepath.Join(store, "b@1.0.0")) {
-			t.Fatalf("purged a healthy or unknown filesystem (%v): %d, %v", err, removed, purgeErr)
+		writePackage("a@1.0.0", 1, MB, now.Add(-30*time.Hour))
+		if removed, err := purgeLocalCaches(); err != nil || removed != 0 {
+			t.Fatalf("purge = %d, %v, want 0 removed", removed, err)
+		}
+	})
+
+	t.Run("separate filesystems", func(t *testing.T) {
+		config = &Config{WorkDir: t.TempDir(), NpmStoreMaxSize: "3MB"}
+		config.Storage = storage.StorageOptions{Type: "s3", CacheDir: t.TempDir(), CacheMaxSize: "2MB"}
+		var cacheUsed uint64
+		storeStatfs := statfs(0, 0)
+		diskStatfs = func(path string, stat *syscall.Statfs_t) error {
+			if !strings.HasPrefix(path, config.Storage.CacheDir) {
+				return storeStatfs(path, stat)
+			}
+			free := (102400*MB - cacheUsed) / 4096
+			*stat = syscall.Statfs_t{Bsize: 4096, Blocks: 102400 * MB / 4096, Bfree: free, Bavail: free}
+			*(*[2]int32)(unsafe.Pointer(&stat.Fsid)) = [2]int32{1, 1}
+			return nil
+		}
+		writePackage("a@1.0.0", 1, MB, now.Add(-30*time.Hour))
+		writePackage("b@1.0.0", 1, MB, now.Add(-30*time.Hour))
+		if removed, err := purgeLocalCaches(); err != nil || removed != 0 {
+			t.Fatalf("purge = %d, %v, want 0 removed", removed, err)
+		}
+		for i := range 4 {
+			name := filepath.Join(config.Storage.CacheDir, strconv.Itoa(i))
+			if err := os.WriteFile(name, make([]byte, MB), 0644); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Chtimes(name, now.Add(-time.Duration(40-i)*time.Hour), now.Add(-time.Duration(40-i)*time.Hour)); err != nil {
+				t.Fatal(err)
+			}
+		}
+		cacheUsed += 4 * MB
+		u := cacheUsages[DefaultNpmRC().StoreDir()]
+		u.scanned = now.Add(-2 * time.Hour)
+		cacheUsages[config.Storage.CacheDir].scanned = now.Add(-2 * time.Hour)
+		// the S3 cache evictions on its own filesystem leave the store estimate as is
+		if removed, err := purgeLocalCaches(); err != nil || removed != 3 || u != cacheUsages[DefaultNpmRC().StoreDir()] {
+			t.Fatalf("purge = %d, %v, want 3 S3 cache files removed and no store scan", removed, err)
+		}
+	})
+}
+
+func TestCacheShare(t *testing.T) {
+	for _, test := range []struct {
+		maxSize string
+		fsSize  uint64
+		share   float64
+		ok      bool
+	}{
+		{"50%", 0, 0.5, true},
+		{"12.5%", 100, 0.125, true},
+		{"100GB", 1000 * 1024 * MB, 0.1, true},
+		{"2TB", 1024 * 1024 * MB, 1, true},
+		{"", 100, 0, false},
+		{"0%", 100, 0, false},
+		{"101%", 100, 0, false},
+		{"0GB", 100, 0, false},
+		{"lots", 100, 0, false},
+	} {
+		share, err := cacheShare(test.maxSize, test.fsSize)
+		if (err == nil) != test.ok || share != test.share {
+			t.Fatalf("cacheShare(%q) = %v, %v, want %v", test.maxSize, share, err, test.share)
 		}
 	}
 }
