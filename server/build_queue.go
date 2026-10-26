@@ -182,6 +182,7 @@ func (q *BuildQueue) run(task *buildTask) {
 	ctx, cancel := context.WithTimeout(context.WithValue(context.Background(), buildQueueKey{}, q), q.timeout)
 	defer cancel()
 	task.meta, task.err = task.ctx.Build(ctx)
+	purgeOnNoSpace(task.err)
 	if errors.Is(task.err, context.DeadlineExceeded) {
 		task.err = fmt.Errorf("build timeout after %d seconds", q.timeout/time.Second)
 	}

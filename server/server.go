@@ -79,21 +79,26 @@ func Start() {
 	if err != nil {
 		logger.Fatalf("failed to initialize negative cache: %v", err)
 	}
-	negativeCache.gc(time.Now())
+	go negativeCache.gc(time.Now())
 
 	// the default transport keeps only 2 idle connections per host, too few for parallel registry fetches
 	http.DefaultTransport.(*http.Transport).MaxIdleConnsPerHost = 64
 
-	// remove the dirs left behind by installs and purges interrupted by a crash or restart
-	for _, pattern := range []string{".install-*", ".purge-*"} {
-		if dirs, err := filepath.Glob(filepath.Join(DefaultNpmRC().StoreDir(), pattern)); err == nil {
-			for _, dir := range dirs {
-				os.RemoveAll(dir)
+	startTime := time.Now()
+	go func() {
+		// remove the dirs left behind by installs and purges interrupted by a crash or restart
+		// [warning] in the background, globbing a big npm store delays the start, so keep the installs started since
+		purgeLock.Lock()
+		for _, pattern := range []string{".install-*", ".purge-*"} {
+			if dirs, err := filepath.Glob(filepath.Join(DefaultNpmRC().StoreDir(), pattern)); err == nil {
+				for _, dir := range dirs {
+					if fi, err := os.Lstat(dir); err == nil && fi.ModTime().Before(startTime) {
+						os.RemoveAll(dir)
+					}
+				}
 			}
 		}
-	}
-
-	go func() {
+		purgeLock.Unlock()
 		// left behind by older versions that moved the npm store away before removing it
 		os.RemoveAll(filepath.Join(config.WorkDir, "npm_old"))
 		ticker := time.NewTicker(time.Minute)
@@ -101,12 +106,15 @@ func Start() {
 		for {
 			removed, err := purgeLocalCaches()
 			if removed > 0 {
-				logger.Infof("purged %d least recently used local cache entries", removed)
+				logger.Warnf("purged %d unused local cache entries because disk space or inodes were low", removed)
 			}
 			if err != nil {
 				logger.Errorf("local cache purge: %v", err)
 			}
-			<-ticker.C
+			select {
+			case <-ticker.C:
+			case <-purgeNow:
+			}
 		}
 	}()
 
@@ -171,7 +179,9 @@ func Start() {
 	signal.Notify(c, syscall.SIGTERM, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGHUP, syscall.SIGABRT)
 	select {
 	case <-c:
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		// [warning] the listeners are closed while it waits, and a build wait takes up to `buildWaitTime`,
+		// so a long grace keeps the server down that long on every deploy
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		var wg sync.WaitGroup
 		wg.Go(func() { httpServer.Shutdown(ctx) })
 		if httpsServer != nil {

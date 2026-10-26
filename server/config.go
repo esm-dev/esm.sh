@@ -49,7 +49,6 @@ type Config struct {
 	NpmPassword         string                       `json:"npmPassword"`
 	NpmScopedRegistries map[string]NpmRegistryConfig `json:"npmScopedRegistries"`
 	NpmQueryCacheTTL    uint32                       `json:"npmQueryCacheTTL"`
-	NpmStoreMaxSize     string                       `json:"npmStoreMaxSize"`
 	PurgeAPI            PurgeAPIConfig               `json:"purgeAPI"`
 	MinifyRaw           json.RawMessage              `json:"minify"`
 	SourceMapRaw        json.RawMessage              `json:"sourceMap"`
@@ -286,17 +285,6 @@ func normalizeConfig(config *Config) {
 			if i, err := strconv.ParseUint(v, 10, 32); err == nil {
 				config.NpmQueryCacheTTL = uint32(i)
 			}
-		}
-	}
-	for _, opt := range []struct {
-		value    *string
-		fallback string
-	}{{&config.NpmStoreMaxSize, "50%"}, {&config.Storage.CacheMaxSize, "20%"}} {
-		if _, err := cacheShare(*opt.value, 0); err != nil {
-			if *opt.value != "" {
-				fmt.Println(term.Red("[error] " + err.Error()))
-			}
-			*opt.value = opt.fallback
 		}
 	}
 	for _, rules := range [][]string{config.AllowList.Packages, config.AllowList.Scopes, config.BanList.Packages} {
