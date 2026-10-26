@@ -1,5 +1,12 @@
 # Server Changelog
 
+## v140_1
+
+* Add `npmStoreMaxSize` and `storage.cacheMaxSize` options to limit the size of local caches. (#1492)
+* Fix automatic cache purging on low disk space and inodes, and retry installs once on `ENOSPC`. (#1483, #1492)
+* Remove abandoned build tasks from the queue and honor cancellation during analysis and module resolution. (#1491)
+* Fix build queue stalls caused by builds waiting for the splitting analysis of other builds. (#1493)
+
 ## v140
 
 * Add one-day `stale-if-error` and `stale-while-revalidate` cache windows for package responses and floating versions. (#1426, #1428, #1429)
