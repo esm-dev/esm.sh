@@ -134,3 +134,43 @@ func TestAnalyzeSplittingCacheKey(t *testing.T) {
 		}
 	}
 }
+
+func TestAnalyzeSplittingCodeError(t *testing.T) {
+	wd := t.TempDir()
+	pkgDir := filepath.Join(wd, "node_modules", "example")
+	if err := os.MkdirAll(pkgDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	for name, code := range map[string]string{
+		"a.js":      `export { value } from "./shared.js";`,
+		"b.js":      `export { value } from "./shared.js";`,
+		"c.js":      `export { default } from "./missing.py";`,
+		"shared.js": `export const value = 1;`,
+	} {
+		if err := os.WriteFile(filepath.Join(pkgDir, name), []byte(code), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	logger, err := log.New("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	logger.SetOutput(io.Discard)
+	ctx := &BuildContext{
+		wd: wd, target: "es2022", logger: logger, npmrc: &NpmRC{},
+		esmPath: EsmPath{PkgName: "example", PkgVersion: "1.0.0"},
+		pkgJson: &npm.PackageJSON{
+			Name: "example", Version: "1.0.0", Type: "module",
+			Exports: npm.NewJSONObject([]string{"./a", "./b", "./c"}, map[string]any{"./a": "./a.js", "./b": "./b.js", "./c": "./c.js"}),
+		},
+	}
+	// an export that fails with a code error must not block caching, or every build would redo the analysis
+	ctx.analyzeSplitting()
+	data, err := os.ReadFile(filepath.Join(wd, "splitting-v2-es2022.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "1\nshared.js" {
+		t.Fatalf("splitting = %q", data)
+	}
+}

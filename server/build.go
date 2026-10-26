@@ -36,6 +36,9 @@ const (
 	BundleFalse
 )
 
+// codeError is an esbuild error in the package code, so every build of the module fails with it.
+type codeError struct{ error }
+
 type BuildContext struct {
 	ctx         context.Context
 	npmrc       *NpmRC
@@ -1402,6 +1405,9 @@ REBUILD:
 					} else {
 						err = fmt.Errorf("could not resolve \"%s\"", name)
 					}
+					if e.PluginName == "" {
+						err = codeError{err}
+					}
 					return
 				}
 				if !implicitExternal.Has(name) {
@@ -1432,6 +1438,9 @@ REBUILD:
 			goto REBUILD
 		}
 		err = errors.New("esbuild: " + res.Errors[0].Text)
+		if res.Errors[0].PluginName == "" {
+			err = codeError{err}
+		}
 		return
 	}
 

@@ -452,3 +452,48 @@ func TestBuildQueueInstallTimeout(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildQueueRelease(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		q := NewBuildQueue(1, 0)
+		events := make(chan string, 3)
+		wake, finish := make(chan struct{}), make(chan struct{})
+		var waiting *BuildContext
+		waiting = newBuildQueueTestContext("/"+t.Name()+"/waiting", func() (*BuildMeta, error) {
+			q := waiting.Context().Value(buildQueueKey{}).(*BuildQueue)
+			q.release()
+			<-wake
+			q.acquire()
+			events <- "waiting"
+			return &BuildMeta{}, nil
+		})
+		running := newBuildQueueTestContext("/"+t.Name()+"/running", func() (*BuildMeta, error) {
+			events <- "running"
+			<-finish
+			return &BuildMeta{}, nil
+		})
+		pending := newBuildQueueTestContext("/"+t.Name()+"/pending", func() (*BuildMeta, error) {
+			events <- "pending"
+			return &BuildMeta{}, nil
+		})
+		for _, build := range []*BuildContext{waiting, running, pending} {
+			go q.Build(context.Background(), build)
+			synctest.Wait()
+		}
+		if len(events) != 1 {
+			t.Fatalf("got %d started builds, want the released slot to run one build", len(events))
+		}
+		close(wake)
+		synctest.Wait()
+		close(finish)
+		synctest.Wait()
+		for _, want := range []string{"running", "waiting", "pending"} {
+			if got := <-events; got != want {
+				t.Fatalf("got %q, want %q: a released build takes the next slot before the pending tasks", got, want)
+			}
+		}
+		if len(q.Snapshot()) != 0 {
+			t.Fatal("finished tasks remain in the queue")
+		}
+	})
+}
