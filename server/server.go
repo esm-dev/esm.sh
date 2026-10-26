@@ -1,7 +1,6 @@
 package server
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -12,7 +11,6 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 
@@ -179,16 +177,11 @@ func Start() {
 	signal.Notify(c, syscall.SIGTERM, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGHUP, syscall.SIGABRT)
 	select {
 	case <-c:
-		// [warning] the listeners are closed while it waits, and a build wait takes up to `buildWaitTime`,
-		// so a long grace keeps the server down that long on every deploy
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		var wg sync.WaitGroup
-		wg.Go(func() { httpServer.Shutdown(ctx) })
+		// [warning] drop the in-flight requests and builds, waiting for them keeps the server down on every restart
+		httpServer.Close()
 		if httpsServer != nil {
-			wg.Go(func() { httpsServer.Shutdown(ctx) })
+			httpsServer.Close()
 		}
-		wg.Wait()
-		cancel()
 	case err = <-errCh:
 		logger.Error(err)
 	}
