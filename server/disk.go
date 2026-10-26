@@ -3,20 +3,13 @@ package server
 import (
 	"crypto/rand"
 	"errors"
-	"fmt"
 	"io/fs"
-	"maps"
 	"os"
-	"path"
 	"path/filepath"
-	"slices"
-	"strconv"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
-
-	"github.com/ije/gox/utils"
 )
 
 type DiskStatus uint8
@@ -28,240 +21,116 @@ const (
 	DiskStatusFull
 )
 
-type usage struct{ bytes, inodes int64 }
-
-// cacheUsage is the usage of a local cache found by the last scan.
-type cacheUsage struct {
-	usage
-	// [warning] the changes after the scan are read from the filesystem, so the other writers on it count too
-	base    usage           // the used plus evicted space of the filesystem at the scan
-	hours   map[int64]usage // the usage of the evictable entries by the hour of their last use
-	scanned time.Time
-}
-
-type localCache struct{ dir, maxSize string }
-
 var (
-	purgeLock   sync.Mutex
-	diskStatfs  = syscall.Statfs
-	cacheUsages = map[string]*cacheUsage{}
-	evicted     = map[syscall.Fsid]usage{}
+	purgeLock  sync.Mutex
+	purgeNow   = make(chan struct{}, 1) // wakes the purge loop before its next tick
+	diskStatfs = syscall.Statfs
 )
 
-func localCaches() []localCache {
-	store := localCache{DefaultNpmRC().StoreDir(), config.NpmStoreMaxSize}
+// purgeOnNoSpace wakes the purge loop when err is a "no space left on device" error.
+func purgeOnNoSpace(err error) {
+	// [warning] match the message too, the errors of git, esbuild and the storage may not wrap the errno
+	if err != nil && (errors.Is(err, syscall.ENOSPC) || strings.Contains(err.Error(), "no space left on device")) {
+		select {
+		case purgeNow <- struct{}{}:
+		default:
+		}
+	}
+}
+
+func localCacheDirs() []string {
+	dirs := []string{DefaultNpmRC().StoreDir()}
 	if config.Storage.Type == "s3" && config.Storage.CacheDir != "" {
 		// [warning] never purge a cache dir holding the work dir, it would remove the negative cache, binaries and certs
 		cacheDir, err := filepath.Abs(config.Storage.CacheDir)
 		rel, _ := filepath.Rel(cacheDir, config.WorkDir)
 		if err == nil && (rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator))) {
-			// [warning] the S3 cache goes first on a low filesystem, a miss there costs one S3 read only
-			return []localCache{{cacheDir, config.Storage.CacheMaxSize}, store}
+			dirs = append(dirs, cacheDir)
 		}
 	}
-	return []localCache{store}
+	return dirs
 }
 
-// cacheShare returns the share of a filesystem that a cache may take, the max size is like "50%" or "500GB".
-func cacheShare(maxSize string, fsSize uint64) (float64, error) {
-	if s, ok := strings.CutSuffix(maxSize, "%"); ok {
-		if p, err := strconv.ParseFloat(s, 64); err == nil && p > 0 && p <= 100 {
-			return p / 100, nil
-		}
-	} else if n, err := utils.ParseBytes(maxSize); err == nil && n > 0 {
-		return min(float64(n)/float64(fsSize), 1), nil
-	}
-	return 0, fmt.Errorf("invalid cache max size %q", maxSize)
-}
-
-// purgeLocalCaches keeps the local caches below their max sizes and frees space on low filesystems,
-// the least recently used npm packages and the oldest S3 cache files go first.
-// It returns the number of removed entries.
+// purgeLocalCaches removes old npm packages and S3 cache files from the low filesystems until they have
+// twice the low limits free, and returns the number of removed entries.
 func purgeLocalCaches() (removed int, err error) {
 	purgeLock.Lock()
 	defer purgeLock.Unlock()
 	// [warning] keep the entries used within a build timeout, a running build may still read them
-	keepHour := time.Now().Add(-time.Duration(config.BuildTimeout)*time.Second-10*time.Minute).Unix() / 3600
+	keepTime := time.Now().Add(-time.Duration(config.BuildTimeout)*time.Second - 10*time.Minute)
 	storeDir := DefaultNpmRC().StoreDir()
-	for _, c := range localCaches() {
-		status, stat := diskStatus(c.dir)
-		if status == DiskStatusError {
+	for _, dir := range localCacheDirs() {
+		if status, _, _ := diskStatus(dir); status != DiskStatusLow && status != DiskStatusFull {
 			continue
 		}
-		fsSize := stat.Blocks * uint64(stat.Bsize)
-		share, shareErr := cacheShare(c.maxSize, fsSize)
-		if shareErr != nil {
-			err = errors.Join(err, shareErr)
-			continue
-		}
-		// [warning] the same share of the inodes too, a cache of tiny files runs out of inodes long before bytes
-		limit := usage{int64(share * float64(fsSize)), int64(share * float64(stat.Files))}
-		// [warning] the evictions of the other caches on the same filesystem must not lower the estimate
-		ev := evicted[stat.Fsid]
-		used := usage{int64(fsSize-stat.Bfree*uint64(stat.Bsize)) + ev.bytes, int64(stat.Files-stat.Ffree) + ev.inodes}
-		u := cacheUsages[c.dir]
-		var est usage
-		if u != nil {
-			est = usage{u.bytes + used.bytes - u.base.bytes, u.inodes + used.inodes - u.base.inodes}
-		}
-		low := status != DiskStatusOk
-		over := u != nil && (fsSize > 0 && est.bytes > limit.bytes || stat.Files > 0 && est.inodes > limit.inodes)
-		// [warning] the estimate counts the other writers too, check it by a scan, at most hourly,
-		// or every 10 minutes on a low filesystem to find the entries added after the last scan
-		rescan := u == nil || over && time.Since(u.scanned) >= time.Hour || low && time.Since(u.scanned) >= 10*time.Minute
-		if !rescan && !low {
-			continue
-		}
-		root, openErr := os.OpenRoot(c.dir)
+		root, openErr := os.OpenRoot(dir)
 		if openErr != nil {
 			if !os.IsNotExist(openErr) {
 				err = errors.Join(err, openErr)
 			}
 			continue
 		}
-		isStore := c.dir == storeDir
-		if rescan {
-			u = &cacheUsage{base: used, hours: map[int64]usage{}, scanned: time.Now()}
-			var unit string
-			var unitHour int64
-			walkErr := fs.WalkDir(root.FS(), ".", func(name string, d fs.DirEntry, walkErr error) error {
-				if walkErr != nil {
-					if !errors.Is(walkErr, fs.ErrNotExist) {
-						err = errors.Join(err, walkErr)
-					}
-					return nil
-				}
-				inUnit := unit != "" && strings.HasPrefix(name, unit)
-				isDir := d.IsDir()
-				// skip staging installs, generated loaders and temporary cache files
-				if !inUnit && name != "." && strings.HasPrefix(d.Name(), ".") {
-					if isDir {
-						return fs.SkipDir
-					}
-					return nil
-				}
-				info, infoErr := d.Info()
-				if infoErr != nil {
-					return nil
-				}
-				size := info.Size()
-				if st, ok := info.Sys().(*syscall.Stat_t); ok {
-					size = int64(st.Blocks) * 512
-				}
-				u.bytes += size
-				u.inodes++
-				hour := info.ModTime().Unix() / 3600
-				if inUnit {
-					hour = unitHour
-				} else {
-					unit = ""
-					// npm packages are evicted as a whole, the S3 cache file by file
-					if name == "." || isDir && (!isStore || strings.LastIndexByte(d.Name(), '@') <= 0) {
-						return nil
-					}
-					if isDir {
-						unit, unitHour = name+"/", hour
-					}
-				}
-				h := u.hours[hour]
-				u.hours[hour] = usage{h.bytes + size, h.inodes + 1}
+		walkErr := fs.WalkDir(root.FS(), ".", func(name string, d fs.DirEntry, walkErr error) error {
+			if walkErr != nil {
+				err = errors.Join(err, walkErr)
 				return nil
-			})
-			err = errors.Join(err, walkErr)
-			cacheUsages[c.dir] = u
-			est = u.usage
-		}
-		// evict to 90% of the max size, and until the filesystem has twice the low limits free
-		// [warning] the max size by a fresh scan only, the estimate may be inflated by the other writers
-		var need usage
-		if rescan && fsSize > 0 {
-			need.bytes = est.bytes - limit.bytes*9/10
-		}
-		if rescan && stat.Files > 0 {
-			need.inodes = est.inodes - limit.inodes*9/10
-		}
-		if low {
-			need.bytes = max(need.bytes, 2048*MB-int64(stat.Bavail*uint64(stat.Bsize)))
-			need.inodes = max(need.inodes, int64(stat.Files/10)-int64(stat.Ffree))
-		}
-		var cutoff int64
-		var freed usage
-		for _, hour := range slices.Sorted(maps.Keys(u.hours)) {
-			if hour >= keepHour || freed.bytes >= need.bytes && freed.inodes >= need.inodes {
-				break
 			}
-			freed.bytes += u.hours[hour].bytes
-			freed.inodes += u.hours[hour].inodes
-			delete(u.hours, hour)
-			cutoff = hour + 1
-		}
-		if cutoff > 0 {
-			walkErr := fs.WalkDir(root.FS(), ".", func(name string, d fs.DirEntry, walkErr error) error {
-				if walkErr != nil {
-					if !errors.Is(walkErr, fs.ErrNotExist) {
-						err = errors.Join(err, walkErr)
-					}
-					return nil
-				}
-				if name == "." {
-					return nil
-				}
-				isDir := d.IsDir()
-				if strings.HasPrefix(d.Name(), ".") {
-					if isDir {
-						return fs.SkipDir
-					}
-					return nil
-				}
-				if isDir && (!isStore || strings.LastIndexByte(d.Name(), '@') <= 0) {
-					return nil
-				}
-				if info, infoErr := d.Info(); infoErr == nil && info.ModTime().Unix()/3600 < cutoff {
-					target := name
-					// [warning] move the package away first, an install must not see a partly removed package
-					if isDir {
-						tmp := ".purge-" + rand.Text()
-						if root.Rename(name, tmp) == nil {
-							target = tmp
-						}
-					}
-					if removeErr := root.RemoveAll(target); removeErr != nil {
-						err = errors.Join(err, removeErr)
-					} else {
-						removed++
-						// [warning] only the S3 cache dirs, an install may be moving a package into an empty scope dir
-						for dir := path.Dir(name); !isStore && dir != "." && root.Remove(dir) == nil; dir = path.Dir(dir) {
-						}
-					}
-				}
+			if name == "." {
+				return nil
+			}
+			isDir := d.IsDir()
+			// skip staging installs, generated loaders and temporary cache files
+			if strings.HasPrefix(d.Name(), ".") {
 				if isDir {
 					return fs.SkipDir
 				}
 				return nil
-			})
-			err = errors.Join(err, walkErr)
-			u.bytes -= freed.bytes
-			u.inodes -= freed.inodes
-			evicted[stat.Fsid] = usage{ev.bytes + freed.bytes, ev.inodes + freed.inodes}
-		}
-		err = errors.Join(err, root.Close())
+			}
+			// npm packages are removed as a whole, the S3 cache file by file
+			if isDir && (dir != storeDir || strings.LastIndexByte(d.Name(), '@') <= 0) {
+				return nil
+			}
+			if info, infoErr := d.Info(); infoErr == nil && info.ModTime().Before(keepTime) {
+				// [warning] move the package away first, an install must not see a partly removed package
+				if dir == storeDir {
+					tmp := ".purge-" + rand.Text()
+					if root.Rename(name, tmp) == nil {
+						name = tmp
+					}
+				}
+				if removeErr := root.RemoveAll(name); removeErr != nil {
+					err = errors.Join(err, removeErr)
+				} else {
+					removed++
+				}
+				if _, avail, inodes := diskStatus(dir); avail >= 20*GB && inodes >= 0.1 {
+					return fs.SkipAll
+				}
+			}
+			if isDir {
+				return fs.SkipDir
+			}
+			return nil
+		})
+		err = errors.Join(err, walkErr, root.Close())
 	}
 	return
 }
 
 func checkDiskStatus() DiskStatus {
 	status := DiskStatusOk
-	for _, c := range localCaches() {
+	for _, dir := range localCacheDirs() {
 		// the worst status wins, an error only replaces ok
-		if s, _ := diskStatus(c.dir); s != DiskStatusOk && (status == DiskStatusOk || s > status) {
+		if s, _, _ := diskStatus(dir); s != DiskStatusOk && (status == DiskStatusOk || s > status) {
 			status = s
 		}
 	}
 	return status
 }
 
-// diskStatus returns the status and the stats of the filesystem holding dir.
-func diskStatus(dir string) (status DiskStatus, stat syscall.Statfs_t) {
+// diskStatus returns the status, the available bytes and the free inode ratio of the filesystem holding dir.
+func diskStatus(dir string) (status DiskStatus, avail uint64, inodes float64) {
+	var stat syscall.Statfs_t
 	var err error
 	for {
 		err = diskStatfs(dir, &stat)
@@ -272,16 +141,16 @@ func diskStatus(dir string) (status DiskStatus, stat syscall.Statfs_t) {
 		dir = parent
 	}
 	if err != nil {
-		return DiskStatusError, stat
+		return DiskStatusError, 0, 0
 	}
-	avail, inodes := stat.Bavail*uint64(stat.Bsize), 1.0
+	avail, inodes = stat.Bavail*uint64(stat.Bsize), 1
 	if stat.Files > 0 {
 		inodes = float64(stat.Ffree) / float64(stat.Files)
 	}
 	switch {
 	case avail < 100*MB || inodes < 0.01:
 		status = DiskStatusFull
-	case avail < 1024*MB || inodes < 0.05:
+	case avail < 10*GB || inodes < 0.05:
 		status = DiskStatusLow
 	default:
 		status = DiskStatusOk

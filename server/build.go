@@ -140,6 +140,23 @@ func (ctx *BuildContext) checkCanceled() error {
 	return ctx.Context().Err()
 }
 
+// waitLock waits until no other build holds the install lock of key, and frees the build slot meanwhile.
+func (ctx *BuildContext) waitLock(key string) {
+	// [warning] a build waiting for the install or analysis of another build is idle,
+	// holding its slot would let the waiters of a slow one fill the build queue
+	q, _ := ctx.Context().Value(buildQueueKey{}).(*BuildQueue)
+	active, ok := installLocks.Load(key)
+	if q == nil || !ok {
+		return
+	}
+	q.release()
+	select {
+	case <-active.(chan struct{}):
+	case <-ctx.Context().Done():
+	}
+	q.acquire()
+}
+
 func (ctx *BuildContext) Build(buildCtx context.Context) (meta *BuildMeta, err error) {
 	if buildCtx == nil {
 		buildCtx = context.Background()
@@ -184,15 +201,18 @@ func (ctx *BuildContext) Build(buildCtx context.Context) (meta *BuildMeta, err e
 
 	// install the package
 	ctx.status.Store("install")
+	prevPath := ctx.Path()
 	err = ctx.install()
 	if err != nil {
 		return
 	}
 
-	// check previous build again after installation (in case the sub-module path has been changed by the `install` function)
-	meta, ok, err = ctx.Exists()
-	if err != nil || ok {
-		return
+	// check previous build again if the sub-module path has been changed by the `install` function
+	if ctx.Path() != prevPath {
+		meta, ok, err = ctx.Exists()
+		if err != nil || ok {
+			return
+		}
 	}
 	if err = ctx.checkCanceled(); err != nil {
 		return
@@ -1898,7 +1918,9 @@ func (ctx *BuildContext) buildTypes() (ret *BuildMeta, err error) {
 
 func (ctx *BuildContext) install() (err error) {
 	if ctx.wd == "" || ctx.pkgJson == nil {
-		p, err := ctx.npmrc.installPackageContext(ctx.Context(), ctx.esmPath.Package())
+		pkg := ctx.esmPath.Package()
+		ctx.waitLock(pkg.String())
+		p, err := ctx.npmrc.installPackageContext(ctx.Context(), pkg)
 		if err != nil {
 			return err
 		}

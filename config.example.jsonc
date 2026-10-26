@@ -64,10 +64,7 @@
     // s3 storage secret access key.
     "secretAccessKey": "",
     // cache files on local file system for s3 storage, default is disabled.
-    "cacheDir": "",
-    // max size of the s3 cache, as a share of its disk like "20%" or a size like "100GB", default is "20%".
-    // The oldest files are removed when the cache goes over it.
-    "cacheMaxSize": "20%"
+    "cacheDir": ""
   },
 
   // The custom landing page options, default is empty.
@@ -97,10 +94,6 @@
 
   // The cache TTL for npm packages query, default is 600 seconds (10 minutes).
   "npmQueryCacheTTL": 600,
-
-  // Max size of the npm store in the work directory, as a share of its disk like "50%" or a size like "500GB", default is "50%".
-  // The least recently used packages are removed when the store goes over it, or over the same share of the inodes.
-  "npmStoreMaxSize": "50%",
 
   // Cache purge API configuration.
   "purgeAPI": {
