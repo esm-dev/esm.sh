@@ -447,7 +447,7 @@ func TestBuildQueueRelease(t *testing.T) {
 		wake, finish := make(chan struct{}), make(chan struct{})
 		var waiting *BuildContext
 		waiting = newBuildQueueTestContext("/"+t.Name()+"/waiting", func() (*BuildMeta, error) {
-			q := waiting.Context().Value(buildQueueKey{}).(*BuildQueue)
+			q := waiting.Context().Value(buildTaskKey{}).(*buildTask).queue
 			q.release()
 			<-wake
 			q.acquire()
@@ -481,6 +481,183 @@ func TestBuildQueueRelease(t *testing.T) {
 		}
 		if len(q.Snapshot()) != 0 {
 			t.Fatal("finished tasks remain in the queue")
+		}
+	})
+}
+
+func TestBuildQueueWaitLock(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		q := NewBuildQueue(2, time.Minute)
+		key := "/" + t.Name() + "/lock"
+		unlock, err := lockInstall(context.Background(), key)
+		if err != nil {
+			t.Fatal(err)
+		}
+		events := make(chan string, 2)
+		finish, stop := make(chan struct{}), make(chan struct{})
+		var waiting *BuildContext
+		waiting = newBuildQueueTestContext("/"+t.Name()+"/waiting", func() (*BuildMeta, error) {
+			waiting.waitLock(key)
+			unlock, err := lockInstall(waiting.Context(), key)
+			if err != nil {
+				return nil, err
+			}
+			unlock()
+			events <- "waiting"
+			return &BuildMeta{}, nil
+		})
+		running := newBuildQueueTestContext("/"+t.Name()+"/running", func() (*BuildMeta, error) {
+			<-finish
+			return &BuildMeta{}, nil
+		})
+		blocking := newBuildQueueTestContext("/"+t.Name()+"/blocking", func() (*BuildMeta, error) {
+			<-stop
+			return &BuildMeta{}, nil
+		})
+		pending := newBuildQueueTestContext("/"+t.Name()+"/pending", func() (*BuildMeta, error) {
+			events <- "pending"
+			return &BuildMeta{}, nil
+		})
+		for _, build := range []*BuildContext{waiting, running, blocking, pending} {
+			go q.Build(context.Background(), build)
+			synctest.Wait()
+		}
+		// the lock is taken by another holder before the waiting build gets its slot back
+		unlock()
+		synctest.Wait()
+		unlock, err = lockInstall(context.Background(), key)
+		if err != nil {
+			t.Fatal(err)
+		}
+		close(finish)
+		synctest.Wait()
+		if len(events) != 1 || <-events != "pending" {
+			t.Fatal("a build waiting for the next holder of the lock kept its slot")
+		}
+		unlock()
+		synctest.Wait()
+		if len(events) != 1 || <-events != "waiting" {
+			t.Fatal("the waiting build did not take the lock")
+		}
+		close(stop)
+		synctest.Wait()
+		if len(q.Snapshot()) != 0 || q.running != 0 {
+			t.Fatalf("queue did not drain: %+v", q.Snapshot())
+		}
+	})
+}
+
+func TestBuildQueueYield(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		q := NewBuildQueue(1, 10*time.Minute)
+		events := make(chan string, 3)
+		expect := func(want ...string) {
+			t.Helper()
+			for _, w := range want {
+				if got := <-events; got != w {
+					t.Fatalf("got %q, want %q", got, w)
+				}
+			}
+		}
+		newBuild := func(name string, run func()) *BuildContext {
+			return newBuildQueueTestContext("/"+t.Name()+"/"+name, func() (*BuildMeta, error) {
+				run()
+				events <- name
+				return &BuildMeta{}, nil
+			})
+		}
+
+		// a build with a waiting client keeps its slot for a minute, then moves behind the pending builds,
+		// and keeps the slot it takes back for another minute
+		step, resumed := make(chan struct{}), make(chan struct{})
+		var slow *BuildContext
+		slow = newBuild("slow", func() {
+			<-step
+			slow.yield()
+			events <- "slow kept"
+			time.Sleep(time.Minute)
+			slow.yield()
+			events <- "slow resumed"
+			<-resumed
+			slow.yield()
+		})
+		go q.Build(context.Background(), slow)
+		synctest.Wait()
+		go q.Build(context.Background(), newBuild("pending", func() {}))
+		synctest.Wait()
+		close(step)
+		expect("slow kept", "pending", "slow resumed")
+		go q.Build(context.Background(), newBuild("next", func() {}))
+		synctest.Wait()
+		close(resumed)
+		expect("slow", "next")
+
+		// a build no client waits for yields at once, then keeps its slot for a minute
+		step, resumed = make(chan struct{}), make(chan struct{})
+		var abandoned *BuildContext
+		abandoned = newBuild("abandoned", func() {
+			<-step
+			abandoned.yield()
+			events <- "abandoned resumed"
+			<-resumed
+			abandoned.yield()
+		})
+		ctx, cancel := context.WithCancel(context.Background())
+		go q.Build(ctx, abandoned)
+		synctest.Wait()
+		go q.Build(context.Background(), newBuild("pending", func() {}))
+		synctest.Wait()
+		cancel()
+		synctest.Wait()
+		close(step)
+		expect("pending", "abandoned resumed")
+		go q.Build(context.Background(), newBuild("next", func() {}))
+		synctest.Wait()
+		close(resumed)
+		expect("abandoned", "next")
+		synctest.Wait()
+		if len(q.Snapshot()) != 0 || q.running != 0 {
+			t.Fatalf("queue did not drain: %+v", q.Snapshot())
+		}
+	})
+}
+
+func TestBuildQueueYieldTimeout(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		q := NewBuildQueue(1, time.Minute)
+		step, stop := make(chan struct{}), make(chan struct{})
+		done := make(chan error, 1)
+		var yielded *BuildContext
+		yielded = newBuildQueueTestContext("/"+t.Name()+"/yielded", func() (*BuildMeta, error) {
+			<-step
+			err := yielded.yield()
+			done <- err
+			return nil, err
+		})
+		blocking := newBuildQueueTestContext("/"+t.Name()+"/blocking", func() (*BuildMeta, error) {
+			<-stop
+			return &BuildMeta{}, nil
+		})
+		ctx, cancel := context.WithCancel(context.Background())
+		go q.Build(ctx, yielded)
+		synctest.Wait()
+		go q.Build(context.Background(), blocking)
+		synctest.Wait()
+		cancel()
+		synctest.Wait()
+		close(step)
+		// a yielded build leaves the pending tasks at its deadline, without taking the slot of the running build
+		if err := <-done; !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("expected deadline exceeded, got %v", err)
+		}
+		synctest.Wait()
+		if len(q.Snapshot()) != 1 || q.running != 1 {
+			t.Fatalf("the timed out build remains in the queue: running=%d, %+v", q.running, q.Snapshot())
+		}
+		close(stop)
+		synctest.Wait()
+		if len(q.Snapshot()) != 0 || q.running != 0 {
+			t.Fatalf("queue did not drain: %+v", q.Snapshot())
 		}
 	})
 }

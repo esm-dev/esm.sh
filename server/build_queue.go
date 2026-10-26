@@ -11,6 +11,7 @@ import (
 )
 
 // BuildQueue runs builds in FIFO order, sharing results for the same requested path.
+// A slow build yields its slot and moves behind the pending builds.
 type BuildQueue struct {
 	lock        sync.Mutex
 	tasks       map[string]*buildTask
@@ -22,19 +23,22 @@ type BuildQueue struct {
 }
 
 type buildTask struct {
+	queue       *BuildQueue
 	ctx         *BuildContext
 	path        string // the queue key stays fixed when installation changes ctx.Path()
 	done        chan struct{}
+	resume      chan struct{} // closed when the yielded task takes a slot back
 	meta        *BuildMeta
 	err         error
 	waitClients int
 	createdAt   time.Time
 	startedAt   time.Time
+	slotAt      time.Time // when the task took its current slot
 	elem        *list.Element
 }
 
-// buildQueueKey is the context key of the queue running a build.
-type buildQueueKey struct{}
+// buildTaskKey is the context key of a running build task.
+type buildTaskKey struct{}
 
 func NewBuildQueue(concurrency int, timeout time.Duration) *BuildQueue {
 	if concurrency <= 0 {
@@ -66,6 +70,7 @@ func (q *BuildQueue) Build(ctx context.Context, build *BuildContext) (*BuildMeta
 	task := q.tasks[path]
 	if task == nil {
 		task = &buildTask{
+			queue:     q,
 			ctx:       build,
 			path:      path,
 			done:      make(chan struct{}),
@@ -142,7 +147,38 @@ func (q *BuildQueue) acquire() {
 	<-resume
 }
 
-// scheduleLocked resumes released builds, then starts pending tasks while capacity is available.
+// yield moves a running task behind the pending tasks after it holds its slot for a minute,
+// or once if no client waits for it.
+func (q *BuildQueue) yield(task *buildTask) {
+	q.lock.Lock()
+	if q.pending.Len() == 0 || (time.Since(task.slotAt) < time.Minute && (task.waitClients > 0 || task.resume != nil)) {
+		q.lock.Unlock()
+		return
+	}
+	resume := make(chan struct{})
+	task.resume = resume
+	task.elem = q.pending.PushBack(task)
+	q.running--
+	q.scheduleLocked()
+	status := task.ctx.status.Swap("pending")
+	q.lock.Unlock()
+	select {
+	case <-resume:
+	case <-task.ctx.Context().Done():
+		q.lock.Lock()
+		select {
+		case <-resume:
+		default:
+			// [warning] take the slot back, the canceled build exits and its run frees the slot
+			q.pending.Remove(task.elem)
+			q.running++
+		}
+		q.lock.Unlock()
+	}
+	task.ctx.status.Store(status)
+}
+
+// scheduleLocked resumes released builds, then starts or resumes pending tasks while capacity is available.
 func (q *BuildQueue) scheduleLocked() {
 	for q.running < q.concurrency && len(q.resumes) > 0 {
 		close(q.resumes[0])
@@ -151,9 +187,14 @@ func (q *BuildQueue) scheduleLocked() {
 	}
 	for q.running < q.concurrency && q.pending.Len() > 0 {
 		task := q.pending.Remove(q.pending.Front()).(*buildTask)
-		task.startedAt = time.Now()
-		task.ctx.status.Store("build")
+		task.slotAt = time.Now()
 		q.running++
+		if task.resume != nil {
+			close(task.resume)
+			continue
+		}
+		task.startedAt = task.slotAt
+		task.ctx.status.Store("build")
 		go q.run(task)
 	}
 }
@@ -179,7 +220,7 @@ func (q *BuildQueue) run(task *buildTask) {
 		q.lock.Unlock()
 	}()
 
-	ctx, cancel := context.WithTimeout(context.WithValue(context.Background(), buildQueueKey{}, q), q.timeout)
+	ctx, cancel := context.WithTimeout(context.WithValue(context.Background(), buildTaskKey{}, task), q.timeout)
 	defer cancel()
 	task.meta, task.err = task.ctx.Build(ctx)
 	purgeOnNoSpace(task.err)

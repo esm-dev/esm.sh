@@ -139,7 +139,7 @@ func (ctx *BuildContext) analyzeSplitting() {
 
 		refs := map[string]Ref{}
 		for _, exportName := range exportNames.Values() {
-			if ctx.checkCanceled() != nil {
+			if ctx.yield() != nil {
 				return
 			}
 			esmPath := ctx.esmPath

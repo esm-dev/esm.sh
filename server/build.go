@@ -144,17 +144,33 @@ func (ctx *BuildContext) checkCanceled() error {
 func (ctx *BuildContext) waitLock(key string) {
 	// [warning] a build waiting for the install or analysis of another build is idle,
 	// holding its slot would let the waiters of a slow one fill the build queue
-	q, _ := ctx.Context().Value(buildQueueKey{}).(*BuildQueue)
-	active, ok := installLocks.Load(key)
-	if q == nil || !ok {
+	task, _ := ctx.Context().Value(buildTaskKey{}).(*buildTask)
+	if task == nil {
 		return
 	}
-	q.release()
-	select {
-	case <-active.(chan struct{}):
-	case <-ctx.Context().Done():
+	// [warning] the waiters wake up together and only one takes the lock, check again after taking the slot back,
+	// or the others wait for the next holder in their slots and the waiters of a busy package fill the build queue
+	for ctx.checkCanceled() == nil {
+		active, ok := installLocks.Load(key)
+		if !ok {
+			return
+		}
+		task.queue.release()
+		select {
+		case <-active.(chan struct{}):
+		case <-ctx.Context().Done():
+		}
+		task.queue.acquire()
 	}
-	q.acquire()
+}
+
+// yield moves the build behind the pending builds if it is slow, and returns the cancellation error.
+// [warning] call it from the build goroutine only, not from esbuild plugins, the task holds one slot
+func (ctx *BuildContext) yield() error {
+	if task, _ := ctx.Context().Value(buildTaskKey{}).(*buildTask); task != nil {
+		task.queue.yield(task)
+	}
+	return ctx.checkCanceled()
 }
 
 func (ctx *BuildContext) Build(buildCtx context.Context) (meta *BuildMeta, err error) {
@@ -214,7 +230,7 @@ func (ctx *BuildContext) Build(buildCtx context.Context) (meta *BuildMeta, err e
 			return
 		}
 	}
-	if err = ctx.checkCanceled(); err != nil {
+	if err = ctx.yield(); err != nil {
 		return
 	}
 
@@ -1890,7 +1906,7 @@ func (ctx *BuildContext) buildTypes() (ret *BuildMeta, err error) {
 	if err != nil {
 		return
 	}
-	if err = ctx.checkCanceled(); err != nil {
+	if err = ctx.yield(); err != nil {
 		return
 	}
 
