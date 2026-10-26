@@ -94,16 +94,8 @@ func (ctx *BuildContext) analyzeSplitting() {
 		}
 
 		// only one analyze process is allowed at the same time for the same package
-		// [warning] a waiting build frees its slot, or the waiters of a slow analysis would fill the build queue
-		q, _ := ctx.Context().Value(buildQueueKey{}).(*BuildQueue)
-		_, wait := installLocks.Load(splittingTxtPath)
-		if q != nil && wait {
-			q.release()
-		}
+		ctx.waitLock(splittingTxtPath)
 		unlock, err := lockInstall(ctx.Context(), splittingTxtPath)
-		if q != nil && wait {
-			q.acquire()
-		}
 		if err != nil {
 			return
 		}
