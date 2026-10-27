@@ -19,6 +19,7 @@ type StorageOptions struct {
 	AccessKeyID     string `json:"accessKeyID"`
 	SecretAccessKey string `json:"secretAccessKey"`
 	CacheDir        string `json:"cacheDir"`
+	MetaCacheFile   string `json:"-"`
 }
 
 type Storage interface {
