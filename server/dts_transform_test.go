@@ -32,20 +32,20 @@ type dtsTestStorage struct {
 	cancel       context.CancelFunc
 }
 
-func (s *dtsTestStorage) Stat(key string) (storage.Stat, error) {
+func (s *dtsTestStorage) StatContext(ctx context.Context, key string) (storage.Stat, error) {
 	s.mu.Lock()
 	s.active++
 	s.peak = max(s.peak, s.active)
 	s.mu.Unlock()
 	time.Sleep(s.delay)
-	stat, err := s.Storage.Stat(key)
+	stat, err := s.Storage.StatContext(ctx, key)
 	s.mu.Lock()
 	s.active--
 	s.mu.Unlock()
 	return stat, err
 }
 
-func (s *dtsTestStorage) Put(key string, content io.Reader) error {
+func (s *dtsTestStorage) PutContext(ctx context.Context, key string, content io.Reader) error {
 	s.mu.Lock()
 	s.active++
 	s.peak = max(s.peak, s.active)
@@ -62,7 +62,7 @@ func (s *dtsTestStorage) Put(key string, content io.Reader) error {
 			}
 		}
 		if err == nil {
-			err = s.Storage.Put(key, content)
+			err = s.Storage.PutContext(ctx, key, content)
 		}
 	}
 	if s.cancel != nil {

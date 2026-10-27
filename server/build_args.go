@@ -125,7 +125,7 @@ func encodeBuildArgs(args BuildArgs, isDts bool) string {
 }
 
 // resolveBuildArgs resolves `alias`, `deps`, `external` of the build args
-func resolveBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esm EsmPath) error {
+func resolveBuildArgs(ctx context.Context, npmrc *NpmRC, installDir string, args *BuildArgs, esm EsmPath) error {
 	if len(args.Alias) > 0 || len(args.Deps) > 0 || args.External.Len() > 0 {
 		// quick check if the alias, deps, external are all in dependencies of the package
 		deps, ok, err := func() (deps *set.Set[string], ok bool, err error) {
@@ -138,9 +138,9 @@ func resolveBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esm EsmP
 					p = raw.ToNpmPackage()
 				}
 			} else if esm.GhPrefix || esm.PrPrefix {
-				p, err = npmrc.installPackage(esm.Package())
+				p, err = npmrc.installPackageContext(ctx, esm.Package())
 			} else {
-				p, err = npmrc.getPackageInfo(esm.PkgName, esm.PkgVersion)
+				p, err = npmrc.getPackageInfoContext(ctx, esm.PkgName, esm.PkgVersion)
 			}
 			if err != nil {
 				return
@@ -184,7 +184,7 @@ func resolveBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esm EsmP
 		}
 		if !ok {
 			deps = set.New[string]()
-			err = walkDeps(npmrc, installDir, esm.Package(), args.Deps, deps)
+			err = walkDeps(ctx, npmrc, installDir, esm.Package(), args.Deps, deps)
 			if err != nil {
 				return err
 			}
@@ -257,7 +257,7 @@ func resolveBuildArgs(npmrc *NpmRC, installDir string, args *BuildArgs, esm EsmP
 	return nil
 }
 
-func walkDeps(npmrc *NpmRC, installDir string, pkg npm.Package, overrides map[string]string, mark *set.Set[string]) (err error) {
+func walkDeps(ctx context.Context, npmrc *NpmRC, installDir string, pkg npm.Package, overrides map[string]string, mark *set.Set[string]) (err error) {
 	if mark.Has(pkg.Name) {
 		return
 	}
@@ -273,13 +273,13 @@ func walkDeps(npmrc *NpmRC, installDir string, pkg npm.Package, overrides map[st
 	} else if pkg.Github || pkg.PkgPrNew {
 		// a gh ref (branch, tag or semver range) must be pinned to a commit before installing
 		if pkg.Github {
-			err = pinGhDependency(context.Background(), &pkg)
+			err = pinGhDependency(ctx, &pkg)
 		}
 		if err == nil {
-			p, err = npmrc.installPackage(pkg)
+			p, err = npmrc.installPackageContext(ctx, pkg)
 		}
 	} else {
-		p, err = npmrc.getPackageInfo(pkg.Name, pkg.Version)
+		p, err = npmrc.getPackageInfoContext(ctx, pkg.Name, pkg.Version)
 	}
 	if err != nil {
 		return
@@ -296,7 +296,7 @@ func walkDeps(npmrc *NpmRC, installDir string, pkg npm.Package, overrides map[st
 		if e == nil && p.Name != "" {
 			depPkg = p
 		}
-		err := walkDeps(npmrc, installDir, depPkg, overrides, mark)
+		err := walkDeps(ctx, npmrc, installDir, depPkg, overrides, mark)
 		if err != nil {
 			return err
 		}

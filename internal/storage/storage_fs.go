@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"crypto/rand"
 	"errors"
 	"io"
@@ -67,6 +68,13 @@ func (fs *fsStorage) Stat(key string) (stat Stat, err error) {
 	return fi, nil
 }
 
+func (fs *fsStorage) StatContext(ctx context.Context, key string) (stat Stat, err error) {
+	if err = ctx.Err(); err != nil {
+		return
+	}
+	return fs.Stat(key)
+}
+
 func (fs *fsStorage) Get(key string) (content io.ReadCloser, stat Stat, err error) {
 	filename, err := cleanKey(key)
 	if err != nil {
@@ -115,6 +123,13 @@ func (fs *fsStorage) Put(key string, content io.Reader) (err error) {
 		return err
 	}
 	return fs.root.Rename(tmpfile, filename)
+}
+
+func (fs *fsStorage) PutContext(ctx context.Context, key string, content io.Reader) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return fs.Put(key, content)
 }
 
 func (fs *fsStorage) Delete(key string) (err error) {
