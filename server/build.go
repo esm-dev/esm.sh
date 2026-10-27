@@ -361,7 +361,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 		buffer := &bytes.Buffer{}
 		buffer.WriteString("export default ")
 		buffer.Write(jsonData)
-		err = ctx.storage.Put(ctx.getSavePath(), buffer)
+		err = ctx.storage.PutContext(ctx.Context(), ctx.getSavePath(), buffer)
 		if err != nil {
 			ctx.logger.Errorf("storage.put(%s): %v", ctx.getSavePath(), err)
 			err = errors.New("storage(put): " + err.Error())
@@ -417,7 +417,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 		if meta.ExportDefault {
 			fmt.Fprintf(buf, `export { default } from "%s";`, importUrl)
 		}
-		err = ctx.storage.Put(ctx.getSavePath(), buf)
+		err = ctx.storage.PutContext(ctx.Context(), ctx.getSavePath(), buf)
 		if err != nil {
 			ctx.logger.Errorf("storage.put(%s): %v", ctx.getSavePath(), err)
 			err = errors.New("storage(put): " + err.Error())
@@ -1814,7 +1814,7 @@ REBUILD:
 			}
 
 			var stat storage.Stat
-			stat, err = ctx.storage.Stat(ctx.getSavePath())
+			stat, err = ctx.storage.StatContext(ctx.Context(), ctx.getSavePath())
 			if err == nil && stat.Size() > 0 {
 				ctx.logger.Infof("build(%s): file already exists in the storage, skip it", ctx.Path())
 				continue
@@ -1825,7 +1825,7 @@ REBUILD:
 				return
 			}
 			sha := sha512.New384()
-			err = ctx.storage.Put(ctx.getSavePath(), storage.TeeReader(finalJS, sha))
+			err = ctx.storage.PutContext(ctx.Context(), ctx.getSavePath(), storage.TeeReader(finalJS, sha))
 			if err != nil {
 				ctx.logger.Errorf("storage.put(%s): %v", ctx.getSavePath(), err)
 				err = errors.New("storage(put): " + err.Error())
@@ -1839,7 +1839,7 @@ REBUILD:
 		if strings.HasSuffix(file.Path, ".css") {
 			savePath := ctx.getSavePath()
 			savePath = strings.TrimSuffix(savePath, path.Ext(savePath)) + ".css"
-			err = ctx.storage.Put(savePath, bytes.NewReader(file.Contents))
+			err = ctx.storage.PutContext(ctx.Context(), savePath, bytes.NewReader(file.Contents))
 			if err != nil {
 				ctx.logger.Errorf("storage.put(%s): %v", savePath, err)
 				err = errors.New("storage(put): " + err.Error())
@@ -1859,7 +1859,7 @@ REBUILD:
 				}
 				buf := &bytes.Buffer{}
 				if json.NewEncoder(buf).Encode(sourceMap) == nil {
-					err = ctx.storage.Put(ctx.getSavePath()+".map", buf)
+					err = ctx.storage.PutContext(ctx.Context(), ctx.getSavePath()+".map", buf)
 					if err != nil {
 						ctx.logger.Errorf("storage.put(%s): %v", ctx.getSavePath()+".map", err)
 						err = errors.New("storage(put): " + err.Error())

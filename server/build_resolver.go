@@ -1029,7 +1029,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 			External:   ctx.args.External,
 			Conditions: ctx.args.Conditions,
 		}
-		err = resolveBuildArgs(ctx.npmrc, ctx.wd, &args, dep)
+		err = resolveBuildArgs(ctx.Context(), ctx.npmrc, ctx.wd, &args, dep)
 		if err != nil {
 			return
 		}
