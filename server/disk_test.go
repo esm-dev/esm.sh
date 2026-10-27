@@ -115,7 +115,7 @@ func TestPurgeLocalCaches(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const key = "meta/pkg@1.0.0/build"
+	const key = "modules/pkg@1.0.0/old.mjs"
 	if err := s3.Put(key, strings.NewReader("data")); err != nil {
 		t.Fatal(err)
 	}

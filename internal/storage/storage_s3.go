@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/md5"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/xml"
 	"errors"
 	"fmt"
@@ -12,13 +13,19 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"slices"
 	"sort"
 	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	bolt "go.etcd.io/bbolt"
 )
+
+var metaCacheBucket = []byte("meta")
 
 // [warning] only the wait for response headers is bounded, a body stream may take longer than any fixed timeout.
 var s3Transport = func() *http.Transport {
@@ -35,8 +42,9 @@ type s3Storage struct {
 	accessKeyID     string
 	secretAccessKey string
 	fsCache         *fsStorage
+	metaCache       *bolt.DB
 	// [warning] bumped after every S3 delete, a cache write that started before it must be dropped
-	fsCacheEpoch atomic.Uint64
+	cacheEpoch atomic.Uint64
 }
 
 // NewS3Storage creates a new S3-compatible storage.
@@ -69,6 +77,24 @@ func NewS3Storage(options *StorageOptions) (Storage, error) {
 			return nil, err
 		}
 		storage.fsCache = fs.(*fsStorage)
+	}
+	if options.MetaCacheFile != "" {
+		if err := os.MkdirAll(filepath.Dir(options.MetaCacheFile), 0755); err != nil {
+			return nil, err
+		}
+		db, err := bolt.Open(options.MetaCacheFile, 0600, &bolt.Options{Timeout: time.Second})
+		if err != nil {
+			return nil, err
+		}
+		err = db.Update(func(tx *bolt.Tx) error {
+			_, err := tx.CreateBucketIfNotExists(metaCacheBucket)
+			return err
+		})
+		if err != nil {
+			db.Close()
+			return nil, err
+		}
+		storage.metaCache = db
 	}
 	return storage, nil
 }
@@ -129,8 +155,13 @@ func (s3 *s3Storage) StatContext(ctx context.Context, name string) (stat Stat, e
 	if name == "" {
 		return nil, errors.New("name is required")
 	}
+	if s3.shouldUseMetaCache(name) {
+		if _, stat = s3.getMetaCache(name); stat != nil {
+			return
+		}
+	}
 	if s3.shouldUseFSCache(name) {
-		stat, err = s3.fsCache.Stat(s3.fsCacheKey(name))
+		stat, err = s3.fsCache.Stat(name)
 		if err == nil {
 			return
 		}
@@ -184,14 +215,20 @@ func (s3 *s3Storage) Get(name string) (content io.ReadCloser, stat Stat, err err
 	if name == "" {
 		return nil, nil, errors.New("name is required")
 	}
+	if s3.shouldUseMetaCache(name) {
+		var data []byte
+		if data, stat = s3.getMetaCache(name); stat != nil {
+			return io.NopCloser(bytes.NewReader(data)), stat, nil
+		}
+	}
 	if s3.shouldUseFSCache(name) {
-		content, stat, err = s3.fsCache.Get(s3.fsCacheKey(name))
+		content, stat, err = s3.fsCache.Get(name)
 		if err == nil {
 			return
 		}
 		// ignore error
 	}
-	epoch := s3.fsCacheEpoch.Load()
+	epoch := s3.cacheEpoch.Load()
 	req, err := http.NewRequest("GET", s3.apiEndpoint+"/"+escapePath(name), nil)
 	if err != nil {
 		return
@@ -236,18 +273,25 @@ func (s3 *s3Storage) Get(name string) (content io.ReadCloser, stat Stat, err err
 		contentLength: size,
 		lastModified:  lastModified,
 	}
-	if s3.shouldUseFSCache(name) {
-		cacheKey := s3.fsCacheKey(name)
+	if s3.shouldUseMetaCache(name) {
+		var data []byte
+		if data, err = io.ReadAll(resp.Body); err != nil {
+			return nil, nil, err
+		}
+		resp.Body.Close()
+		s3.putMetaCache(name, data, lastModified, epoch)
+		content = io.NopCloser(bytes.NewReader(data))
+	} else if s3.shouldUseFSCache(name) {
 		pr, pw := io.Pipe()
 		go func() {
 			defer resp.Body.Close()
-			err := s3.fsCache.Put(cacheKey, io.TeeReader(resp.Body, pw))
+			err := s3.fsCache.Put(name, io.TeeReader(resp.Body, pw))
 			if err != nil {
 				// [warning] the tee already passed every byte it read, so stream the rest when the cache write fails.
 				// A read error of the response body is sticky, so the copy ends with it too.
 				_, err = io.Copy(pw, resp.Body)
-			} else if s3.fsCacheEpoch.Load() != epoch {
-				s3.fsCache.Delete(cacheKey)
+			} else if s3.cacheEpoch.Load() != epoch {
+				s3.fsCache.Delete(name)
 			}
 			pw.CloseWithError(err)
 		}()
@@ -304,9 +348,14 @@ func (s3 *s3Storage) PutContext(ctx context.Context, name string, content io.Rea
 		err = errors.New("missing content length")
 		return
 	}
-	if s3.shouldUseFSCache(name) {
-		cacheKey := s3.fsCacheKey(name)
-		epoch := s3.fsCacheEpoch.Load()
+	epoch := s3.cacheEpoch.Load()
+	var metaData []byte
+	if s3.shouldUseMetaCache(name) {
+		if metaData, err = io.ReadAll(content); err != nil {
+			return
+		}
+		content = bytes.NewReader(metaData)
+	} else if s3.shouldUseFSCache(name) {
 		pr, pw := io.Pipe()
 		done := make(chan struct{})
 		defer func() {
@@ -315,11 +364,11 @@ func (s3 *s3Storage) PutContext(ctx context.Context, name string, content io.Rea
 		}()
 		go func() {
 			defer close(done)
-			if err := s3.fsCache.Put(cacheKey, pr); err != nil {
+			if err := s3.fsCache.Put(name, pr); err != nil {
 				// [warning] drain the pipe, a failed cache write must not abort the upload
 				io.Copy(io.Discard, pr)
-			} else if s3.fsCacheEpoch.Load() != epoch {
-				s3.fsCache.Delete(cacheKey)
+			} else if s3.cacheEpoch.Load() != epoch {
+				s3.fsCache.Delete(name)
 			}
 		}()
 		content = io.TeeReader(content, pw)
@@ -341,6 +390,9 @@ func (s3 *s3Storage) PutContext(ctx context.Context, name string, content io.Rea
 	if resp.StatusCode >= 400 {
 		return parseS3Error(resp)
 	}
+	if s3.shouldUseMetaCache(name) {
+		s3.putMetaCache(name, metaData, time.Now(), epoch)
+	}
 	return nil
 }
 
@@ -360,9 +412,16 @@ func (s3 *s3Storage) Delete(name string) (err error) {
 	if resp.StatusCode >= 400 {
 		return errors.New("unexpected status code: " + resp.Status)
 	}
+	if s3.shouldUseMetaCache(name) {
+		s3.cacheEpoch.Add(1)
+		// [warning] report a failed cache delete, the deleted metadata would be served again
+		return s3.metaCache.Update(func(tx *bolt.Tx) error {
+			return tx.Bucket(metaCacheBucket).Delete([]byte(name))
+		})
+	}
 	if s3.shouldUseFSCache(name) {
-		s3.fsCacheEpoch.Add(1)
-		s3.fsCache.Delete(s3.fsCacheKey(name))
+		s3.cacheEpoch.Add(1)
+		s3.fsCache.Delete(name)
 	}
 	return nil
 }
@@ -414,12 +473,23 @@ func (s3 *s3Storage) DeleteAll(prefix string) (deletedKeys []string, err error) 
 	if err != nil {
 		return
 	}
-	if s3.fsCache != nil {
-		defer func() {
-			s3.fsCacheEpoch.Add(1)
+	defer func() {
+		s3.cacheEpoch.Add(1)
+		if s3.fsCache != nil {
 			s3.fsCache.DeleteAll(prefix)
-		}()
-	}
+		}
+		if s3.metaCache != nil {
+			err = errors.Join(err, s3.metaCache.Update(func(tx *bolt.Tx) error {
+				cursor, p := tx.Bucket(metaCacheBucket).Cursor(), []byte(prefix)
+				for k, _ := cursor.Seek(p); k != nil && bytes.HasPrefix(k, p); k, _ = cursor.Next() {
+					if err := cursor.Delete(); err != nil {
+						return err
+					}
+				}
+				return nil
+			}))
+		}
+	}()
 	if len(keysToDelete) == 0 {
 		return []string{}, nil
 	}
@@ -514,7 +584,7 @@ func (s3 *s3Storage) sign(req *http.Request) {
 }
 
 func (s3 *s3Storage) shouldUseFSCache(name string) bool {
-	if s3.fsCache == nil {
+	if s3.fsCache == nil || isMetaKey(name) {
 		return false
 	}
 	if strings.HasSuffix(name, ".mjs.map") || strings.HasSuffix(name, ".d.ts") || strings.HasSuffix(name, ".d.mts") || strings.HasSuffix(name, ".d.cts") {
@@ -523,15 +593,35 @@ func (s3 *s3Storage) shouldUseFSCache(name string) bool {
 	return true
 }
 
-func (s3 *s3Storage) fsCacheKey(name string) string {
-	const metaPrefix = "meta/"
-	if strings.HasPrefix(name, metaPrefix) {
-		hash := strings.TrimPrefix(name, metaPrefix)
-		if len(hash) == 64 && strings.IndexByte(hash, '/') == -1 {
-			return metaPrefix + hash[:2] + "/" + hash[2:]
+func (s3 *s3Storage) shouldUseMetaCache(name string) bool {
+	return s3.metaCache != nil && isMetaKey(name)
+}
+
+func (s3 *s3Storage) getMetaCache(name string) (content []byte, stat Stat) {
+	s3.metaCache.View(func(tx *bolt.Tx) error {
+		if v := tx.Bucket(metaCacheBucket).Get([]byte(name)); len(v) >= 8 {
+			content = bytes.Clone(v[8:])
+			stat = &s3ObjectMeta{contentLength: int64(len(v) - 8), lastModified: time.UnixMilli(int64(binary.BigEndian.Uint64(v)))}
 		}
-	}
-	return name
+		return nil
+	})
+	return
+}
+
+func (s3 *s3Storage) putMetaCache(name string, content []byte, modTime time.Time, epoch uint64) {
+	value := binary.BigEndian.AppendUint64(make([]byte, 0, 8+len(content)), uint64(modTime.UnixMilli()))
+	value = append(value, content...)
+	s3.metaCache.Batch(func(tx *bolt.Tx) error {
+		// [warning] check the epoch in the transaction, a delete commits its cache delete after the bump
+		if s3.cacheEpoch.Load() != epoch {
+			return nil
+		}
+		return tx.Bucket(metaCacheBucket).Put([]byte(name), value)
+	})
+}
+
+func isMetaKey(name string) bool {
+	return strings.HasPrefix(name, "meta/") || strings.HasPrefix(name, "meta-purged/")
 }
 
 func parseS3Error(resp *http.Response) error {

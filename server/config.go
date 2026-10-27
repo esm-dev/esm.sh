@@ -218,6 +218,9 @@ func normalizeConfig(config *Config) {
 	if config.Storage.SecretAccessKey == "" {
 		config.Storage.SecretAccessKey = os.Getenv("STORAGE_SECRET_ACCESS_KEY")
 	}
+	if config.Storage.CacheDir != "" {
+		config.Storage.MetaCacheFile = path.Join(config.WorkDir, "meta-cache.db")
+	}
 	if config.LogDir == "" {
 		config.LogDir = path.Join(config.WorkDir, "log")
 	}

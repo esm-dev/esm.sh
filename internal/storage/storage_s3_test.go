@@ -280,19 +280,6 @@ func TestS3StorageGetClosesResponseWhenCacheIsFilled(t *testing.T) {
 	}
 }
 
-func TestS3StorageFSCacheKey(t *testing.T) {
-	s3 := &s3Storage{}
-	hash := "3fdadb34f247fde94adfb18268ac0caeed539ae7ad1380035d1366943b85ca7a"
-	got := s3.fsCacheKey("meta/" + hash)
-	want := "meta/3f/dadb34f247fde94adfb18268ac0caeed539ae7ad1380035d1366943b85ca7a"
-	if got != want {
-		t.Fatalf("invalid cache key %q, want %q", got, want)
-	}
-	if got = s3.fsCacheKey("v135/react@19.2.0/esnext/react.mjs"); got != "v135/react@19.2.0/esnext/react.mjs" {
-		t.Fatalf("invalid cache key %q", got)
-	}
-}
-
 func TestS3StorageCacheRejectSymlinkEscape(t *testing.T) {
 	for _, operation := range []string{"Get", "Put"} {
 		t.Run(operation, func(t *testing.T) {
@@ -639,14 +626,117 @@ func TestS3StoragePutEmpty(t *testing.T) {
 		t.Fatal(err)
 	}
 	s3 := &s3Storage{apiEndpoint: srv.URL, fsCache: cache.(*fsStorage)}
-	if err := s3.Put("meta-purged/pkg@1.0.0", strings.NewReader("")); err != nil {
+	if err := s3.Put("modules/empty.mjs", strings.NewReader("")); err != nil {
 		t.Fatal(err)
 	}
 	if got := <-seen; got != "[] 0" {
 		t.Fatalf("empty upload: transfer encoding and length %s, want [] 0", got)
 	}
-	if stat, err := cache.Stat("meta-purged/pkg@1.0.0"); err != nil || stat.Size() != 0 {
+	if stat, err := cache.Stat("modules/empty.mjs"); err != nil || stat.Size() != 0 {
 		t.Fatalf("empty cache file: %v", err)
+	}
+}
+
+func TestS3StorageMetaCache(t *testing.T) {
+	var requests []string
+	client := http.DefaultClient
+	t.Cleanup(func() { http.DefaultClient = client })
+	http.DefaultClient = &http.Client{Transport: s3TestTransport(func(req *http.Request) (*http.Response, error) {
+		requests = append(requests, req.Method+" "+req.URL.Path)
+		switch req.Method {
+		case http.MethodGet:
+			if req.URL.RawQuery == "list-type=2&prefix=meta%2Fpkg%401.0.0%2F" {
+				body := "<ListBucketResult><Contents><Key>meta/pkg@1.0.0/a</Key></Contents></ListBucketResult>"
+				return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body))}, nil
+			}
+			return &http.Response{StatusCode: 200, Header: http.Header{
+				"Content-Length": {"6"},
+				"Last-Modified":  {"Tue, 20 Oct 2026 00:00:00 GMT"},
+			}, Body: io.NopCloser(strings.NewReader("remote"))}, nil
+		case http.MethodPost:
+			body := "<DeleteResult><Deleted><Key>meta/pkg@1.0.0/a</Key></Deleted></DeleteResult>"
+			return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body))}, nil
+		}
+		if req.Body != nil {
+			io.Copy(io.Discard, req.Body)
+		}
+		return &http.Response{StatusCode: 200, Body: http.NoBody}, nil
+	})}
+	cacheDir := t.TempDir()
+	options := &StorageOptions{Endpoint: "https://storage.test", AccessKeyID: "test", SecretAccessKey: "test", CacheDir: cacheDir, MetaCacheFile: filepath.Join(t.TempDir(), "meta-cache.db")}
+	storage, err := NewS3Storage(options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s3 := storage.(*s3Storage)
+	t.Cleanup(func() { s3.metaCache.Close() })
+	read := func(name string) string {
+		content, _, err := s3.Get(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer content.Close()
+		data, err := io.ReadAll(content)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(data)
+	}
+
+	for _, name := range []string{"meta/pkg@1.0.0/a", "meta/pkg@1.0.0/b", "meta/pkg@1.0.0/c", "meta/pkg@1.0.10/a"} {
+		if err := s3.Put(name, strings.NewReader(name)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s3.Put("meta-purged/pkg@1.0.0", strings.NewReader("")); err != nil {
+		t.Fatal(err)
+	}
+	requests = nil
+	if got := read("meta/pkg@1.0.0/b"); got != "meta/pkg@1.0.0/b" {
+		t.Fatalf("cached content %q", got)
+	}
+	if stat, err := s3.Stat("meta-purged/pkg@1.0.0"); err != nil || stat.Size() != 0 {
+		t.Fatalf("cached marker: %v", err)
+	}
+	if len(requests) != 0 {
+		t.Fatalf("cached reads hit S3: %v", requests)
+	}
+	if got := read("meta/remote"); got != "remote" {
+		t.Fatalf("remote content %q", got)
+	}
+	if stat, err := s3.Stat("meta/remote"); err != nil || stat.Size() != 6 || !stat.ModTime().Equal(time.Date(2026, 10, 20, 0, 0, 0, 0, time.UTC)) {
+		t.Fatalf("cached stat of a remote read: %v, %v", stat, err)
+	}
+	if got := read("meta/remote"); got != "remote" || len(requests) != 1 {
+		t.Fatalf("remote read was not cached: %q, %v", got, requests)
+	}
+	if entries, err := os.ReadDir(cacheDir); err != nil || len(entries) != 0 {
+		t.Fatalf("meta keys were cached as files: %v, %v", entries, err)
+	}
+
+	if err := s3.Delete("meta/remote"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s3.DeleteAll("meta/pkg@1.0.0/"); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"meta/remote", "meta/pkg@1.0.0/a", "meta/pkg@1.0.0/b", "meta/pkg@1.0.0/c"} {
+		if _, stat := s3.getMetaCache(name); stat != nil {
+			t.Fatalf("deleted %s remains cached", name)
+		}
+	}
+	for _, name := range []string{"meta/pkg@1.0.10/a", "meta-purged/pkg@1.0.0"} {
+		if _, stat := s3.getMetaCache(name); stat == nil {
+			t.Fatalf("%s was deleted by an unrelated prefix", name)
+		}
+	}
+
+	// a read that raced with a delete is not cached
+	epoch := s3.cacheEpoch.Load()
+	s3.cacheEpoch.Add(1)
+	s3.putMetaCache("meta/stale", []byte("stale"), time.Now(), epoch)
+	if _, stat := s3.getMetaCache("meta/stale"); stat != nil {
+		t.Fatal("a read that raced with a delete was cached")
 	}
 }
 
