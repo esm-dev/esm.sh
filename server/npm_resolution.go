@@ -84,7 +84,10 @@ func (rc *NpmRC) cachedResolution(ctx context.Context, pkg, query, key string, f
 		return v.(*npm.PackageJSON), nil
 	}
 	storageKey := rc.resolutionKey(pkg, query)
-	unlock := cacheMutex.Lock("resolution:" + storageKey)
+	unlock, err := cacheMutex.LockContext(ctx, "resolution:"+storageKey)
+	if err != nil {
+		return nil, err
+	}
 	defer unlock()
 	if v, ok := getCacheItem(key); ok {
 		return v.(*npm.PackageJSON), nil
@@ -92,7 +95,10 @@ func (rc *NpmRC) cachedResolution(ctx context.Context, pkg, query, key string, f
 	epoch := npmResolutionEpoch.Load()
 	item, ok := npmResolutions.Get(storageKey)
 	if !ok && rc.resolutionStorage != nil {
-		release := cacheMutex.Lock("resolution-persistence")
+		release, err := cacheMutex.LockContext(ctx, "resolution-persistence")
+		if err != nil {
+			return nil, err
+		}
 		readCtx, stop := context.WithTimeout(ctx, time.Second)
 		item, _ = rc.readResolutionObject(readCtx, resolutionSlot(storageKey))
 		stop()
@@ -128,7 +134,10 @@ func (rc *NpmRC) cachedResolution(ctx context.Context, pkg, query, key string, f
 
 func (rc *NpmRC) refreshResolution(ctx context.Context, pkg, key, storageKey string, ttl time.Duration, epoch uint64, fetch func(context.Context) (*npm.PackageJSONRaw, error)) (*npm.PackageJSON, error) {
 	raw, err := fetch(ctx)
-	unlock := cacheMutex.Lock("resolution-persistence")
+	unlock, lockErr := cacheMutex.LockContext(ctx, "resolution-persistence")
+	if lockErr != nil {
+		return nil, lockErr
+	}
 	defer unlock()
 	if epoch != npmResolutionEpoch.Load() {
 		if err != nil {

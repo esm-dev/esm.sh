@@ -1,11 +1,13 @@
 package server
 
 import (
+	"context"
 	"strings"
 	"time"
 
 	lru "github.com/hashicorp/golang-lru/v2"
 	"github.com/ije/gox/sync"
+	"golang.org/x/sync/semaphore"
 )
 
 var onceMap = sync.Map{}
@@ -22,7 +24,7 @@ var (
 	cacheLRU   *lru.Cache[string, any]
 )
 
-// keyedMutex holds a reference counted RWMutex per key.
+// keyedMutex holds a reference counted read/write lock per key.
 // [warning] the count must change under the same lock as the map, otherwise two holders can get different mutexes for one key
 type keyedMutex struct {
 	mu    sync.Mutex
@@ -30,43 +32,56 @@ type keyedMutex struct {
 }
 
 type keyedLock struct {
-	sync.RWMutex
+	gate *semaphore.Weighted
 	refs int
 }
 
+const keyedWriteWeight int64 = 1 << 30
+
 func (m *keyedMutex) lock(key string, exclusive bool) func() {
+	unlock, _ := m.lockContext(context.Background(), key, exclusive)
+	return unlock
+}
+
+func (m *keyedMutex) Lock(key string) func() {
+	return m.lock(key, true)
+}
+
+func (m *keyedMutex) LockContext(ctx context.Context, key string) (func(), error) {
+	return m.lockContext(ctx, key, true)
+}
+
+func (m *keyedMutex) lockContext(ctx context.Context, key string, exclusive bool) (func(), error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	m.mu.Lock()
 	l := m.locks[key]
 	if l == nil {
 		if m.locks == nil {
 			m.locks = map[string]*keyedLock{}
 		}
-		l = &keyedLock{}
+		l = &keyedLock{gate: semaphore.NewWeighted(keyedWriteWeight)}
 		m.locks[key] = l
 	}
 	l.refs++
 	m.mu.Unlock()
-	if exclusive {
-		l.Lock()
-	} else {
-		l.RLock()
-	}
-	return func() {
-		if exclusive {
-			l.Unlock()
-		} else {
-			l.RUnlock()
-		}
+	release := func() {
 		m.mu.Lock()
 		if l.refs--; l.refs == 0 {
 			delete(m.locks, key)
 		}
 		m.mu.Unlock()
 	}
-}
-
-func (m *keyedMutex) Lock(key string) func() {
-	return m.lock(key, true)
+	weight := int64(1)
+	if exclusive {
+		weight = keyedWriteWeight
+	}
+	if err := l.gate.Acquire(ctx, weight); err != nil {
+		release()
+		return nil, err
+	}
+	return func() { l.gate.Release(weight); release() }, nil
 }
 
 type cacheItem struct {
@@ -106,6 +121,13 @@ func deleteCacheItemsWithPrefix(prefix string) (deletedKeys []string) {
 }
 
 func withCache[T any](key string, cacheTtl time.Duration, fetch func() (data T, aliasKey string, err error)) (data T, err error) {
+	return withCacheContext(context.Background(), key, cacheTtl, fetch)
+}
+
+func withCacheContext[T any](ctx context.Context, key string, cacheTtl time.Duration, fetch func() (data T, aliasKey string, err error)) (data T, err error) {
+	if err = ctx.Err(); err != nil {
+		return
+	}
 	if cacheTtl == 0 {
 		data, _, err = fetch()
 		return
@@ -119,7 +141,10 @@ func withCache[T any](key string, cacheTtl time.Duration, fetch func() (data T, 
 		}
 	}
 
-	unlock := cacheMutex.Lock(key)
+	unlock, err := cacheMutex.LockContext(ctx, key)
+	if err != nil {
+		return data, err
+	}
 	defer unlock()
 
 	// check cache store again after get lock

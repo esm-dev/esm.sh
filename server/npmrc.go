@@ -28,6 +28,7 @@ import (
 	"github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/ije/gox/term"
 	"github.com/ije/gox/utils"
+	"golang.org/x/sync/singleflight"
 )
 
 const (
@@ -55,6 +56,7 @@ type NpmRC struct {
 	resolutionStorage storage.Storage
 	globalRegistry    *NpmRegistry
 	scopedRegistries  map[string]*NpmRegistry
+	metadataLoads     singleflight.Group
 }
 
 func DefaultNpmRC() *NpmRC {
@@ -129,7 +131,39 @@ type npmRegistryError struct {
 
 func (e *npmRegistryError) Error() string { return e.message }
 
+type packageMetadataResult struct {
+	metadata *npm.PackageMetadata
+	raw      *npm.PackageJSONRaw
+}
+
 func (npmrc *NpmRC) fetchPackageMetadataContext(ctx context.Context, pkgName string, version string, isWellknownVersion bool) (*npm.PackageMetadata, *npm.PackageJSONRaw, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, nil, err
+	}
+	key := fmt.Sprintf("%d:%s%s", npmResolutionEpoch.Load(), npmrc.getRegistryByPackageName(pkgName).Registry, pkgName)
+	if isWellknownVersion {
+		key += "@" + version
+	}
+	result := npmrc.metadataLoads.DoChan(key, func() (any, error) {
+		// One client's departure must not abort a registry fill shared by other callers.
+		fetchCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), npmQueryTimeout)
+		defer cancel()
+		metadata, raw, err := npmrc.fetchPackageMetadata(fetchCtx, pkgName, version, isWellknownVersion)
+		return packageMetadataResult{metadata, raw}, err
+	})
+	select {
+	case <-ctx.Done():
+		return nil, nil, ctx.Err()
+	case result := <-result:
+		if result.Err != nil {
+			return nil, nil, result.Err
+		}
+		value := result.Val.(packageMetadataResult)
+		return value.metadata, value.raw, nil
+	}
+}
+
+func (npmrc *NpmRC) fetchPackageMetadata(ctx context.Context, pkgName string, version string, isWellknownVersion bool) (*npm.PackageMetadata, *npm.PackageJSONRaw, error) {
 	epoch := npmResolutionEpoch.Load()
 	reg := npmrc.getRegistryByPackageName(pkgName)
 	missingKey := "404:" + reg.Registry + pkgName + "@"
@@ -167,7 +201,11 @@ RETRY:
 	useVersionRoute := isWellknownVersion && !useBackup && reg.isSupportVersionRoute(ctx, header)
 	if !useVersionRoute && unlock == nil {
 		// [warning] a packument can be huge, one fetch is shared by the range, tag and date lookups for a while
-		unlock = cacheMutex.Lock("packument:" + packumentKey)
+		var err error
+		unlock, err = cacheMutex.LockContext(ctx, "packument:"+packumentKey)
+		if err != nil {
+			return nil, nil, err
+		}
 		if metadata, ok := packumentCache.Get(packumentKey); ok {
 			return metadata, nil, nil
 		}
@@ -242,7 +280,10 @@ RETRY:
 		return nil, nil, fmt.Errorf("version %s of '%s' not found", version, pkgName)
 	}
 
-	release := cacheMutex.Lock("resolution-persistence")
+	release, err := cacheMutex.LockContext(ctx, "resolution-persistence")
+	if err != nil {
+		return nil, nil, err
+	}
 	if epoch == npmResolutionEpoch.Load() {
 		packumentCache.Add(packumentKey, &metadata)
 	}
