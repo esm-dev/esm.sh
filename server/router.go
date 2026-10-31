@@ -845,6 +845,10 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 			writeStatus(w, 404, message)
 		}
 
+		if pathKind == RawFile {
+			defer useNpmPackage(r.Context(), esmPath.PackageId())()
+		}
+
 		if pathKind == RawFile && !esmPath.GhPrefix && !rawFlag && esmPath.SubPath != "" && strings.HasSuffix(esmPath.SubPath, ".map") {
 			pkgJson, err := npmrc.installPackage(esmPath.Package())
 			if err != nil {

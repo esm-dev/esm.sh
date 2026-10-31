@@ -1,7 +1,6 @@
 package server
 
 import (
-	"crypto/rand"
 	"errors"
 	"io/fs"
 	"os"
@@ -51,15 +50,12 @@ func localCacheDirs() []string {
 	return dirs
 }
 
-// purgeLocalCaches removes old npm packages and S3 cache files from the low filesystems until they have
-// twice the low limits free, and returns the number of removed entries.
 func purgeLocalCaches() (removed int, err error) {
 	purgeLock.Lock()
 	defer purgeLock.Unlock()
 	// [warning] keep the entries used within a build timeout, a running build may still read them
 	keepTime := time.Now().Add(-time.Duration(config.BuildTimeout)*time.Second - 10*time.Minute)
-	storeDir := DefaultNpmRC().StoreDir()
-	for _, dir := range localCacheDirs() {
+	for _, dir := range localCacheDirs()[1:] {
 		if status, _, _ := diskStatus(dir); status != DiskStatusLow && status != DiskStatusFull {
 			continue
 		}
@@ -79,25 +75,16 @@ func purgeLocalCaches() (removed int, err error) {
 				return nil
 			}
 			isDir := d.IsDir()
-			// skip staging installs, generated loaders and temporary cache files
 			if strings.HasPrefix(d.Name(), ".") {
 				if isDir {
 					return fs.SkipDir
 				}
 				return nil
 			}
-			// npm packages are removed as a whole, the S3 cache file by file
-			if isDir && (dir != storeDir || strings.LastIndexByte(d.Name(), '@') <= 0) {
+			if isDir {
 				return nil
 			}
 			if info, infoErr := d.Info(); infoErr == nil && info.ModTime().Before(keepTime) {
-				// [warning] move the package away first, an install must not see a partly removed package
-				if dir == storeDir {
-					tmp := ".purge-" + rand.Text()
-					if root.Rename(name, tmp) == nil {
-						name = tmp
-					}
-				}
 				if removeErr := root.RemoveAll(name); removeErr != nil {
 					err = errors.Join(err, removeErr)
 				} else {
@@ -106,9 +93,6 @@ func purgeLocalCaches() (removed int, err error) {
 				if _, avail, inodes := diskStatus(dir); avail >= 20*GB && inodes >= 0.1 {
 					return fs.SkipAll
 				}
-			}
-			if isDir {
-				return fs.SkipDir
 			}
 			return nil
 		})

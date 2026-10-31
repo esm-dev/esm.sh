@@ -131,6 +131,7 @@ func resolveBuildArgs(ctx context.Context, npmrc *NpmRC, installDir string, args
 		deps, ok, err := func() (deps *set.Set[string], ok bool, err error) {
 			var p *npm.PackageJSON
 			pkgJsonPath := path.Join(installDir, "node_modules", esm.PkgName, "package.json")
+			defer useNpmPackageDir(ctx, path.Dir(pkgJsonPath))()
 			if _, overridden := args.Deps[esm.PkgName]; !overridden && existsFile(pkgJsonPath) {
 				var raw npm.PackageJSONRaw
 				err = utils.ParseJSONFile(pkgJsonPath, &raw)
@@ -264,6 +265,7 @@ func walkDeps(ctx context.Context, npmrc *NpmRC, installDir string, pkg npm.Pack
 	mark.Add(pkg.Name)
 	var p *npm.PackageJSON
 	pkgJsonPath := path.Join(installDir, "node_modules", pkg.Name, "package.json")
+	defer useNpmPackageDir(ctx, path.Dir(pkgJsonPath))()
 	if _, overridden := overrides[pkg.Name]; !overridden && existsFile(pkgJsonPath) {
 		var raw npm.PackageJSONRaw
 		err = utils.ParseJSONFile(pkgJsonPath, &raw)

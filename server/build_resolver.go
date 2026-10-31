@@ -1287,6 +1287,7 @@ lookup:
 
 	var raw npm.PackageJSONRaw
 	pkgJsonPath := path.Join(ctx.wd, "node_modules", pkgName, "package.json")
+	defer useNpmPackageDir(ctx.Context(), path.Dir(pkgJsonPath))()
 	if utils.ParseJSONFile(pkgJsonPath, &raw) == nil {
 		esm = EsmPath{
 			PkgName:    pkgName,

@@ -290,6 +290,7 @@ func (npmrc *NpmRC) getPackageInfoContext(ctx context.Context, pkgName string, v
 	// [warning] don't cache the installed package.json: it has no `dist` field, and the store
 	// may be purged before the cache expires, then the installer would fetch an empty tarball url
 	if npm.IsExactVersion(version) {
+		defer useNpmPackage(ctx, pkgName+"@"+version)()
 		var raw npm.PackageJSONRaw
 		if utils.ParseJSONFile(filepath.Join(npmrc.StoreDir(), pkgName+"@"+version, "node_modules", pkgName, "package.json"), &raw) == nil {
 			return raw.ToNpmPackage(), nil
@@ -413,8 +414,8 @@ func lockInstall(ctx context.Context, key string) (func(), error) {
 }
 
 func (npmrc *NpmRC) installPackageContext(ctx context.Context, pkg npm.Package) (packageJson *npm.PackageJSON, err error) {
+	defer useNpmPackage(ctx, pkg.String())()
 	packageJson, err = npmrc.installPackageOnce(ctx, pkg)
-	// the purge keeps recently used packages, so the packages of running builds survive it
 	if errors.Is(err, syscall.ENOSPC) && ctx.Err() == nil {
 		_, purgeErr := purgeLocalCaches()
 		if packageJson, err = npmrc.installPackageOnce(ctx, pkg); err != nil {
@@ -433,13 +434,6 @@ func (npmrc *NpmRC) installPackageOnce(ctx context.Context, pkg npm.Package) (pa
 	}
 	finalDir := filepath.Join(npmrc.StoreDir(), pkg.String())
 	packageJsonPath := filepath.Join(finalDir, "node_modules", pkg.Name, "package.json")
-	defer func() {
-		// [warning] the purge removes the packages not used within a build timeout, mark this one as used
-		if err == nil {
-			now := time.Now()
-			os.Chtimes(finalDir, now, now)
-		}
-	}()
 
 	// check if the package has been installed
 	var raw npm.PackageJSONRaw
@@ -583,6 +577,8 @@ func (npmrc *NpmRC) installDependencies(wd string, pkgJson *npm.PackageJSON, npm
 }
 
 func (npmrc *NpmRC) installDependenciesContext(ctx context.Context, wd string, pkgJson *npm.PackageJSON, npmMode bool, overrides map[string]string) error {
+	ctx, release := withNpmPackageScope(ctx)
+	defer release()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 

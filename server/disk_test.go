@@ -164,12 +164,12 @@ func TestPurgeLocalCaches(t *testing.T) {
 		*stat = syscall.Statfs_t{Bsize: 4096, Bavail: 512 * MB / 4096}
 		return nil
 	}
-	if removed, err := purgeLocalCaches(); err != nil || removed != 4 {
-		t.Fatalf("purge = %d, %v, want 4 removed", removed, err)
+	if removed, err := purgeLocalCaches(); err != nil || removed != 1 {
+		t.Fatalf("purge = %d, %v, want 1 removed", removed, err)
 	}
 	for _, name := range []string{"old@1.0.0", "@scope/old@1.0.0", "gh/owner/repo@abc"} {
-		if _, err := os.Lstat(filepath.Join(store, name)); !errors.Is(err, os.ErrNotExist) {
-			t.Fatalf("old package %s remains: %v", name, err)
+		if !existsDir(filepath.Join(store, name)) {
+			t.Fatalf("purged npm package %s before its TTL expired", name)
 		}
 	}
 	for _, name := range []string{
@@ -205,11 +205,11 @@ func TestPurgeLocalCaches(t *testing.T) {
 	}
 
 	// stop once the disk has enough free space
-	for _, name := range []string{"a@1.0.0", "b@1.0.0"} {
-		if err := os.MkdirAll(filepath.Join(store, name), 0755); err != nil {
+	for _, name := range []string{"a.mjs", "b.mjs"} {
+		if err := os.WriteFile(filepath.Join(cache, name), []byte("old"), 0644); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.Chtimes(filepath.Join(store, name), old, old); err != nil {
+		if err := os.Chtimes(filepath.Join(cache, name), old, old); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -222,15 +222,15 @@ func TestPurgeLocalCaches(t *testing.T) {
 		}
 		return nil
 	}
-	if removed, err := purgeLocalCaches(); err != nil || removed != 1 || existsDir(filepath.Join(store, "a@1.0.0")) || !existsDir(filepath.Join(store, "b@1.0.0")) {
-		t.Fatalf("purge = %d, %v, want the first old package removed only", removed, err)
+	if removed, err := purgeLocalCaches(); err != nil || removed != 1 || existsFile(filepath.Join(cache, "a.mjs")) || !existsFile(filepath.Join(cache, "b.mjs")) {
+		t.Fatalf("purge = %d, %v, want the first old file removed only", removed, err)
 	}
 	for _, err := range []error{nil, syscall.EIO} {
 		diskStatfs = func(_ string, stat *syscall.Statfs_t) error {
 			*stat = syscall.Statfs_t{Bsize: 4096, Bavail: 32 * GB / 4096}
 			return err
 		}
-		if removed, purgeErr := purgeLocalCaches(); purgeErr != nil || removed != 0 || !existsDir(filepath.Join(store, "b@1.0.0")) {
+		if removed, purgeErr := purgeLocalCaches(); purgeErr != nil || removed != 0 || !existsFile(filepath.Join(cache, "b.mjs")) {
 			t.Fatalf("purged a healthy or unknown filesystem (%v): %d, %v", err, removed, purgeErr)
 		}
 	}
@@ -242,11 +242,10 @@ func TestInstallPackageDiskRecovery(t *testing.T) {
 		err      error
 		failures int32
 		requests int32
-		purged   bool
 	}{
-		{"recovered", syscall.ENOSPC, 1, 2, true},
-		{"still full", syscall.ENOSPC, 2, 2, true},
-		{"other error", syscall.EIO, 1, 1, false},
+		{"recovered", syscall.ENOSPC, 1, 2},
+		{"still full", syscall.ENOSPC, 2, 2},
+		{"other error", syscall.EIO, 1, 1},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			oldConfig, transport, oldStatfs := config, http.DefaultTransport, diskStatfs
@@ -264,7 +263,6 @@ func TestInstallPackageDiskRecovery(t *testing.T) {
 			key := "npm:" + pkg.String()
 			setCacheItem(key, &npm.PackageJSON{Name: pkg.Name, Version: pkg.Version, Dist: npm.NpmPackageDist{Tarball: npmRegistry + "disk-recovery.tgz"}}, time.Minute)
 			t.Cleanup(func() { deleteCacheItem(key) })
-			// the purge removes a package not used for a day, and keeps the package of a running build
 			old := time.Now().Add(-24 * time.Hour)
 			oldPackage, usedPackage := filepath.Join(npmrc.StoreDir(), "old@1.0.0"), filepath.Join(npmrc.StoreDir(), "used@1.0.0")
 			for _, dir := range []string{oldPackage, usedPackage} {
@@ -294,8 +292,8 @@ func TestInstallPackageDiskRecovery(t *testing.T) {
 			if requests.Load() != test.requests {
 				t.Fatalf("downloads = %d, want %d", requests.Load(), test.requests)
 			}
-			if existsDir(oldPackage) == test.purged {
-				t.Fatalf("old package removed = %v, want %v", !existsDir(oldPackage), test.purged)
+			if !existsDir(oldPackage) {
+				t.Fatal("disk recovery purged an npm package before its TTL expired")
 			}
 			if !existsDir(usedPackage) {
 				t.Fatal("purged the package of a running build")
@@ -304,20 +302,6 @@ func TestInstallPackageDiskRecovery(t *testing.T) {
 				if dirs, err := filepath.Glob(filepath.Join(npmrc.StoreDir(), pattern)); err != nil || len(dirs) != 0 {
 					t.Fatalf("temporary directories remain: %v, %v", dirs, err)
 				}
-			}
-			if err != nil {
-				return
-			}
-			// an installed package is marked as used again on every install
-			installDir := filepath.Join(npmrc.StoreDir(), pkg.String())
-			if err := os.Chtimes(installDir, old, old); err != nil {
-				t.Fatal(err)
-			}
-			if _, err := npmrc.installPackage(pkg); err != nil {
-				t.Fatal(err)
-			}
-			if fi, err := os.Stat(installDir); err != nil || fi.ModTime().Before(time.Now().Add(-time.Minute)) {
-				t.Fatalf("installed package is not marked as used: %v", err)
 			}
 		})
 	}
