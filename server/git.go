@@ -50,7 +50,13 @@ func listGhRepoRefsContext(ctx context.Context, repo string) (refs []GitRef, err
 		err = cmd.Run()
 		if err != nil {
 			if errout.Len() > 0 {
-				return nil, "", errors.New(errout.String())
+				// [warning] github asks an anonymous client to sign in for a missing or private repo,
+				// and the router matches the " not found" suffix
+				msg := strings.TrimSpace(errout.String())
+				if strings.Contains(msg, "terminal prompts disabled") {
+					msg = fmt.Sprintf("repository '%s' not found", repo)
+				}
+				return nil, "", errors.New(msg)
 			}
 			return nil, "", err
 		}

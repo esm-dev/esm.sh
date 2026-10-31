@@ -76,8 +76,6 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 		metaDB     = NewBuildMetaDB(esmStorage)
 	)
 
-	npmrc.resolutionStorage = esmStorage
-
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		pathname := r.URL.Path
 		header := w.Header()
@@ -211,13 +209,17 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 					writeJSONError(w, 400, "require valid json body")
 					return
 				}
-				if !powVerify("purge", req.Challenge, req.Nonce) {
-					writeJSONError(w, 400, "invalid or expired proof-of-work challenge")
-					return
-				}
-				// count the quota after the proof-of-work, cheap invalid requests must not use up a shared IP's quota
-				if !purgeRateAllowed(limiterKey) {
-					writeJSONError(w, 429, "too many purge requests, please try again later")
+				limited := false
+				if !powVerify("purge", req.Challenge, req.Nonce, func() bool {
+					// count the quota after the proof-of-work, cheap invalid requests must not use up a shared IP's quota
+					limited = !purgeRateAllowed(limiterKey)
+					return !limited
+				}) {
+					if limited {
+						writeJSONError(w, 429, "too many purge requests, please try again later")
+					} else {
+						writeJSONError(w, 400, "invalid or expired proof-of-work challenge")
+					}
 					return
 				}
 				pathname, err := parsePurgeInput(req.URL)
@@ -1663,10 +1665,15 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 			target:      target,
 			dev:         dev,
 		}
-		buildMeta, ok, err := build.Exists()
-		if err != nil {
-			writeStatus(w, 500, err.Error())
-			return
+		// [warning] join a running build without a metadata lookup, every lookup of an unbuilt module is a storage round trip
+		var buildMeta *BuildMeta
+		ok := false
+		if !buildQueue.Has(build.Path()) {
+			buildMeta, ok, err = build.Exists()
+			if err != nil {
+				writeStatus(w, 500, err.Error())
+				return
+			}
 		}
 		if !ok {
 			waitCtx, cancel := context.WithTimeout(r.Context(), time.Duration(config.BuildWaitTime)*time.Second)

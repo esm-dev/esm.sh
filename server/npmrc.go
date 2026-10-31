@@ -24,7 +24,6 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/esm-dev/esm.sh/internal/npm"
-	"github.com/esm-dev/esm.sh/internal/storage"
 	"github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/ije/gox/term"
 	"github.com/ije/gox/utils"
@@ -53,10 +52,9 @@ type NpmRegistry struct {
 }
 
 type NpmRC struct {
-	resolutionStorage storage.Storage
-	globalRegistry    *NpmRegistry
-	scopedRegistries  map[string]*NpmRegistry
-	metadataLoads     singleflight.Group
+	globalRegistry   *NpmRegistry
+	scopedRegistries map[string]*NpmRegistry
+	metadataLoads    singleflight.Group
 }
 
 func DefaultNpmRC() *NpmRC {
@@ -140,7 +138,7 @@ func (npmrc *NpmRC) fetchPackageMetadataContext(ctx context.Context, pkgName str
 	if err := ctx.Err(); err != nil {
 		return nil, nil, err
 	}
-	key := fmt.Sprintf("%d:%s%s", npmResolutionEpoch.Load(), npmrc.getRegistryByPackageName(pkgName).Registry, pkgName)
+	key := fmt.Sprintf("%d:%s%s", npmResolutionEpoch(pkgName).Load(), npmrc.getRegistryByPackageName(pkgName).Registry, pkgName)
 	if isWellknownVersion {
 		key += "@" + version
 	}
@@ -164,7 +162,7 @@ func (npmrc *NpmRC) fetchPackageMetadataContext(ctx context.Context, pkgName str
 }
 
 func (npmrc *NpmRC) fetchPackageMetadata(ctx context.Context, pkgName string, version string, isWellknownVersion bool) (*npm.PackageMetadata, *npm.PackageJSONRaw, error) {
-	epoch := npmResolutionEpoch.Load()
+	epoch := npmResolutionEpoch(pkgName).Load()
 	reg := npmrc.getRegistryByPackageName(pkgName)
 	missingKey := "404:" + reg.Registry + pkgName + "@"
 	if message := negativeCache.get(missingKey); message != "" {
@@ -178,10 +176,7 @@ func (npmrc *NpmRC) fetchPackageMetadata(ctx context.Context, pkgName string, ve
 		header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(reg.User+":"+reg.Password)))
 	}
 
-	packumentKey := reg.Registry + pkgName
-	if reg.Token != "" || reg.User != "" || reg.Password != "" {
-		packumentKey += npmrc.resolutionPrefix(pkgName)
-	}
+	packumentKey := npmrc.packumentKey(pkgName)
 	var unlock func()
 	defer func() {
 		if unlock != nil {
@@ -265,7 +260,8 @@ RETRY:
 		var raw npm.PackageJSONRaw
 		err = json.NewDecoder(res.Body).Decode(&raw)
 		if err != nil {
-			return nil, nil, err
+			// [warning] the router caches an error starting with "invalid" as a permanent 400
+			return nil, nil, fmt.Errorf("%s: bad response: %w", regUrl.Hostname(), err)
 		}
 		return nil, &raw, nil
 	}
@@ -273,18 +269,15 @@ RETRY:
 	var metadata npm.PackageMetadata
 	err = json.NewDecoder(res.Body).Decode(&metadata)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("%s: bad response: %w", regUrl.Hostname(), err)
 	}
 
 	if len(metadata.Versions) == 0 {
 		return nil, nil, fmt.Errorf("version %s of '%s' not found", version, pkgName)
 	}
 
-	release, err := cacheMutex.LockContext(ctx, "resolution-persistence")
-	if err != nil {
-		return nil, nil, err
-	}
-	if epoch == npmResolutionEpoch.Load() {
+	release := lockNpmResolution(pkgName)
+	if epoch == npmResolutionEpoch(pkgName).Load() {
 		packumentCache.Add(packumentKey, &metadata)
 	}
 	release()
@@ -411,7 +404,7 @@ func invalidateDistTagCacheIfNewer(pkgName string, version string) {
 	if !ok || !semverLessThan(latest.Version, version) {
 		return
 	}
-	unlock := cacheMutex.Lock("resolution-persistence")
+	unlock := lockNpmResolution(pkgName)
 	defer unlock()
 	v, _ = getCacheItem(key)
 	latest, ok = v.(*npm.PackageJSON)
@@ -419,8 +412,8 @@ func invalidateDistTagCacheIfNewer(pkgName string, version string) {
 		return
 	}
 	deleteCacheItem(key)
-	npmResolutionEpoch.Add(1)
-	DefaultNpmRC().deleteResolution(DefaultNpmRC().resolutionKey(pkgName, "latest"))
+	npmResolutionEpoch(pkgName).Add(1)
+	npmResolutions.Remove(DefaultNpmRC().resolutionKey(pkgName, "latest"))
 	deleteCacheItem("404:" + pkgName + "@latest")
 	negativeCache.delete("404:"+DefaultNpmRC().getRegistryByPackageName(pkgName).Registry+pkgName+"@latest", false)
 }

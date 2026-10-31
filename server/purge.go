@@ -3,11 +3,13 @@ package server
 import (
 	"context"
 	"errors"
+	"math/rand/v2"
 	"net/netip"
 	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -99,12 +101,9 @@ func purgePackageCache(npmrc *NpmRC, metaDB *BuildMetaDB, esmStorage storage.Sto
 	// git ref, each cached under its own key, so matching a single resolved
 	// version is not enough — a purge must force a fresh resolution.
 	if !esmPath.GhPrefix && !esmPath.PrPrefix {
-		if err := npmrc.purgeResolutions(esmPath.PkgName); err != nil {
-			return nil, err
-		}
+		npmrc.purgeResolutions(esmPath.PkgName)
 	}
 	registry := npmrc.getRegistryByPackageName(esmPath.PkgName).Registry
-	packumentCache.Remove(registry + esmPath.PkgName)
 	prefixes := []string{
 		"npm:" + esmPath.PkgName + "@",
 		"404:" + esmPath.PkgName + "@",
@@ -181,13 +180,15 @@ func purgePackageCache(npmrc *NpmRC, metaDB *BuildMetaDB, esmStorage storage.Sto
 	}
 
 	// 3. remove the local npm store copy so the tarball is re-fetched.
+	// [warning] move it away first, a concurrent build must never see a half-deleted package
 	installDir := filepath.Join(npmrc.StoreDir(), pkgId)
-	if existsDir(installDir) {
-		if err := os.RemoveAll(installDir); err != nil {
-			logger.Errorf("removeAll(%s): %v", installDir, err)
-			return nil, err
-		}
+	trashDir := filepath.Join(npmrc.StoreDir(), ".purge-"+strconv.FormatUint(rand.Uint64(), 36))
+	if err := os.Rename(installDir, trashDir); err == nil {
+		go os.RemoveAll(trashDir)
 		resp.Purged = append(resp.Purged, "install:"+installDir)
+	} else if !os.IsNotExist(err) {
+		logger.Errorf("rename(%s): %v", installDir, err)
+		return nil, err
 	}
 
 	// Clear the "not found" records only after the artifacts are gone, so a

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sync"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -535,6 +536,50 @@ func TestBuildQueueReleasedTimeout(t *testing.T) {
 			t.Fatalf("running = %d, want 1", q.running)
 		}
 		close(finish)
+		synctest.Wait()
+		if len(q.Snapshot()) != 0 || q.running != 0 {
+			t.Fatalf("queue did not drain: running=%d, tasks=%+v", q.running, q.Snapshot())
+		}
+	})
+}
+
+func TestBuildQueueParallelRelease(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		q := NewBuildQueue(1, 0)
+		wake, finish := make(chan struct{}), make(chan struct{})
+		var waiting *BuildContext
+		waiting = newBuildQueueTestContext("/"+t.Name()+"/waiting", func() (*BuildMeta, error) {
+			// parallel resolver callbacks of one build wait for other installs at the same time
+			task := waiting.Context().Value(buildTaskKey{}).(*buildTask)
+			var wg sync.WaitGroup
+			for range 2 {
+				wg.Go(func() {
+					task.release()
+					<-wake
+					task.acquire()
+				})
+			}
+			wg.Wait()
+			return &BuildMeta{}, nil
+		})
+		running := newBuildQueueTestContext("/"+t.Name()+"/running", func() (*BuildMeta, error) {
+			<-finish
+			return &BuildMeta{}, nil
+		})
+		done := make(chan error, 1)
+		go func() {
+			_, err := q.Build(context.Background(), waiting)
+			done <- err
+		}()
+		synctest.Wait()
+		go q.Build(context.Background(), running)
+		synctest.Wait()
+		close(wake)
+		synctest.Wait()
+		close(finish)
+		if err := <-done; err != nil {
+			t.Fatal(err)
+		}
 		synctest.Wait()
 		if len(q.Snapshot()) != 0 || q.running != 0 {
 			t.Fatalf("queue did not drain: running=%d, tasks=%+v", q.running, q.Snapshot())
