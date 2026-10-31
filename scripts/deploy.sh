@@ -127,6 +127,11 @@ ssh -p $sshPort ${user}@${host} << EOF
 
   mv -f esmd /usr/local/bin/esmd
 
+  if [ -d /esm/npm ]; then
+    mv -T /esm/npm /esm/_npm || exit 1
+    nohup rm -rf /esm/_npm </dev/null >/dev/null 2>&1 &
+  fi
+
   if [ "$init" == "yes" ]; then
     systemctl daemon-reload
     systemctl enable esmd.service
