@@ -144,17 +144,17 @@ func (ctx *BuildContext) checkCanceled() error {
 func (ctx *BuildContext) waitLock(key string) {
 	// [warning] a build waiting for the install or analysis of another build is idle,
 	// holding its slot would let the waiters of a slow one fill the build queue
-	q, _ := ctx.Context().Value(buildQueueKey{}).(*BuildQueue)
+	task, _ := ctx.Context().Value(buildTaskKey{}).(*buildTask)
 	active, ok := installLocks.Load(key)
-	if q == nil || !ok {
+	if task == nil || !ok {
 		return
 	}
-	q.release()
+	task.release()
 	select {
 	case <-active.(chan struct{}):
 	case <-ctx.Context().Done():
 	}
-	q.acquire()
+	task.acquire()
 }
 
 func (ctx *BuildContext) Build(buildCtx context.Context) (meta *BuildMeta, err error) {
