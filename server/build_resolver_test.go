@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -414,7 +415,7 @@ func TestBuildExternalWildcard(t *testing.T) {
 				pkgJson: &npm.PackageJSON{Name: "example", Version: "1.0.0", Type: "module", Main: "./index.js", Types: "./index.d.ts", Dependencies: map[string]string{"css-in-js-utils": "2.0.1"}},
 				args:    BuildArgs{External: *set.NewReadOnly("css-in-js-utils/*")},
 			}
-			if err := resolveBuildArgs(nil, wd, &ctx.args, ctx.esmPath); err != nil {
+			if err := resolveBuildArgs(context.Background(), nil, wd, &ctx.args, ctx.esmPath); err != nil {
 				t.Fatal(err)
 			}
 			var savePath string

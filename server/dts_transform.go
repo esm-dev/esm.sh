@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path"
 	"strings"
@@ -73,13 +72,7 @@ func (t *dtsTransform) stat(savePath string) *dtsFile {
 		if file.statErr = t.ctx.Err(); file.statErr != nil {
 			return
 		}
-		if s, ok := t.storage.(interface {
-			StatContext(context.Context, string) (storage.Stat, error)
-		}); ok {
-			_, file.statErr = s.StatContext(t.ctx, savePath)
-		} else {
-			_, file.statErr = t.storage.Stat(savePath)
-		}
+		_, file.statErr = t.storage.StatContext(t.ctx, savePath)
 	})
 	return file
 }
@@ -414,7 +407,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, transfo
 		if err != nil {
 			return "", err
 		}
-		err = resolveBuildArgs(ctx.npmrc, b.wd, &b.args, dtsModule)
+		err = resolveBuildArgs(ctx.Context(), ctx.npmrc, b.wd, &b.args, dtsModule)
 		if err != nil {
 			return "", err
 		}
@@ -475,13 +468,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, transfo
 			return
 		}
 		content := ctx.rewriteDTS(dts, buffer)
-		if s, ok := ctx.storage.(interface {
-			PutContext(context.Context, string, io.Reader) error
-		}); ok {
-			file.err = s.PutContext(transform.ctx, savePath, content)
-		} else {
-			file.err = ctx.storage.Put(savePath, content)
-		}
+		file.err = ctx.storage.PutContext(transform.ctx, savePath, content)
 		if file.err == nil {
 			file.err = transform.ctx.Err()
 		}

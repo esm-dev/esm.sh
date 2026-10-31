@@ -574,6 +574,11 @@ func TestInstallGithubDenoConfig(t *testing.T) {
 }
 
 func TestInvalidateDistTagCacheIfNewer(t *testing.T) {
+	key := DefaultNpmRC().resolutionFreshKey("cache-test", "npm:cache-test@latest")
+	t.Cleanup(func() {
+		deleteCacheItem(key)
+		deleteCacheItem("404:cache-test@latest")
+	})
 	tests := []struct {
 		request string
 		invalid bool
@@ -585,10 +590,10 @@ func TestInvalidateDistTagCacheIfNewer(t *testing.T) {
 		{"v2.0.0", true},  // v-prefixed newer
 	}
 	for _, test := range tests {
-		setCacheItem("npm:cache-test@latest", &npm.PackageJSON{Version: "1.2.0"}, time.Minute)
+		setCacheItem(key, &npm.PackageJSON{Version: "1.2.0"}, time.Minute)
 		setCacheItem("404:cache-test@latest", "boom", time.Minute)
 		invalidateDistTagCacheIfNewer("cache-test", test.request)
-		_, ok := getCacheItem("npm:cache-test@latest")
+		_, ok := getCacheItem(key)
 		if invalid := !ok; invalid != test.invalid {
 			t.Fatalf("request %q: expected invalidated=%v, got %v", test.request, test.invalid, invalid)
 		}
@@ -1040,7 +1045,7 @@ func TestGetPackageInfoDoesNotCacheStoreCopy(t *testing.T) {
 }
 
 func TestInvalidateDistTagCacheSkipsPrerelease(t *testing.T) {
-	key := "npm:dist-tag-test@latest"
+	key := DefaultNpmRC().resolutionFreshKey("dist-tag-test", "npm:dist-tag-test@latest")
 	t.Cleanup(func() { deleteCacheItem(key) })
 	setCacheItem(key, &npm.PackageJSON{Name: "dist-tag-test", Version: "1.0.0"}, time.Minute)
 	invalidateDistTagCacheIfNewer("dist-tag-test", "2.0.0-canary.1")

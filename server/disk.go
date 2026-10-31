@@ -2,10 +2,8 @@ package server
 
 import (
 	"os"
-	"sync"
+	"path/filepath"
 	"syscall"
-
-	"github.com/ije/gox/log"
 )
 
 type DiskStatus uint8
@@ -17,51 +15,49 @@ const (
 	DiskStatusFull
 )
 
-// npmStorePurgeLock serializes purge operations on the npm store to avoid
-// concurrent rename/remove races within this process.
-var npmStorePurgeLock sync.Mutex
-
-func purgeNPMCacheWhenDiskIsLowOrFull(npmrc *NpmRC, logger *log.Logger) {
-	if status := checkDiskStatus(); status == DiskStatusOk || status == DiskStatusError {
-		return
-	}
-
-	npmStorePurgeLock.Lock()
-	defer npmStorePurgeLock.Unlock()
-
-	npmDir := npmrc.StoreDir()
-	oldDir := npmDir + "_old"
-
-	// Ensure any previous backup directory is removed so that the rename is idempotent.
-	if err := os.RemoveAll(oldDir); err != nil {
-		logger.Errorf("failed to remove previous npm cache backup directory %s: %v", oldDir, err)
-	}
-
-	if err := os.Rename(npmDir, oldDir); err != nil {
-		// If the directory does not exist, there's nothing to purge.
-		if !os.IsNotExist(err) {
-			logger.Errorf("failed to rename npm cache directory %s to %s: %v", npmDir, oldDir, err)
-		}
-		return
-	}
-
-	if err := os.RemoveAll(oldDir); err != nil {
-		logger.Errorf("failed to remove npm cache directory %s: %v", oldDir, err)
-	}
-}
+var diskStatfs = syscall.Statfs
 
 func checkDiskStatus() DiskStatus {
-	var stat syscall.Statfs_t
-	err := syscall.Statfs(config.WorkDir, &stat)
-	if err == nil {
-		avail := stat.Bavail * uint64(stat.Bsize)
-		if avail < 100*MB {
-			return DiskStatusFull
-		} else if avail < 1024*MB {
-			return DiskStatusLow
-		}
-	} else {
-		return DiskStatusError
+	dirs := []string{DefaultNpmRC().StoreDir()}
+	if config.Storage.Type == "s3" && config.Storage.CacheDir != "" {
+		dirs = append(dirs, config.Storage.CacheDir)
 	}
-	return DiskStatusOk
+	status := DiskStatusOk
+	for _, dir := range dirs {
+		// the worst status wins, an error only replaces ok
+		if s, _, _ := diskStatus(dir); s != DiskStatusOk && (status == DiskStatusOk || s > status) {
+			status = s
+		}
+	}
+	return status
+}
+
+// diskStatus returns the status, the available bytes and the free inode ratio of the filesystem holding dir.
+func diskStatus(dir string) (status DiskStatus, avail uint64, inodes float64) {
+	var stat syscall.Statfs_t
+	var err error
+	for {
+		err = diskStatfs(dir, &stat)
+		parent := filepath.Dir(dir)
+		if !os.IsNotExist(err) || parent == dir {
+			break
+		}
+		dir = parent
+	}
+	if err != nil {
+		return DiskStatusError, 0, 0
+	}
+	avail, inodes = stat.Bavail*uint64(stat.Bsize), 1
+	if stat.Files > 0 {
+		inodes = float64(stat.Ffree) / float64(stat.Files)
+	}
+	switch {
+	case avail < 100*MB || inodes < 0.01:
+		status = DiskStatusFull
+	case avail < 10*GB || inodes < 0.05:
+		status = DiskStatusLow
+	default:
+		status = DiskStatusOk
+	}
+	return
 }

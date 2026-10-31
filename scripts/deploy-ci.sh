@@ -84,8 +84,13 @@ ssh esm.sh << EOF
   if [ "$RESET_ON_DEPLOY" == "yes" ]; then
     mkdir -p /tmp/.esm
     mv -f /esm/* /tmp/.esm
-    nohup rm -rf /tmp/.esm &
+    nohup rm -rf /tmp/.esm </dev/null >/dev/null 2>&1 &
   fi
+
+  if [ -d /esm/npm ]; then
+    mv -T /esm/npm /esm/_npm.\$(date +%s)
+  fi
+  nohup rm -rf /esm/_npm.* </dev/null >/dev/null 2>&1 &
 
   if [ "\$reload" == "yes" ]; then
     systemctl daemon-reload

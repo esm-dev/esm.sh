@@ -19,6 +19,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/Masterminds/semver/v3"
@@ -309,6 +310,7 @@ func (npmrc *NpmRC) getPackageInfoContext(ctx context.Context, pkgName string, v
 	if npm.IsExactVersion(version) {
 		var raw npm.PackageJSONRaw
 		if utils.ParseJSONFile(filepath.Join(npmrc.StoreDir(), pkgName+"@"+version, "node_modules", pkgName, "package.json"), &raw) == nil {
+			useNpmPackage(ctx, pkgName+"@"+version)()
 			return raw.ToNpmPackage(), nil
 		}
 	}
@@ -437,14 +439,25 @@ func lockInstall(ctx context.Context, key string) (func(), error) {
 }
 
 func (npmrc *NpmRC) installPackageContext(ctx context.Context, pkg npm.Package) (packageJson *npm.PackageJSON, err error) {
+	packageJson, err = npmrc.installPackageOnce(ctx, pkg)
+	// the idle purge keeps the packages held by running builds
+	if errors.Is(err, syscall.ENOSPC) && ctx.Err() == nil && npmStore != nil {
+		npmStore.purgeIdle()
+		packageJson, err = npmrc.installPackageOnce(ctx, pkg)
+	}
+	return
+}
+
+func (npmrc *NpmRC) installPackageOnce(ctx context.Context, pkg npm.Package) (packageJson *npm.PackageJSON, err error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	if message := npmrc.getCachedPackageNotFound(pkg); message != "" {
 		return nil, errors.New(message)
 	}
-	installDir := filepath.Join(npmrc.StoreDir(), pkg.String())
-	packageJsonPath := filepath.Join(installDir, "node_modules", pkg.Name, "package.json")
+	defer useNpmPackage(ctx, pkg.String())()
+	finalDir := filepath.Join(npmrc.StoreDir(), pkg.String())
+	packageJsonPath := filepath.Join(finalDir, "node_modules", pkg.Name, "package.json")
 
 	// check if the package has been installed
 	var raw npm.PackageJSONRaw
@@ -481,11 +494,10 @@ func (npmrc *NpmRC) installPackageContext(ctx context.Context, pkg npm.Package) 
 			negativeCache.put(missingKey, err.Error(), packageNotFoundTTL)
 		}
 	}()
-	finalDir := installDir
 	if err = ensureDir(npmrc.StoreDir()); err != nil {
 		return nil, err
 	}
-	installDir, err = os.MkdirTemp(npmrc.StoreDir(), ".install-")
+	installDir, err := os.MkdirTemp(npmrc.StoreDir(), ".install-")
 	if err != nil {
 		return nil, err
 	}
@@ -589,6 +601,8 @@ func (npmrc *NpmRC) installDependencies(wd string, pkgJson *npm.PackageJSON, npm
 }
 
 func (npmrc *NpmRC) installDependenciesContext(ctx context.Context, wd string, pkgJson *npm.PackageJSON, npmMode bool, overrides map[string]string) error {
+	ctx, release := withNpmPackageScope(ctx)
+	defer release()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 

@@ -134,8 +134,8 @@ func TestBuildQueueWaitCancellation(t *testing.T) {
 				time.Sleep(time.Second)
 				synctest.Wait()
 				for _, item := range q.Snapshot() {
-					if item["path"] == path && item["waitClients"] != 0 {
-						t.Fatalf("timed out waiter retained: %+v", item)
+					if item["path"] == path && (pending || item["waitClients"] != 0) {
+						t.Fatalf("abandoned task or waiter retained: %+v", item)
 					}
 				}
 				if !pending && build.Context().Err() != nil {
@@ -145,7 +145,7 @@ func TestBuildQueueWaitCancellation(t *testing.T) {
 				finished := make(chan struct{}, clients)
 				for range clients {
 					go func() {
-						meta, err := q.Build(context.Background(), &BuildContext{path: path})
+						meta, err := q.Build(context.Background(), &BuildContext{path: path, metaDB: build.metaDB})
 						if err != nil || meta == nil || !meta.ExportDefault {
 							t.Errorf("shared result: meta=%+v, err=%v", meta, err)
 						}
@@ -179,6 +179,7 @@ func TestBuildQueueFailure(t *testing.T) {
 	for _, failure := range []string{"error", "panic", "timeout"} {
 		t.Run(failure, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
+				useNegativeCache(t)
 				q := NewBuildQueue(1, time.Second)
 				release := make(chan struct{})
 				path := "/" + t.Name()
@@ -225,15 +226,14 @@ func TestBuildQueueFailure(t *testing.T) {
 				}()
 				synctest.Wait()
 				if failure == "timeout" {
-					time.Sleep(time.Second)
-					synctest.Wait()
-					if len(nextStarted) != 0 {
-						t.Fatal("released capacity before the timed out build exited")
-					}
+					// the build ignores its canceled context, the queue must not wait for it,
+					// only for the batched write of the timeout record
+					time.Sleep(time.Second + negativeCache.MaxBatchDelay)
+				} else {
+					close(release)
 				}
-				close(release)
 				synctest.Wait()
-				if len(errorsReceived) != 2 || len(nextStarted) != 1 || len(q.Snapshot()) != 0 {
+				if len(errorsReceived) != 2 || len(nextStarted) != 1 || len(q.Snapshot()) != 0 || q.running != 0 {
 					t.Fatalf("failure did not release waiters and capacity: errors=%d, next=%d, queue=%+v", len(errorsReceived), len(nextStarted), q.Snapshot())
 				}
 				for range 2 {
@@ -242,12 +242,74 @@ func TestBuildQueueFailure(t *testing.T) {
 					}
 				}
 				retry := newBuildQueueTestContext(path, func() (*BuildMeta, error) { return &BuildMeta{}, nil })
+				if failure == "timeout" {
+					close(release)
+					synctest.Wait()
+					if q.running != 0 {
+						t.Fatalf("the exit of a timed out build changed the running count: %d", q.running)
+					}
+					if _, err := q.Build(context.Background(), retry); err == nil || err.Error() != want {
+						t.Fatalf("retried a timed out build within %v: %v", buildTimeoutTTL, err)
+					}
+					time.Sleep(buildTimeoutTTL)
+				}
 				if _, err := q.Build(context.Background(), retry); err != nil {
 					t.Fatalf("retry failed: %v", err)
 				}
 			})
 		})
 	}
+}
+
+func TestBuildQueueAbandonedPending(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		q := NewBuildQueue(1, time.Minute)
+		release := make(chan struct{})
+		blocker := newBuildQueueTestContext("/"+t.Name()+"/blocker", func() (*BuildMeta, error) {
+			<-release
+			return &BuildMeta{}, nil
+		})
+		go func() {
+			if _, err := q.Build(context.Background(), blocker); err != nil {
+				t.Error(err)
+			}
+		}()
+		synctest.Wait()
+		path := "/" + t.Name() + "/pending"
+		build := newBuildQueueTestContext(path, func() (*BuildMeta, error) {
+			t.Error("started an abandoned pending build")
+			return &BuildMeta{}, nil
+		})
+		cancels := make([]context.CancelFunc, 3)
+		for i := range cancels {
+			ctx, cancel := context.WithCancel(context.Background())
+			cancels[i] = cancel
+			go func() {
+				if _, err := q.Build(ctx, build); !errors.Is(err, context.Canceled) {
+					t.Errorf("expected canceled waiter, got %v", err)
+				}
+			}()
+		}
+		synctest.Wait()
+		for i, cancel := range cancels {
+			cancel()
+			synctest.Wait()
+			remaining := len(cancels) - i - 1
+			task := q.tasks[path]
+			if remaining > 0 {
+				if task == nil || task.waitClients != remaining {
+					t.Fatalf("lost shared pending build with %d waiters", remaining)
+				}
+			} else if task != nil || q.pending.Len() != 0 {
+				t.Fatal("retained pending build after its last waiter left")
+			}
+		}
+		close(release)
+		synctest.Wait()
+		if len(q.Snapshot()) != 0 || q.running != 0 {
+			t.Fatalf("queue did not drain: %+v", q.Snapshot())
+		}
+	})
 }
 
 func TestBuildQueuePathChange(t *testing.T) {
@@ -347,57 +409,135 @@ func TestBuildQueueSnapshotDuringBuild(t *testing.T) {
 }
 
 func TestBuildQueueInstallTimeout(t *testing.T) {
-	workDir := config.WorkDir
-	config.WorkDir = t.TempDir()
-	defer func() { config.WorkDir = workDir }()
-	pkg := npm.Package{Name: "queue-install-timeout", Version: "1.0.0"}
-	unlock, err := lockInstall(context.Background(), pkg.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	q := NewBuildQueue(1, 20*time.Millisecond)
-	started := make(chan struct{}, 1)
-	build := newBuildQueueTestContext("/"+t.Name(), func() (*BuildMeta, error) {
-		started <- struct{}{}
-		return nil, storage.ErrNotFound
-	})
-	build.npmrc = &NpmRC{}
-	build.esmPath = EsmPath{PkgName: pkg.Name, PkgVersion: pkg.Version}
-	done := make(chan error, 1)
-	go func() {
-		_, err := q.Build(context.Background(), build)
-		done <- err
-	}()
-	<-started
-	next := newBuildQueueTestContext("/"+t.Name()+"/next", func() (*BuildMeta, error) {
-		return &BuildMeta{}, nil
-	})
-	nextDone := make(chan error, 1)
-	go func() {
-		_, err := q.Build(context.Background(), next)
-		nextDone <- err
-	}()
-	timedOut := false
-	select {
-	case err := <-nextDone:
+	synctest.Test(t, func(t *testing.T) {
+		workDir := config.WorkDir
+		config.WorkDir = t.TempDir()
+		defer func() { config.WorkDir = workDir }()
+		pkg := npm.Package{Name: "queue-install-timeout", Version: "1.0.0"}
+		unlock, err := lockInstall(context.Background(), pkg.String())
 		if err != nil {
-			t.Error(err)
+			t.Fatal(err)
 		}
-	case <-time.After(time.Second):
-		timedOut = true
-		t.Errorf("install lock kept the queue stuck past its deadline: %+v", q.Snapshot())
-	}
-	if err := build.Context().Err(); !errors.Is(err, context.DeadlineExceeded) {
-		t.Errorf("build deadline was not delivered: %v", err)
-	}
-	unlock()
-	if err := <-done; err == nil || err.Error() != "build timeout after 0 seconds" {
-		t.Errorf("expected build timeout, got %v", err)
-	}
-	if timedOut {
-		err := <-nextDone
-		if err != nil {
-			t.Error(err)
+		defer unlock()
+		q := NewBuildQueue(1, time.Minute)
+		build := newBuildQueueTestContext("/"+t.Name(), func() (*BuildMeta, error) {
+			return nil, storage.ErrNotFound
+		})
+		build.npmrc = &NpmRC{}
+		build.esmPath = EsmPath{PkgName: pkg.Name, PkgVersion: pkg.Version}
+		done := make(chan error, 1)
+		go func() {
+			_, err := q.Build(context.Background(), build)
+			done <- err
+		}()
+		synctest.Wait()
+		// a build waiting for the install of another build frees its slot
+		next := newBuildQueueTestContext("/"+t.Name()+"/next", func() (*BuildMeta, error) {
+			return &BuildMeta{}, nil
+		})
+		if _, err := q.Build(context.Background(), next); err != nil {
+			t.Fatal(err)
 		}
-	}
+		if err := build.Context().Err(); err != nil {
+			t.Fatalf("the next build waited for the install lock: %v", err)
+		}
+		// the install lock never keeps a build past its deadline
+		if err := <-done; err == nil || err.Error() != "build timeout after 60 seconds" {
+			t.Fatalf("expected build timeout, got %v", err)
+		}
+		if len(q.Snapshot()) != 0 {
+			t.Fatal("finished tasks remain in the queue")
+		}
+	})
+}
+
+func TestBuildQueueRelease(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		q := NewBuildQueue(1, 0)
+		events := make(chan string, 3)
+		wake, finish := make(chan struct{}), make(chan struct{})
+		var waiting *BuildContext
+		waiting = newBuildQueueTestContext("/"+t.Name()+"/waiting", func() (*BuildMeta, error) {
+			task := waiting.Context().Value(buildTaskKey{}).(*buildTask)
+			task.release()
+			<-wake
+			task.acquire()
+			events <- "waiting"
+			return &BuildMeta{}, nil
+		})
+		running := newBuildQueueTestContext("/"+t.Name()+"/running", func() (*BuildMeta, error) {
+			events <- "running"
+			<-finish
+			return &BuildMeta{}, nil
+		})
+		pending := newBuildQueueTestContext("/"+t.Name()+"/pending", func() (*BuildMeta, error) {
+			events <- "pending"
+			return &BuildMeta{}, nil
+		})
+		for _, build := range []*BuildContext{waiting, running, pending} {
+			go q.Build(context.Background(), build)
+			synctest.Wait()
+		}
+		if len(events) != 1 {
+			t.Fatalf("got %d started builds, want the released slot to run one build", len(events))
+		}
+		close(wake)
+		synctest.Wait()
+		close(finish)
+		synctest.Wait()
+		for _, want := range []string{"running", "waiting", "pending"} {
+			if got := <-events; got != want {
+				t.Fatalf("got %q, want %q: a released build takes the next slot before the pending tasks", got, want)
+			}
+		}
+		if len(q.Snapshot()) != 0 {
+			t.Fatal("finished tasks remain in the queue")
+		}
+	})
+}
+
+func TestBuildQueueReleasedTimeout(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		q := NewBuildQueue(1, time.Minute)
+		exited, finish := make(chan struct{}, 1), make(chan struct{})
+		var released *BuildContext
+		released = newBuildQueueTestContext("/"+t.Name()+"/released", func() (*BuildMeta, error) {
+			task := released.Context().Value(buildTaskKey{}).(*buildTask)
+			task.release()
+			<-released.Context().Done()
+			task.acquire()
+			exited <- struct{}{}
+			return nil, released.Context().Err()
+		})
+		running := newBuildQueueTestContext("/"+t.Name()+"/running", func() (*BuildMeta, error) {
+			<-finish
+			return &BuildMeta{}, nil
+		})
+		done := make(chan error, 1)
+		go func() {
+			_, err := q.Build(context.Background(), released)
+			done <- err
+		}()
+		synctest.Wait()
+		time.Sleep(time.Second)
+		go q.Build(context.Background(), running)
+		synctest.Wait()
+		// the running build holds the only slot past the deadline of the released one
+		time.Sleep(time.Minute - time.Second)
+		synctest.Wait()
+		if len(exited) != 1 {
+			t.Fatal("a timed out build waited for a slot to exit")
+		}
+		if err := <-done; err == nil || err.Error() != "build timeout after 60 seconds" {
+			t.Fatalf("expected build timeout, got %v", err)
+		}
+		if q.running != 1 {
+			t.Fatalf("running = %d, want 1", q.running)
+		}
+		close(finish)
+		synctest.Wait()
+		if len(q.Snapshot()) != 0 || q.running != 0 {
+			t.Fatalf("queue did not drain: running=%d, tasks=%+v", q.running, q.Snapshot())
+		}
+	})
 }

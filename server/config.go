@@ -187,7 +187,7 @@ func normalizeConfig(config *Config) {
 		}
 	}
 	if config.BuildConcurrency == 0 {
-		config.BuildConcurrency = uint16(runtime.NumCPU())
+		config.BuildConcurrency = uint16(runtime.GOMAXPROCS(0))
 	}
 	if config.BuildWaitTime == 0 {
 		config.BuildWaitTime = 30 // seconds
@@ -217,6 +217,9 @@ func normalizeConfig(config *Config) {
 	}
 	if config.Storage.SecretAccessKey == "" {
 		config.Storage.SecretAccessKey = os.Getenv("STORAGE_SECRET_ACCESS_KEY")
+	}
+	if config.Storage.CacheDir != "" {
+		config.Storage.MetaCacheFile = path.Join(config.WorkDir, "meta-cache.db")
 	}
 	if config.LogDir == "" {
 		config.LogDir = path.Join(config.WorkDir, "log")

@@ -1,7 +1,6 @@
 package server
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -12,7 +11,6 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 
@@ -79,26 +77,27 @@ func Start() {
 	if err != nil {
 		logger.Fatalf("failed to initialize negative cache: %v", err)
 	}
-	negativeCache.gc(time.Now())
+	go negativeCache.gc(time.Now())
 
 	// the default transport keeps only 2 idle connections per host, too few for parallel registry fetches
 	http.DefaultTransport.(*http.Transport).MaxIdleConnsPerHost = 64
 
-	// remove staging dirs left behind by installs interrupted by a crash or restart
-	npmrc := DefaultNpmRC()
-	if dirs, err := filepath.Glob(filepath.Join(npmrc.StoreDir(), ".install-*")); err == nil {
-		for _, dir := range dirs {
-			os.RemoveAll(dir)
-		}
-	}
-
-	// purge npm cache when disk is low or full
+	startTime := time.Now()
+	npmStore = &npmPackageStore{dir: DefaultNpmRC().StoreDir(), logger: logger}
 	go func() {
-		purgeNPMCacheWhenDiskIsLowOrFull(npmrc, logger)
-		ticker := time.NewTicker(time.Hour)
-		defer ticker.Stop()
-		for range ticker.C {
-			purgeNPMCacheWhenDiskIsLowOrFull(npmrc, logger)
+		// remove the dirs left behind by installs and purges interrupted by a crash or restart
+		// [warning] in the background, globbing a big npm store delays the start, so keep the installs started since
+		for _, pattern := range []string{".install-*", ".purge-*"} {
+			if dirs, err := filepath.Glob(filepath.Join(DefaultNpmRC().StoreDir(), pattern)); err == nil {
+				for _, dir := range dirs {
+					if fi, err := os.Lstat(dir); err == nil && fi.ModTime().Before(startTime) {
+						os.RemoveAll(dir)
+					}
+				}
+			}
+		}
+		if err := npmStore.restore(); err != nil {
+			logger.Errorf("npm TTL restore: %v", err)
 		}
 	}()
 
@@ -163,14 +162,11 @@ func Start() {
 	signal.Notify(c, syscall.SIGTERM, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGHUP, syscall.SIGABRT)
 	select {
 	case <-c:
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		var wg sync.WaitGroup
-		wg.Go(func() { httpServer.Shutdown(ctx) })
+		// [warning] drop the in-flight requests and builds, waiting for them keeps the server down on every restart
+		httpServer.Close()
 		if httpsServer != nil {
-			wg.Go(func() { httpsServer.Shutdown(ctx) })
+			httpsServer.Close()
 		}
-		wg.Wait()
-		cancel()
 	case err = <-errCh:
 		logger.Error(err)
 	}

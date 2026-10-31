@@ -2,6 +2,7 @@ package server
 
 const (
 	MB                    = 1 << 20
+	GB                    = 1 << 30
 	maxAssetFileSize      = 50 * MB
 	maxPackageTarballSize = 256 * MB
 	lruCacheCapacity      = 10000

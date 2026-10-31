@@ -32,20 +32,20 @@ type dtsTestStorage struct {
 	cancel       context.CancelFunc
 }
 
-func (s *dtsTestStorage) Stat(key string) (storage.Stat, error) {
+func (s *dtsTestStorage) StatContext(ctx context.Context, key string) (storage.Stat, error) {
 	s.mu.Lock()
 	s.active++
 	s.peak = max(s.peak, s.active)
 	s.mu.Unlock()
 	time.Sleep(s.delay)
-	stat, err := s.Storage.Stat(key)
+	stat, err := s.Storage.StatContext(ctx, key)
 	s.mu.Lock()
 	s.active--
 	s.mu.Unlock()
 	return stat, err
 }
 
-func (s *dtsTestStorage) Put(key string, content io.Reader) error {
+func (s *dtsTestStorage) PutContext(ctx context.Context, key string, content io.Reader) error {
 	s.mu.Lock()
 	s.active++
 	s.peak = max(s.peak, s.active)
@@ -62,7 +62,7 @@ func (s *dtsTestStorage) Put(key string, content io.Reader) error {
 			}
 		}
 		if err == nil {
-			err = s.Storage.Put(key, content)
+			err = s.Storage.PutContext(ctx, key, content)
 		}
 	}
 	if s.cancel != nil {
@@ -197,6 +197,8 @@ func TestTransformDTSStorageTimeout(t *testing.T) {
 				ctx := &BuildContext{storage: s, wd: root, target: "types", esmPath: EsmPath{PkgName: "pkg", PkgVersion: "1.0.0", SubPath: "index.d.ts"}, pkgJson: &npm.PackageJSON{}}
 				start := time.Now()
 				_, err := queue.Build(context.Background(), ctx)
+				// the queue returns at the deadline, let the canceled build exit before restoring the client
+				synctest.Wait()
 				if err == nil || err.Error() != "build timeout after 1 seconds" {
 					t.Fatalf("expected build timeout, got %v", err)
 				}
