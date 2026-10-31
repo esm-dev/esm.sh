@@ -81,7 +81,8 @@ func newPowChallenge(scope string) (*powChallengeResponse, error) {
 // powVerify checks a solved challenge, then uses it up when allow passes. A
 // challenge is single-use and only valid for the scope it was minted for, so a
 // valid solution cannot be replayed across endpoints.
-// [warning] allow runs before the solution is remembered, so the requests it
+// [warning] the solution is reserved before allow runs, so parallel replays
+// call allow once; it is forgotten when allow fails, so the requests allow
 // rejects cannot fill the solved store and lock out every client.
 func powVerify(scope string, id string, nonce string, allow func() bool) bool {
 	policy, ok := powPolicies[scope]
@@ -103,14 +104,8 @@ func powVerify(scope string, id string, nonce string, allow func() bool) bool {
 		return false
 	}
 	powSolved.Lock()
-	_, used := powSolved.m[id]
-	powSolved.Unlock()
-	if used || (allow != nil && !allow()) {
-		return false
-	}
-	powSolved.Lock()
-	defer powSolved.Unlock()
 	if _, used := powSolved.m[id]; used {
+		powSolved.Unlock()
 		return false
 	}
 	if len(powSolved.m) >= powSolvedMaxSize {
@@ -121,9 +116,17 @@ func powVerify(scope string, id string, nonce string, allow func() bool) bool {
 		}
 		// fail closed: forgetting an unexpired solution would allow its replay
 		if len(powSolved.m) >= powSolvedMaxSize {
+			powSolved.Unlock()
 			return false
 		}
 	}
 	powSolved.m[id] = exp
+	powSolved.Unlock()
+	if allow != nil && !allow() {
+		powSolved.Lock()
+		delete(powSolved.m, id)
+		powSolved.Unlock()
+		return false
+	}
 	return true
 }

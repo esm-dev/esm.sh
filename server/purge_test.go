@@ -76,9 +76,16 @@ func TestPowChallenge(t *testing.T) {
 	if powVerify("purge", challenge.ID, nonce, func() bool { return false }) {
 		t.Fatal("expected a rejected request to fail")
 	}
-	// a correctly solved challenge passes and is consumed (single-use)
-	if !powVerify("purge", challenge.ID, nonce, nil) {
+	// a correctly solved challenge passes and is consumed (single-use), even by a replay that runs while allow does
+	replayed := false
+	if !powVerify("purge", challenge.ID, nonce, func() bool {
+		replayed = powVerify("purge", challenge.ID, nonce, nil)
+		return true
+	}) {
 		t.Fatal("expected the solved challenge to verify")
+	}
+	if replayed {
+		t.Fatal("expected a parallel replay to be rejected")
 	}
 	if powVerify("purge", challenge.ID, nonce, nil) {
 		t.Fatal("expected the challenge to be single-use")
