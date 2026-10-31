@@ -1,5 +1,21 @@
 # Server Changelog
 
+## v140_2
+
+* Remove `npmStoreMaxSize`, `storage.cacheMaxSize`, and automatic local S3 cache purging. (#1495, #1501)
+* Expire installed npm packages after 1 idle hour, keep packages used by active requests and builds, and free idle packages before retrying an install on `ENOSPC`. (#1501)
+* Cache S3 build metadata in `{workDir}/meta-cache.db` when `storage.cacheDir` is enabled. (#1498)
+* Reduce deploy downtime by moving startup cleanup to the background and removing old npm directories asynchronously. (#1495, #1501)
+* Free build slots while waiting for package installs and fix concurrent build queue resumes. (#1495, #1503)
+* Honor build timeouts during dependency resolution and storage writes, free timed out build slots immediately, and cache build timeout errors for 10 minutes. (#1497, #1502)
+* Serve cached npm resolutions while refreshing metadata in the background, including during registry outages. (#1488, #1503)
+* Share concurrent registry lookups, cancel waits with the request, and return uncached HTTP 408 responses when resolution exceeds 30 seconds. (#1489)
+* Fix purge rate limiting, authenticated registry cache invalidation, and races when removing installed packages. (#1503)
+* Fix dependency JSON imports, legacy scoped package URLs with `*`, missing GitHub repository responses, and caching of invalid registry responses. (#1503)
+* Skip redundant storage lookups when joining a running build. (#1503)
+* Allow comments in the server config file. (#1503)
+* Respect container CPU limits for default build concurrency and upgrade `golang.org/x/net` to `v0.60.0`. (#1486)
+
 ## v140_1
 
 * Add `npmStoreMaxSize` and `storage.cacheMaxSize` options to limit the size of local caches. (#1492)
