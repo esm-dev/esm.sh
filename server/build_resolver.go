@@ -1173,7 +1173,8 @@ func (ctx *BuildContext) resolveDTS(entry BuildEntry) (string, error) {
 }
 
 func (ctx *BuildContext) getImportPath(esm EsmPath, buildArgsPrefix string, externalAll bool) string {
-	if strings.HasSuffix(esm.SubPath, ".json") && ctx.existsPkgFile(esm.SubPath) {
+	// [warning] esm may be a dependency, so check its own directory, not the one of the building package
+	if strings.HasSuffix(esm.SubPath, ".json") && existsFile(path.Join(ctx.wd, "node_modules", esm.PkgName, esm.SubPath)) {
 		return "/" + esm.PackageId() + "/" + esm.SubPath + "?module"
 	}
 	asteriskPrefix := ""

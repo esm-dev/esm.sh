@@ -106,6 +106,13 @@ func (q *BuildQueue) Build(ctx context.Context, build *BuildContext) (*BuildMeta
 	}
 }
 
+// Has reports whether a build of the path is pending or running.
+func (q *BuildQueue) Has(path string) bool {
+	q.lock.Lock()
+	defer q.lock.Unlock()
+	return q.tasks[path] != nil
+}
+
 func (q *BuildQueue) Snapshot() []map[string]any {
 	q.lock.Lock()
 	defer q.lock.Unlock()
@@ -152,10 +159,18 @@ func (task *buildTask) acquire() {
 		return
 	default:
 	}
-	task.resume = make(chan struct{})
+	// [warning] parallel resolver callbacks of one build may wait at the same time, queue the task only once
+	if task.slot {
+		q.lock.Unlock()
+		return
+	}
 	resume := task.resume
-	q.resumes = append(q.resumes, task)
-	q.scheduleLocked()
+	if resume == nil {
+		resume = make(chan struct{})
+		task.resume = resume
+		q.resumes = append(q.resumes, task)
+		q.scheduleLocked()
+	}
 	q.lock.Unlock()
 	select {
 	case <-resume:
@@ -171,6 +186,7 @@ func (q *BuildQueue) scheduleLocked() {
 		task.slot = true
 		q.running++
 		close(task.resume)
+		task.resume = nil
 	}
 	for q.running < q.concurrency && q.pending.Len() > 0 {
 		task := q.pending.Remove(q.pending.Front()).(*buildTask)

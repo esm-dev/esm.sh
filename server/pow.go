@@ -78,10 +78,12 @@ func newPowChallenge(scope string) (*powChallengeResponse, error) {
 	return &powChallengeResponse{ID: payload + "." + powSign(scope, payload), Salt: salt, Scope: scope, Difficulty: policy.difficulty}, nil
 }
 
-// powVerify checks a solved challenge. A challenge is single-use and only
-// valid for the scope it was minted for, so a valid solution cannot be
-// replayed across endpoints.
-func powVerify(scope string, id string, nonce string) bool {
+// powVerify checks a solved challenge, then uses it up when allow passes. A
+// challenge is single-use and only valid for the scope it was minted for, so a
+// valid solution cannot be replayed across endpoints.
+// [warning] allow runs before the solution is remembered, so the requests it
+// rejects cannot fill the solved store and lock out every client.
+func powVerify(scope string, id string, nonce string, allow func() bool) bool {
 	policy, ok := powPolicies[scope]
 	if !ok {
 		return false
@@ -98,6 +100,12 @@ func powVerify(scope string, id string, nonce string) bool {
 	}
 	sum := sha256.Sum256([]byte(salt + nonce))
 	if !strings.HasPrefix(hex.EncodeToString(sum[:]), strings.Repeat("0", policy.difficulty)) {
+		return false
+	}
+	powSolved.Lock()
+	_, used := powSolved.m[id]
+	powSolved.Unlock()
+	if used || (allow != nil && !allow()) {
 		return false
 	}
 	powSolved.Lock()

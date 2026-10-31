@@ -72,11 +72,15 @@ func TestPowChallenge(t *testing.T) {
 	}
 	nonce := solvePowForTest(challenge)
 
+	// a rejected request does not use up the solution
+	if powVerify("purge", challenge.ID, nonce, func() bool { return false }) {
+		t.Fatal("expected a rejected request to fail")
+	}
 	// a correctly solved challenge passes and is consumed (single-use)
-	if !powVerify("purge", challenge.ID, nonce) {
+	if !powVerify("purge", challenge.ID, nonce, nil) {
 		t.Fatal("expected the solved challenge to verify")
 	}
-	if powVerify("purge", challenge.ID, nonce) {
+	if powVerify("purge", challenge.ID, nonce, nil) {
 		t.Fatal("expected the challenge to be single-use")
 	}
 
@@ -93,7 +97,7 @@ func TestPowChallenge(t *testing.T) {
 		}
 		nonce += "0"
 	}
-	if powVerify("purge", unsolved.ID, nonce) {
+	if powVerify("purge", unsolved.ID, nonce, nil) {
 		t.Fatal("expected an invalid nonce to be rejected")
 	}
 
@@ -102,7 +106,7 @@ func TestPowChallenge(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected a challenge to be minted: %v", err)
 	}
-	if powVerify("other", scoped.ID, solvePowForTest(scoped)) {
+	if powVerify("other", scoped.ID, solvePowForTest(scoped), nil) {
 		t.Fatal("expected a challenge to be rejected by another scope")
 	}
 
@@ -115,7 +119,7 @@ func TestPowChallenge(t *testing.T) {
 	expired := &powChallengeResponse{Salt: "s", Difficulty: powPolicies["purge"].difficulty}
 	payload := "s." + strconv.FormatInt(time.Now().Add(-time.Minute).Unix(), 10)
 	expired.ID = payload + "." + powSign("purge", payload)
-	if powVerify("purge", expired.ID, solvePowForTest(expired)) {
+	if powVerify("purge", expired.ID, solvePowForTest(expired), nil) {
 		t.Fatal("expected an expired challenge to be rejected")
 	}
 
@@ -125,10 +129,10 @@ func TestPowChallenge(t *testing.T) {
 		t.Fatal(err)
 	}
 	forgedNonce := solvePowForTest(forged)
-	if powVerify("purge", forged.ID[:len(forged.ID)-1]+"x", forgedNonce) {
+	if powVerify("purge", forged.ID[:len(forged.ID)-1]+"x", forgedNonce, nil) {
 		t.Fatal("expected a tampered signature to be rejected")
 	}
-	if powVerify("purge", "s.9999999999.bad", "0") {
+	if powVerify("purge", "s.9999999999.bad", "0", nil) {
 		t.Fatal("expected a forged challenge to be rejected")
 	}
 
@@ -138,7 +142,7 @@ func TestPowChallenge(t *testing.T) {
 			t.Fatalf("expected unlimited challenges to be minted: %v", err)
 		}
 	}
-	if !powVerify("purge", forged.ID, forgedNonce) {
+	if !powVerify("purge", forged.ID, forgedNonce, nil) {
 		t.Fatal("expected a challenge to verify after many were minted")
 	}
 }

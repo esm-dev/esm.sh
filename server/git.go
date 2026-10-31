@@ -50,7 +50,8 @@ func listGhRepoRefsContext(ctx context.Context, repo string) (refs []GitRef, err
 		err = cmd.Run()
 		if err != nil {
 			if errout.Len() > 0 {
-				return nil, "", errors.New(errout.String())
+				// trim the trailing newline, the router matches the " not found" suffix
+				return nil, "", errors.New(strings.TrimSpace(errout.String()))
 			}
 			return nil, "", err
 		}

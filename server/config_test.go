@@ -2,6 +2,8 @@ package server
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"runtime"
 	"testing"
 )
@@ -445,5 +447,19 @@ func TestPackageRulesOfPrefixedPackages(t *testing.T) {
 		if got := cfg.BanList.IsPackageBanned(test.id); got != test.banned {
 			t.Errorf("IsPackageBanned(%s) = %v, want %v", test.id, got, test.banned)
 		}
+	}
+}
+
+func TestLoadConfigJSONC(t *testing.T) {
+	filename := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(filename, []byte("// config.json\n{\n  \"port\": 8081, // comment\n}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	c, err := LoadConfig(filename)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Port != 8081 {
+		t.Fatalf("port = %d, want 8081", c.Port)
 	}
 }

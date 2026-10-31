@@ -97,14 +97,14 @@ type AllowList struct {
 
 // LoadConfig loads config from the given file. Panic if failed to load.
 func LoadConfig(filename string) (*Config, error) {
-	file, err := os.Open(filename)
+	data, err := os.ReadFile(filename)
 	if err != nil {
 		return nil, fmt.Errorf("fail to read config file: %w", err)
 	}
-	defer file.Close()
 
+	// the documented config.example.jsonc has comments
 	var config Config
-	err = json.NewDecoder(file).Decode(&config)
+	err = json.Unmarshal(stripJSONC(data), &config)
 	if err != nil {
 		return nil, fmt.Errorf("fail to parse config: %w", err)
 	}
