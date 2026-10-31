@@ -35,6 +35,8 @@ func transformSvelte(ctx context.Context, npmrc *NpmRC, svelteVersion string, fi
 }
 
 func compileSvelteLoader(ctx context.Context, npmrc *NpmRC, svelteVersion string, loaderExecPath string) (err error) {
+	ctx, release := withNpmPackageScope(ctx)
+	defer release()
 	wd := path.Join(npmrc.StoreDir(), "svelte@"+svelteVersion)
 
 	// install svelte and its dependencies
@@ -91,6 +93,8 @@ func transformVue(ctx context.Context, npmrc *NpmRC, vueVersion string, filename
 }
 
 func compileVueLoader(ctx context.Context, npmrc *NpmRC, vueVersion string, loaderVersion, loaderExecPath string) (err error) {
+	ctx, release := withNpmPackageScope(ctx)
+	defer release()
 	wd := path.Join(npmrc.StoreDir(), "@vue/compiler-sfc@"+vueVersion)
 
 	// install vue sfc compiler

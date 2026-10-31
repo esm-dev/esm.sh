@@ -1,6 +1,8 @@
 package server
 
 import (
+	"context"
+	"errors"
 	"io"
 	"maps"
 	"net/http"
@@ -8,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/synctest"
+	"time"
 
 	"github.com/ije/gox/set"
 )
@@ -74,7 +78,7 @@ func TestResolveBuildArgsExternalWithoutWalkingDeps(t *testing.T) {
 	for _, external := range []string{"node:fs", "example", "example/*", "broken/*", "node:sqlite", "node:test/reporters"} {
 		t.Run(external, func(t *testing.T) {
 			args := BuildArgs{External: *set.NewReadOnly(external)}
-			err := resolveBuildArgs(nil, wd, &args, EsmPath{PkgName: "example", PkgVersion: "1.0.0", SubPath: "sub"})
+			err := resolveBuildArgs(context.Background(), nil, wd, &args, EsmPath{PkgName: "example", PkgVersion: "1.0.0", SubPath: "sub"})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -104,7 +108,7 @@ func TestResolveBuildArgsExternalPatterns(t *testing.T) {
 	for _, external := range []string{"css-in-js-utils/*", "css-in-js-utils/lib/*", "@scope/pkg/*", "@scope/*", "@scope", "css-in-js-utils", "@scope/pkg"} {
 		t.Run(external, func(t *testing.T) {
 			args := BuildArgs{External: *set.NewReadOnly(external, "unrelated/*")}
-			if err := resolveBuildArgs(nil, wd, &args, EsmPath{PkgName: "example", PkgVersion: "1.0.0"}); err != nil {
+			if err := resolveBuildArgs(context.Background(), nil, wd, &args, EsmPath{PkgName: "example", PkgVersion: "1.0.0"}); err != nil {
 				t.Fatal(err)
 			}
 			if !args.External.Has(external) || args.External.Has("unrelated/*") {
@@ -150,7 +154,7 @@ func TestResolveBuildArgsDependencyOverrides(t *testing.T) {
 		want := map[string]string{"override-direct": "2.0.0", "override-leaf": "2.0.0"}
 		args := BuildArgs{Deps: maps.Clone(want)}
 		args.Deps["unrelated"] = "1.0.0"
-		if err := resolveBuildArgs(npmrc, wd, &args, EsmPath{PkgName: "override-root", PkgVersion: "2.0.0"}); err != nil {
+		if err := resolveBuildArgs(context.Background(), npmrc, wd, &args, EsmPath{PkgName: "override-root", PkgVersion: "2.0.0"}); err != nil {
 			t.Errorf("installed=%v: %v", installed, err)
 			continue
 		}
@@ -158,4 +162,28 @@ func TestResolveBuildArgsDependencyOverrides(t *testing.T) {
 			t.Errorf("installed=%v: deps = %v, want %v", installed, args.Deps, want)
 		}
 	}
+}
+
+func TestResolveBuildArgsCanceled(t *testing.T) {
+	oldConfig, transport := config, http.DefaultTransport
+	config = &Config{WorkDir: t.TempDir()}
+	t.Cleanup(func() { config, http.DefaultTransport = oldConfig, transport })
+	npmrc := &NpmRC{globalRegistry: &NpmRegistry{NpmRegistryConfig: NpmRegistryConfig{Registry: npmRegistry}}}
+	// a stalled registry
+	http.DefaultTransport = ghTestTransport(func(r *http.Request) (*http.Response, error) {
+		<-r.Context().Done()
+		return nil, r.Context().Err()
+	})
+	synctest.Test(t, func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		start := time.Now()
+		args := BuildArgs{Deps: map[string]string{"react": "18.0.0"}}
+		err := resolveBuildArgs(ctx, npmrc, t.TempDir(), &args, EsmPath{PkgName: "canceled-root", PkgVersion: "1.0.0"})
+		if !errors.Is(err, context.DeadlineExceeded) || time.Since(start) > time.Second {
+			t.Fatalf("err = %v after %v, want %v after 1s", err, time.Since(start), context.DeadlineExceeded)
+		}
+		time.Sleep(npmQueryTimeout + time.Second)
+		synctest.Wait()
+	})
 }

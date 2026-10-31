@@ -1029,7 +1029,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 			External:   ctx.args.External,
 			Conditions: ctx.args.Conditions,
 		}
-		err = resolveBuildArgs(ctx.npmrc, ctx.wd, &args, dep)
+		err = resolveBuildArgs(ctx.Context(), ctx.npmrc, ctx.wd, &args, dep)
 		if err != nil {
 			return
 		}
@@ -1287,6 +1287,7 @@ lookup:
 
 	var raw npm.PackageJSONRaw
 	pkgJsonPath := path.Join(ctx.wd, "node_modules", pkgName, "package.json")
+	defer useNpmPackageDir(ctx.Context(), path.Dir(pkgJsonPath))()
 	if utils.ParseJSONFile(pkgJsonPath, &raw) == nil {
 		esm = EsmPath{
 			PkgName:    pkgName,

@@ -1013,6 +1013,11 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 			return
 		}
 
+		// [warning] keep this after the redirects and GitHub assets, they would add a TTL for a package never installed
+		if pathKind == RawFile {
+			defer useNpmPackage(r.Context(), esmPath.PackageId())()
+		}
+
 		// fix url that is related to `import.meta.url`
 		if hasTargetSegment && isExactVersion && pathKind == RawFile && !rawFlag {
 			dir := path.Join(npmrc.StoreDir(), esmPath.PackageId())
@@ -1551,7 +1556,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 				}
 				if errors.Is(err, context.DeadlineExceeded) {
 					header.Set("Cache-Control", ccMustRevalidate)
-					writeStatus(w, http.StatusRequestTimeout, "timeout, the types is waiting to be built, please try refreshing the page.")
+					writeStatus(w, http.StatusRequestTimeout, "timeout, the types are not built yet, please try refreshing the page.")
 					return
 				}
 				if err != nil {
@@ -1670,7 +1675,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 			}
 			if errors.Is(err, context.DeadlineExceeded) {
 				header.Set("Cache-Control", ccMustRevalidate)
-				writeStatus(w, http.StatusRequestTimeout, "timeout, the module is waiting to be built, please try refreshing the page.")
+				writeStatus(w, http.StatusRequestTimeout, "timeout, the module is not built yet, please try refreshing the page.")
 				return
 			}
 			if err != nil {

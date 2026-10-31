@@ -36,6 +36,9 @@ const (
 	BundleFalse
 )
 
+// codeError is an esbuild error in the package code, so every build of the module fails with it.
+type codeError struct{ error }
+
 type BuildContext struct {
 	ctx         context.Context
 	npmrc       *NpmRC
@@ -137,10 +140,29 @@ func (ctx *BuildContext) checkCanceled() error {
 	return ctx.Context().Err()
 }
 
+// waitLock waits until no other build holds the install lock of key, and frees the build slot meanwhile.
+func (ctx *BuildContext) waitLock(key string) {
+	// [warning] a build waiting for the install or analysis of another build is idle,
+	// holding its slot would let the waiters of a slow one fill the build queue
+	task, _ := ctx.Context().Value(buildTaskKey{}).(*buildTask)
+	active, ok := installLocks.Load(key)
+	if task == nil || !ok {
+		return
+	}
+	task.release()
+	select {
+	case <-active.(chan struct{}):
+	case <-ctx.Context().Done():
+	}
+	task.acquire()
+}
+
 func (ctx *BuildContext) Build(buildCtx context.Context) (meta *BuildMeta, err error) {
 	if buildCtx == nil {
 		buildCtx = context.Background()
 	}
+	buildCtx, release := withNpmPackageScope(buildCtx)
+	defer release()
 	ctx.ctx = buildCtx
 	if err = ctx.checkCanceled(); err != nil {
 		return
@@ -181,15 +203,18 @@ func (ctx *BuildContext) Build(buildCtx context.Context) (meta *BuildMeta, err e
 
 	// install the package
 	ctx.status.Store("install")
+	prevPath := ctx.Path()
 	err = ctx.install()
 	if err != nil {
 		return
 	}
 
-	// check previous build again after installation (in case the sub-module path has been changed by the `install` function)
-	meta, ok, err = ctx.Exists()
-	if err != nil || ok {
-		return
+	// check previous build again if the sub-module path has been changed by the `install` function
+	if ctx.Path() != prevPath {
+		meta, ok, err = ctx.Exists()
+		if err != nil || ok {
+			return
+		}
 	}
 	if err = ctx.checkCanceled(); err != nil {
 		return
@@ -338,7 +363,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 		buffer := &bytes.Buffer{}
 		buffer.WriteString("export default ")
 		buffer.Write(jsonData)
-		err = ctx.storage.Put(ctx.getSavePath(), buffer)
+		err = ctx.storage.PutContext(ctx.Context(), ctx.getSavePath(), buffer)
 		if err != nil {
 			ctx.logger.Errorf("storage.put(%s): %v", ctx.getSavePath(), err)
 			err = errors.New("storage(put): " + err.Error())
@@ -394,7 +419,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 		if meta.ExportDefault {
 			fmt.Fprintf(buf, `export { default } from "%s";`, importUrl)
 		}
-		err = ctx.storage.Put(ctx.getSavePath(), buf)
+		err = ctx.storage.PutContext(ctx.Context(), ctx.getSavePath(), buf)
 		if err != nil {
 			ctx.logger.Errorf("storage.put(%s): %v", ctx.getSavePath(), err)
 			err = errors.New("storage(put): " + err.Error())
@@ -458,6 +483,9 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 				parents := map[string]string{filename: ""}
 				pending := []string{filename}
 				for len(pending) > 0 {
+					if ctx.checkCanceled() != nil {
+						return false
+					}
 					filename = pending[len(pending)-1]
 					pending = pending[:len(pending)-1]
 					if v, ok := exportStarExternal.Load(filename); ok {
@@ -512,6 +540,9 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 			build.OnResolve(
 				esbuild.OnResolveOptions{Filter: ".*"},
 				func(args esbuild.OnResolveArgs) (esbuild.OnResolveResult, error) {
+					if err := ctx.checkCanceled(); err != nil {
+						return esbuild.OnResolveResult{}, err
+					}
 					if args.PluginData == nativeResolve {
 						return esbuild.OnResolveResult{}, nil
 					}
@@ -1367,10 +1398,16 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 	defer esbCtx.Dispose()
 
 REBUILD:
+	if err = ctx.checkCanceled(); err != nil {
+		return
+	}
 	includes = nil
 	ctx.esmImports = nil
 	ctx.cjsRequires = nil
 	res := esbCtx.Rebuild()
+	if err = ctx.checkCanceled(); err != nil {
+		return
+	}
 	if len(res.Errors) > 0 {
 		retry := false
 		for _, e := range res.Errors {
@@ -1389,6 +1426,9 @@ REBUILD:
 						err = fmt.Errorf("could not resolve \"%s\" (imported by %s)", name, loc.File)
 					} else {
 						err = fmt.Errorf("could not resolve \"%s\"", name)
+					}
+					if e.PluginName == "" {
+						err = codeError{err}
 					}
 					return
 				}
@@ -1420,6 +1460,9 @@ REBUILD:
 			goto REBUILD
 		}
 		err = errors.New("esbuild: " + res.Errors[0].Text)
+		if res.Errors[0].PluginName == "" {
+			err = codeError{err}
+		}
 		return
 	}
 
@@ -1773,7 +1816,7 @@ REBUILD:
 			}
 
 			var stat storage.Stat
-			stat, err = ctx.storage.Stat(ctx.getSavePath())
+			stat, err = ctx.storage.StatContext(ctx.Context(), ctx.getSavePath())
 			if err == nil && stat.Size() > 0 {
 				ctx.logger.Infof("build(%s): file already exists in the storage, skip it", ctx.Path())
 				continue
@@ -1784,7 +1827,7 @@ REBUILD:
 				return
 			}
 			sha := sha512.New384()
-			err = ctx.storage.Put(ctx.getSavePath(), storage.TeeReader(finalJS, sha))
+			err = ctx.storage.PutContext(ctx.Context(), ctx.getSavePath(), storage.TeeReader(finalJS, sha))
 			if err != nil {
 				ctx.logger.Errorf("storage.put(%s): %v", ctx.getSavePath(), err)
 				err = errors.New("storage(put): " + err.Error())
@@ -1798,7 +1841,7 @@ REBUILD:
 		if strings.HasSuffix(file.Path, ".css") {
 			savePath := ctx.getSavePath()
 			savePath = strings.TrimSuffix(savePath, path.Ext(savePath)) + ".css"
-			err = ctx.storage.Put(savePath, bytes.NewReader(file.Contents))
+			err = ctx.storage.PutContext(ctx.Context(), savePath, bytes.NewReader(file.Contents))
 			if err != nil {
 				ctx.logger.Errorf("storage.put(%s): %v", savePath, err)
 				err = errors.New("storage(put): " + err.Error())
@@ -1818,7 +1861,7 @@ REBUILD:
 				}
 				buf := &bytes.Buffer{}
 				if json.NewEncoder(buf).Encode(sourceMap) == nil {
-					err = ctx.storage.Put(ctx.getSavePath()+".map", buf)
+					err = ctx.storage.PutContext(ctx.Context(), ctx.getSavePath()+".map", buf)
 					if err != nil {
 						ctx.logger.Errorf("storage.put(%s): %v", ctx.getSavePath()+".map", err)
 						err = errors.New("storage(put): " + err.Error())
@@ -1877,7 +1920,9 @@ func (ctx *BuildContext) buildTypes() (ret *BuildMeta, err error) {
 
 func (ctx *BuildContext) install() (err error) {
 	if ctx.wd == "" || ctx.pkgJson == nil {
-		p, err := ctx.npmrc.installPackageContext(ctx.Context(), ctx.esmPath.Package())
+		pkg := ctx.esmPath.Package()
+		ctx.waitLock(pkg.String())
+		p, err := ctx.npmrc.installPackageContext(ctx.Context(), pkg)
 		if err != nil {
 			return err
 		}
