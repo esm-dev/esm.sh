@@ -1665,6 +1665,10 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 			target:      target,
 			dev:         dev,
 		}
+		// an alias sub-path (e.g. `/pkg/index`) has no meta, it is built as the main module
+		if v, ok := cacheLRU.Get("alias:" + build.Path()); ok {
+			build.esmPath, build.path = v.(EsmPath), ""
+		}
 		// [warning] join a running build without a metadata lookup, every lookup of an unbuilt module is a storage round trip
 		var buildMeta *BuildMeta
 		ok := false

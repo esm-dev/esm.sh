@@ -211,9 +211,23 @@ func (ctx *BuildContext) Build(buildCtx context.Context) (meta *BuildMeta, err e
 
 	// check previous build again if the sub-module path has been changed by the `install` function
 	if ctx.Path() != prevPath {
+		// let the router look up the main module of the alias sub-path directly, without a build
+		cacheLRU.Add("alias:"+prevPath, ctx.esmPath)
 		meta, ok, err = ctx.Exists()
 		if err != nil || ok {
 			return
+		}
+		if task, _ := ctx.Context().Value(buildTaskKey{}).(*buildTask); task != nil {
+			if t := task.resolve(ctx.Path()); t != nil {
+				// [warning] the main module is building under its own path, wait for it without holding the slot
+				task.release()
+				select {
+				case <-t.done:
+					return t.meta, t.err
+				case <-ctx.Context().Done():
+					return nil, ctx.Context().Err()
+				}
+			}
 		}
 	}
 	if err = ctx.checkCanceled(); err != nil {
@@ -242,7 +256,9 @@ func (ctx *BuildContext) Build(buildCtx context.Context) (meta *BuildMeta, err e
 	if err != nil {
 		ctx.logger.Errorf("db.put(%s): %v", key, err)
 		err = errors.New("db: " + err.Error())
+		return
 	}
+	cacheLRU.Add(key, meta)
 	return
 }
 

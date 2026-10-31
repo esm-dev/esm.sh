@@ -30,7 +30,9 @@ type buildTask struct {
 	meta        *BuildMeta
 	err         error
 	waitClients int
-	slot        bool // holds a build slot
+	slot        bool       // holds a build slot
+	alias       string     // the path the install resolved to, also held by this task
+	follower    *buildTask // the pending task of the alias path, finished with this task
 	createdAt   time.Time
 	startedAt   time.Time
 	elem        *list.Element
@@ -68,6 +70,13 @@ func (q *BuildQueue) Build(ctx context.Context, build *BuildContext) (*BuildMeta
 	q.lock.Lock()
 	task := q.tasks[path]
 	if task == nil {
+		// [warning] a build may finish after the caller's lookup, queuing again would wait for a slot only to read the meta
+		if meta, ok := cacheLRU.Get(path); ok {
+			if meta, ok := meta.(*BuildMeta); ok {
+				q.lock.Unlock()
+				return meta, nil
+			}
+		}
 		task = &buildTask{
 			queue:     q,
 			ctx:       build,
@@ -118,8 +127,11 @@ func (q *BuildQueue) Snapshot() []map[string]any {
 	defer q.lock.Unlock()
 
 	tasks := make([]*buildTask, 0, len(q.tasks))
-	for _, task := range q.tasks {
-		tasks = append(tasks, task)
+	for path, task := range q.tasks {
+		// skip the alias entry of a task
+		if path == task.path {
+			tasks = append(tasks, task)
+		}
 	}
 	slices.SortFunc(tasks, func(a, b *buildTask) int {
 		return a.createdAt.Compare(b.createdAt)
@@ -129,6 +141,7 @@ func (q *BuildQueue) Snapshot() []map[string]any {
 		items = append(items, map[string]any{
 			"waitClients": task.waitClients,
 			"createdAt":   task.createdAt.Format(time.RFC1123),
+			"duration":    time.Since(task.createdAt).String(),
 			"path":        task.path,
 			"status":      task.ctx.status.Load(),
 		})
@@ -176,6 +189,34 @@ func (task *buildTask) acquire() {
 	case <-resume:
 	case <-task.done:
 	}
+}
+
+// resolve moves a running build to the path its install resolved to, so the same module is never built twice.
+// It returns the running task of the path to wait for, or takes the path, with its pending task, over.
+func (task *buildTask) resolve(path string) *buildTask {
+	q := task.queue
+	q.lock.Lock()
+	defer q.lock.Unlock()
+	select {
+	case <-task.done:
+		// a finished (timed out) task never takes a path, its build only exits
+		return nil
+	default:
+	}
+	t := q.tasks[path]
+	if t != nil && !t.startedAt.IsZero() {
+		return t
+	}
+	if t != nil {
+		q.pending.Remove(t.elem)
+		t.startedAt = time.Now()
+		t.ctx.status.Store("build")
+		task.follower = t
+	} else {
+		q.tasks[path] = task
+	}
+	task.alias = path
+	return nil
 }
 
 // scheduleLocked resumes released builds, then starts pending tasks while capacity is available.
@@ -235,6 +276,13 @@ func (q *BuildQueue) finish(task *buildTask, meta *BuildMeta, err error) {
 	}
 	q.lock.Lock()
 	delete(q.tasks, task.path)
+	if task.alias != "" {
+		delete(q.tasks, task.alias)
+	}
+	if f := task.follower; f != nil {
+		f.meta, f.err = meta, err
+		close(f.done)
+	}
 	if task.slot {
 		task.slot = false
 		q.running--

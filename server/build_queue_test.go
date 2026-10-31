@@ -586,3 +586,103 @@ func TestBuildQueueParallelRelease(t *testing.T) {
 		}
 	})
 }
+
+func TestBuildQueueResolve(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		// concurrency 1: the main module task stays pending while the alias task runs
+		q := NewBuildQueue(1, time.Minute)
+		aliasPath, mainPath := "/"+t.Name()+"/index", "/"+t.Name()+"/main"
+		release := make(chan struct{})
+		var alias *BuildContext
+		alias = newBuildQueueTestContext(aliasPath, func() (*BuildMeta, error) {
+			<-release
+			if t := alias.Context().Value(buildTaskKey{}).(*buildTask).resolve(mainPath); t != nil {
+				return nil, errors.New("waits for a pending task")
+			}
+			return &BuildMeta{Dts: "alias"}, nil
+		})
+		main := newBuildQueueTestContext(mainPath, func() (*BuildMeta, error) {
+			return nil, errors.New("the main module is built twice")
+		})
+		results := make(chan string, 3)
+		build := func(b *BuildContext) {
+			meta, err := q.Build(context.Background(), b)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			results <- meta.Dts
+		}
+		go build(alias)
+		synctest.Wait()
+		go build(main)
+		synctest.Wait()
+		close(release)
+		synctest.Wait()
+		if len(results) != 2 || len(q.Snapshot()) != 0 || q.running != 0 {
+			t.Fatalf("results=%d, running=%d, tasks=%+v", len(results), q.running, q.Snapshot())
+		}
+		for range 2 {
+			if got := <-results; got != "alias" {
+				t.Fatalf("got %q, want the alias build result", got)
+			}
+		}
+
+		// concurrency 2: the alias task waits for the running main module task
+		q = NewBuildQueue(2, time.Minute)
+		finishMain := make(chan struct{})
+		alias = newBuildQueueTestContext(aliasPath, func() (*BuildMeta, error) {
+			task := alias.Context().Value(buildTaskKey{}).(*buildTask)
+			running := task.resolve(mainPath)
+			if running == nil {
+				return nil, errors.New("does not wait for the running task")
+			}
+			task.release()
+			<-running.done
+			return running.meta, running.err
+		})
+		main = newBuildQueueTestContext(mainPath, func() (*BuildMeta, error) {
+			<-finishMain
+			return &BuildMeta{Dts: "main"}, nil
+		})
+		go build(main)
+		synctest.Wait()
+		go build(alias)
+		synctest.Wait()
+		if q.running != 1 {
+			t.Fatalf("running=%d, want the waiting alias task to free its slot", q.running)
+		}
+		close(finishMain)
+		synctest.Wait()
+		for range 2 {
+			if got := <-results; got != "main" {
+				t.Fatalf("got %q, want the main build result", got)
+			}
+		}
+		if len(q.Snapshot()) != 0 || q.running != 0 {
+			t.Fatalf("queue did not drain: running=%d, tasks=%+v", q.running, q.Snapshot())
+		}
+	})
+}
+
+func TestBuildQueueBuiltMeta(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		q := NewBuildQueue(1, time.Minute)
+		path := "/" + t.Name() + "/built"
+		build := newBuildQueueTestContext(path, nil)
+		defer cacheLRU.Remove(path)
+		cacheLRU.Add(path, &BuildMeta{Dts: "built"})
+		// a full queue must not delay a module that is built already
+		block := make(chan struct{})
+		defer close(block)
+		go q.Build(context.Background(), newBuildQueueTestContext("/"+t.Name()+"/running", func() (*BuildMeta, error) {
+			<-block
+			return &BuildMeta{}, nil
+		}))
+		synctest.Wait()
+		meta, err := q.Build(context.Background(), build)
+		if err != nil || meta.Dts != "built" {
+			t.Fatalf("meta=%+v, err=%v", meta, err)
+		}
+	})
+}
