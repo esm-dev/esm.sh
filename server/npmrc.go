@@ -19,7 +19,6 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	"github.com/Masterminds/semver/v3"
@@ -415,17 +414,6 @@ func lockInstall(ctx context.Context, key string) (func(), error) {
 
 func (npmrc *NpmRC) installPackageContext(ctx context.Context, pkg npm.Package) (packageJson *npm.PackageJSON, err error) {
 	defer useNpmPackage(ctx, pkg.String())()
-	packageJson, err = npmrc.installPackageOnce(ctx, pkg)
-	if errors.Is(err, syscall.ENOSPC) && ctx.Err() == nil {
-		_, purgeErr := purgeLocalCaches()
-		if packageJson, err = npmrc.installPackageOnce(ctx, pkg); err != nil {
-			err = errors.Join(err, purgeErr)
-		}
-	}
-	return
-}
-
-func (npmrc *NpmRC) installPackageOnce(ctx context.Context, pkg npm.Package) (packageJson *npm.PackageJSON, err error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}

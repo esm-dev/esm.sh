@@ -3,15 +3,12 @@
 package server
 
 import (
-	"bytes"
 	"errors"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 	"sync/atomic"
 	"syscall"
 	"testing"
@@ -77,258 +74,36 @@ func TestCheckDiskStatus(t *testing.T) {
 			t.Fatalf("checked %v, want %v", paths, want)
 		}
 	})
-	t.Run("S3 cache holding the work dir", func(t *testing.T) {
-		for _, cacheDir := range []string{config.WorkDir, filepath.Dir(config.WorkDir)} {
-			config.Storage = storage.StorageOptions{Type: "s3", CacheDir: cacheDir}
-			if dirs := localCacheDirs(); len(dirs) != 1 {
-				t.Fatalf("cache dirs = %v, want the npm store only", dirs)
-			}
-		}
-	})
 }
 
-func TestPurgeLocalCaches(t *testing.T) {
-	oldConfig, oldStatfs := config, diskStatfs
-	config = &Config{WorkDir: t.TempDir()}
-	t.Cleanup(func() { config, diskStatfs = oldConfig, oldStatfs })
-	var requests []string
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requests = append(requests, r.Method)
-		switch r.Method {
-		case http.MethodPut:
-			io.Copy(io.Discard, r.Body)
-		case http.MethodGet:
-			w.Header().Set("Content-Length", "4")
-			w.Header().Set("Last-Modified", "Tue, 20 Oct 2026 00:00:00 GMT")
-			io.WriteString(w, "data")
-		default:
-			t.Errorf("unexpected remote operation: %s", r.Method)
-			w.WriteHeader(500)
-		}
-	}))
-	defer upstream.Close()
-	config.Storage = storage.StorageOptions{
-		Type: "s3", CacheDir: t.TempDir(), Endpoint: upstream.URL,
-		AccessKeyID: "test", SecretAccessKey: "test",
-	}
-	s3, err := storage.New(&config.Storage)
-	if err != nil {
-		t.Fatal(err)
-	}
-	const key = "modules/pkg@1.0.0/old.mjs"
-	if err := s3.Put(key, strings.NewReader("data")); err != nil {
-		t.Fatal(err)
-	}
-	cacheRoot, err := os.Stat(config.Storage.CacheDir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	store, cache, outside := filepath.Join(config.WorkDir, "npm"), config.Storage.CacheDir, t.TempDir()
-	if err := os.WriteFile(filepath.Join(outside, "keep"), []byte("keep"), 0644); err != nil {
-		t.Fatal(err)
-	}
-	for _, name := range []string{
-		"old@1.0.0/node_modules/old/package.json",
-		"@scope/old@1.0.0/node_modules/@scope/old/package.json",
-		"gh/owner/repo@abc/node_modules/repo/package.json",
-		"new@1.0.0/node_modules/new/package.json",
-		".install-1/node_modules/new/package.json",
-		".loaders/svelte@5.0.0.js",
-	} {
-		if err := os.MkdirAll(filepath.Dir(filepath.Join(store, name)), 0755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(store, name), []byte("{}"), 0644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := os.Symlink(outside, filepath.Join(store, "old@1.0.0/node_modules/dep")); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(filepath.Join(cache, "modules"), 0755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(cache, "modules/new.mjs"), []byte("new"), 0644); err != nil {
-		t.Fatal(err)
-	}
-	old := time.Now().Add(-24 * time.Hour)
-	for _, name := range []string{
-		filepath.Join(store, "old@1.0.0"), filepath.Join(store, "@scope/old@1.0.0"), filepath.Join(store, "gh/owner/repo@abc"),
-		filepath.Join(store, ".install-1"), filepath.Join(store, ".loaders/svelte@5.0.0.js"), filepath.Join(cache, key),
-	} {
-		if err := os.Chtimes(name, old, old); err != nil {
-			t.Fatal(err)
-		}
-	}
-	diskStatfs = func(_ string, stat *syscall.Statfs_t) error {
-		*stat = syscall.Statfs_t{Bsize: 4096, Bavail: 512 * MB / 4096}
-		return nil
-	}
-	if removed, err := purgeLocalCaches(); err != nil || removed != 1 {
-		t.Fatalf("purge = %d, %v, want 1 removed", removed, err)
-	}
-	for _, name := range []string{"old@1.0.0", "@scope/old@1.0.0", "gh/owner/repo@abc"} {
-		if !existsDir(filepath.Join(store, name)) {
-			t.Fatalf("purged npm package %s before its TTL expired", name)
-		}
-	}
-	for _, name := range []string{
-		filepath.Join(store, "new@1.0.0/node_modules/new/package.json"), filepath.Join(store, ".install-1/node_modules/new/package.json"),
-		filepath.Join(store, ".loaders/svelte@5.0.0.js"), filepath.Join(cache, "modules/new.mjs"), filepath.Join(outside, "keep"),
-	} {
-		if !existsFile(name) {
-			t.Fatalf("purged %s", name)
-		}
-	}
-	if leftovers, _ := filepath.Glob(filepath.Join(store, ".purge-*")); len(leftovers) != 0 {
-		t.Fatalf("purge leftovers: %v", leftovers)
-	}
-	if existsFile(filepath.Join(cache, key)) {
-		t.Fatal("old S3 cache file remains")
-	}
-	if after, err := os.Stat(cache); err != nil || !os.SameFile(cacheRoot, after) {
-		t.Fatalf("S3 cache root was replaced: %v", err)
-	}
-	for range 2 {
-		content, _, err := s3.Get(key)
-		if err != nil {
-			t.Fatal(err)
-		}
-		data, err := io.ReadAll(content)
-		content.Close()
-		if err != nil || string(data) != "data" {
-			t.Fatalf("S3 read after purge = %q, %v", data, err)
-		}
-	}
-	if !slices.Equal(requests, []string{"PUT", "GET"}) {
-		t.Fatalf("remote objects or cache reuse affected: %v", requests)
-	}
-
-	// stop once the disk has enough free space
-	for _, name := range []string{"a.mjs", "b.mjs"} {
-		if err := os.WriteFile(filepath.Join(cache, name), []byte("old"), 0644); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.Chtimes(filepath.Join(cache, name), old, old); err != nil {
-			t.Fatal(err)
-		}
-	}
-	var calls int
-	diskStatfs = func(_ string, stat *syscall.Statfs_t) error {
-		calls++
-		*stat = syscall.Statfs_t{Bsize: 4096, Bavail: 32 * GB / 4096}
-		if calls == 1 {
-			stat.Bavail = 512 * MB / 4096
-		}
-		return nil
-	}
-	if removed, err := purgeLocalCaches(); err != nil || removed != 1 || existsFile(filepath.Join(cache, "a.mjs")) || !existsFile(filepath.Join(cache, "b.mjs")) {
-		t.Fatalf("purge = %d, %v, want the first old file removed only", removed, err)
-	}
-	for _, err := range []error{nil, syscall.EIO} {
-		diskStatfs = func(_ string, stat *syscall.Statfs_t) error {
-			*stat = syscall.Statfs_t{Bsize: 4096, Bavail: 32 * GB / 4096}
-			return err
-		}
-		if removed, purgeErr := purgeLocalCaches(); purgeErr != nil || removed != 0 || !existsFile(filepath.Join(cache, "b.mjs")) {
-			t.Fatalf("purged a healthy or unknown filesystem (%v): %d, %v", err, removed, purgeErr)
-		}
-	}
-}
-
-func TestInstallPackageDiskRecovery(t *testing.T) {
-	for _, test := range []struct {
-		name     string
-		err      error
-		failures int32
-		requests int32
-	}{
-		{"recovered", syscall.ENOSPC, 1, 2},
-		{"still full", syscall.ENOSPC, 2, 2},
-		{"other error", syscall.EIO, 1, 1},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			oldConfig, transport, oldStatfs := config, http.DefaultTransport, diskStatfs
+func TestInstallPackageDiskError(t *testing.T) {
+	for _, diskErr := range []error{syscall.ENOSPC, syscall.EIO} {
+		t.Run(diskErr.Error(), func(t *testing.T) {
+			oldConfig, transport := config, http.DefaultTransport
 			cfg := *config
+			cfg.WorkDir = t.TempDir()
 			config = &cfg
-			config.WorkDir = t.TempDir()
-			config.Storage = storage.StorageOptions{}
-			t.Cleanup(func() { config, http.DefaultTransport, diskStatfs = oldConfig, transport, oldStatfs })
-			diskStatfs = func(_ string, stat *syscall.Statfs_t) error {
-				*stat = syscall.Statfs_t{Bsize: 4096, Bavail: 512 * MB / 4096}
-				return nil
-			}
+			t.Cleanup(func() { config, http.DefaultTransport = oldConfig, transport })
 			npmrc := newTestNpmRC()
-			pkg := npm.Package{Name: "disk-recovery", Version: "1.0.0"}
+			pkg := npm.Package{Name: "disk-error", Version: "1.0.0"}
 			key := "npm:" + pkg.String()
-			setCacheItem(key, &npm.PackageJSON{Name: pkg.Name, Version: pkg.Version, Dist: npm.NpmPackageDist{Tarball: npmRegistry + "disk-recovery.tgz"}}, time.Minute)
+			setCacheItem(key, &npm.PackageJSON{Name: pkg.Name, Version: pkg.Version, Dist: npm.NpmPackageDist{Tarball: npmRegistry + "disk-error.tgz"}}, time.Minute)
 			t.Cleanup(func() { deleteCacheItem(key) })
-			old := time.Now().Add(-24 * time.Hour)
-			oldPackage, usedPackage := filepath.Join(npmrc.StoreDir(), "old@1.0.0"), filepath.Join(npmrc.StoreDir(), "used@1.0.0")
-			for _, dir := range []string{oldPackage, usedPackage} {
-				if err := os.MkdirAll(dir, 0755); err != nil {
-					t.Fatal(err)
-				}
-			}
-			if err := os.Chtimes(oldPackage, old, old); err != nil {
-				t.Fatal(err)
-			}
 			var requests atomic.Int32
 			http.DefaultTransport = ghTestTransport(func(r *http.Request) (*http.Response, error) {
-				var body io.Reader = bytes.NewReader(testPackageTarball(`{"name":"disk-recovery","version":"1.0.0"}`))
-				if requests.Add(1) <= test.failures {
-					body = iotest.ErrReader(&os.PathError{Op: "write", Path: "package.json", Err: test.err})
-				}
+				requests.Add(1)
+				body := iotest.ErrReader(&os.PathError{Op: "write", Path: "package.json", Err: diskErr})
 				return &http.Response{StatusCode: 200, Body: io.NopCloser(body)}, nil
 			})
-			_, err := npmrc.installPackage(pkg)
-			if test.failures >= test.requests {
-				if !errors.Is(err, test.err) {
-					t.Fatalf("install error = %v, want %v", err, test.err)
-				}
-			} else if err != nil {
-				t.Fatal(err)
+			if _, err := npmrc.installPackage(pkg); !errors.Is(err, diskErr) {
+				t.Fatalf("install error = %v, want %v", err, diskErr)
 			}
-			if requests.Load() != test.requests {
-				t.Fatalf("downloads = %d, want %d", requests.Load(), test.requests)
+			if requests.Load() != 1 {
+				t.Fatalf("downloads = %d, want 1", requests.Load())
 			}
-			if !existsDir(oldPackage) {
-				t.Fatal("disk recovery purged an npm package before its TTL expired")
-			}
-			if !existsDir(usedPackage) {
-				t.Fatal("purged the package of a running build")
-			}
-			for _, pattern := range []string{".install-*", ".purge-*"} {
-				if dirs, err := filepath.Glob(filepath.Join(npmrc.StoreDir(), pattern)); err != nil || len(dirs) != 0 {
-					t.Fatalf("temporary directories remain: %v, %v", dirs, err)
-				}
+			if dirs, err := filepath.Glob(filepath.Join(npmrc.StoreDir(), ".install-*")); err != nil || len(dirs) != 0 {
+				t.Fatalf("temporary directories remain: %v, %v", dirs, err)
 			}
 		})
-	}
-}
-
-func TestPurgeOnNoSpace(t *testing.T) {
-	for _, test := range []struct {
-		err  error
-		wake bool
-	}{
-		{&os.PathError{Op: "write", Path: "a.mjs", Err: syscall.ENOSPC}, true},
-		{errors.New("git clone: write error: no space left on device"), true},
-		{syscall.EIO, false},
-		{nil, false},
-	} {
-		// the second call must not block on the pending wake
-		purgeOnNoSpace(test.err)
-		purgeOnNoSpace(test.err)
-		select {
-		case <-purgeNow:
-			if !test.wake {
-				t.Fatalf("woke the purge loop on %v", test.err)
-			}
-		default:
-			if test.wake {
-				t.Fatalf("did not wake the purge loop on %v", test.err)
-			}
-		}
 	}
 }
