@@ -172,7 +172,6 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 					output.Code = fmt.Sprintf("%s//# sourceMappingURL=+%s", output.Code, path.Base(savePath)+".map")
 					err = esmStorage.Put(savePath+".map", strings.NewReader(output.Map))
 					if err != nil {
-						purgeOnNoSpace(err)
 						logger.Errorf("storage.put(%s): %v", savePath+".map", err)
 						writeJSONError(w, 500, "failed to store source map")
 						return
@@ -180,7 +179,6 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 				}
 				err = esmStorage.Put(savePath, strings.NewReader(output.Code))
 				if err != nil {
-					purgeOnNoSpace(err)
 					logger.Errorf("storage.put(%s): %v", savePath, err)
 					writeJSONError(w, 500, "failed to store transformed code")
 					return
@@ -1009,6 +1007,11 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 			return
 		}
 
+		// [warning] keep this after the redirects and GitHub assets, they would add a TTL for a package never installed
+		if pathKind == RawFile {
+			defer useNpmPackage(r.Context(), esmPath.PackageId())()
+		}
+
 		// fix url that is related to `import.meta.url`
 		if hasTargetSegment && isExactVersion && pathKind == RawFile && !rawFlag {
 			dir := path.Join(npmrc.StoreDir(), esmPath.PackageId())
@@ -1812,7 +1815,6 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 				meta.Integrity = integrity
 				err = metaDB.Put(build.Path(), encodeBuildMeta(&meta))
 				if err != nil {
-					purgeOnNoSpace(err)
 					writeStatus(w, 500, err.Error())
 					return
 				}

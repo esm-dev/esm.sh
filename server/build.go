@@ -161,6 +161,8 @@ func (ctx *BuildContext) Build(buildCtx context.Context) (meta *BuildMeta, err e
 	if buildCtx == nil {
 		buildCtx = context.Background()
 	}
+	buildCtx, release := withNpmPackageScope(buildCtx)
+	defer release()
 	ctx.ctx = buildCtx
 	if err = ctx.checkCanceled(); err != nil {
 		return

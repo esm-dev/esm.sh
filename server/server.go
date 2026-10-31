@@ -83,10 +83,10 @@ func Start() {
 	http.DefaultTransport.(*http.Transport).MaxIdleConnsPerHost = 64
 
 	startTime := time.Now()
+	npmStore = &npmPackageStore{dir: DefaultNpmRC().StoreDir(), logger: logger}
 	go func() {
 		// remove the dirs left behind by installs and purges interrupted by a crash or restart
 		// [warning] in the background, globbing a big npm store delays the start, so keep the installs started since
-		purgeLock.Lock()
 		for _, pattern := range []string{".install-*", ".purge-*"} {
 			if dirs, err := filepath.Glob(filepath.Join(DefaultNpmRC().StoreDir(), pattern)); err == nil {
 				for _, dir := range dirs {
@@ -96,23 +96,8 @@ func Start() {
 				}
 			}
 		}
-		purgeLock.Unlock()
-		// left behind by older versions that moved the npm store away before removing it
-		os.RemoveAll(filepath.Join(config.WorkDir, "npm_old"))
-		ticker := time.NewTicker(time.Minute)
-		defer ticker.Stop()
-		for {
-			removed, err := purgeLocalCaches()
-			if removed > 0 {
-				logger.Warnf("purged %d unused local cache entries because disk space or inodes were low", removed)
-			}
-			if err != nil {
-				logger.Errorf("local cache purge: %v", err)
-			}
-			select {
-			case <-ticker.C:
-			case <-purgeNow:
-			}
+		if err := npmStore.restore(); err != nil {
+			logger.Errorf("npm TTL restore: %v", err)
 		}
 	}()
 
