@@ -101,8 +101,6 @@ func Start() {
 		if err := npmStore.restore(); err != nil {
 			logger.Errorf("npm TTL restore: %v", err)
 		}
-		// left behind by older versions that moved the npm store away before removing it
-		os.RemoveAll(filepath.Join(config.WorkDir, "npm_old"))
 		ticker := time.NewTicker(time.Minute)
 		defer ticker.Stop()
 		for {
