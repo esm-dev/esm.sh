@@ -156,9 +156,7 @@ func TestNpmResolutionPurgeSkipsPendingMetadata(t *testing.T) {
 		if err := <-first; !errors.Is(err, context.Canceled) {
 			t.Fatal(err)
 		}
-		if err := rc.purgeResolutions(name); err != nil {
-			t.Fatal(err)
-		}
+		rc.purgeResolutions(name)
 		next := make(chan *npm.PackageJSON, 1)
 		go func() {
 			info, err := rc.getPackageInfo(name, "latest")

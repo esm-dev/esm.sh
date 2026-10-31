@@ -49,6 +49,13 @@ func TestListRepoRefs(t *testing.T) {
 	}
 }
 
+func TestListRepoRefsMissingRepo(t *testing.T) {
+	_, err := listGhRepoRefsContext(context.Background(), "https://github.com/esm-dev/this-repo-does-not-exist")
+	if err == nil || !strings.HasSuffix(err.Error(), " not found") {
+		t.Fatalf("expected a not found error, got %v", err)
+	}
+}
+
 func TestListRepoRefsPeelsTags(t *testing.T) {
 	repo := t.TempDir()
 	for _, args := range [][]string{

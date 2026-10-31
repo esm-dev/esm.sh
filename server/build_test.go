@@ -18,6 +18,7 @@ import (
 	"runtime/debug"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/esm-dev/esm.sh/internal/npm"
@@ -53,11 +54,17 @@ func TestBuildModuleCancellation(t *testing.T) {
 			buildCtx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			requested := false
+			fetched := make(chan struct{})
+			closeFetched := sync.OnceFunc(func() { close(fetched) })
+			// [warning] the shared registry fetch outlives the canceled build, answer at once and
+			// wait for its packument request, or it reaches the transport of a later test
 			http.DefaultTransport = ghTestTransport(func(r *http.Request) (*http.Response, error) {
 				requested = true
 				cancel()
-				<-r.Context().Done()
-				return nil, r.Context().Err()
+				if strings.HasPrefix(r.URL.Path, "/vue") {
+					defer closeFetched()
+				}
+				return &http.Response{StatusCode: 503, Status: "503 Service Unavailable", Body: http.NoBody}, nil
 			})
 			ctx := &BuildContext{
 				ctx: buildCtx, wd: wd, target: "es2022", logger: logger,
@@ -66,6 +73,7 @@ func TestBuildModuleCancellation(t *testing.T) {
 				pkgJson: &npm.PackageJSON{Name: "build-cancel", Version: "1.0.0", Type: "module", Main: "./index.js"},
 			}
 			_, _, err = ctx.buildModule(analyze)
+			<-fetched
 			if !requested || !errors.Is(err, context.Canceled) {
 				t.Fatalf("expected cancellation during esbuild, requested=%v, err=%v", requested, err)
 			}

@@ -5,23 +5,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"testing"
 	"testing/synctest"
 	"time"
 
 	"github.com/esm-dev/esm.sh/internal/npm"
-	"github.com/esm-dev/esm.sh/internal/storage"
 )
 
 func TestNpmResolutionCache(t *testing.T) {
-	fs, err := storage.NewFSStorage(filepath.Join(t.TempDir(), "resolutions"))
-	if err != nil {
-		t.Fatal(err)
-	}
 	synctest.Test(t, func(t *testing.T) {
 		const name = "resolution-cache-test"
-		rc := &NpmRC{globalRegistry: &NpmRegistry{NpmRegistryConfig: NpmRegistryConfig{Registry: npmRegistry}}, resolutionStorage: fs}
+		rc := &NpmRC{globalRegistry: &NpmRegistry{NpmRegistryConfig: NpmRegistryConfig{Registry: npmRegistry}}}
 		var raw npm.PackageJSONRaw
 		if err := json.Unmarshal([]byte(`{"name":"resolution-cache-test","version":"1.0.0","main":"index.js","exports":{".":"./index.js"},"dist":{"tarball":"http://fixture/package.tgz"}}`), &raw); err != nil {
 			t.Fatal(err)
@@ -66,8 +60,7 @@ func TestNpmResolutionCache(t *testing.T) {
 		time.Sleep(npmQueryTimeout + time.Second)
 		synctest.Wait()
 		blocked = nil
-		npmResolutions.Purge()
-		deleteCacheItemsWithPrefix("npm:" + name + "@")
+		time.Sleep(time.Minute)
 		failure = errors.New("registry unavailable")
 		check("1.0.0")
 		synctest.Wait()
@@ -105,7 +98,7 @@ func TestNpmResolutionCache(t *testing.T) {
 		}
 		failure = nil
 		item, _ := npmResolutions.Get(rc.resolutionKey(name, "^1"))
-		item.SavedAt = time.Now().Add(-time.Duration(config.NpmQueryCacheTTL)*time.Second - npmStaleTTL - time.Second)
+		item.savedAt = time.Now().Add(-time.Duration(config.NpmQueryCacheTTL)*time.Second - npmStaleTTL - time.Second)
 		failure = errors.New("offline")
 		if _, err := lookup("^1"); err == nil {
 			t.Fatal("expired backup was served")
@@ -116,17 +109,11 @@ func TestNpmResolutionCache(t *testing.T) {
 		blocked = make(chan struct{})
 		check("1.1.0")
 		synctest.Wait()
-		if err := rc.purgeResolutions(name); err != nil {
-			t.Fatal(err)
-		}
+		rc.purgeResolutions(name)
 		close(blocked)
 		synctest.Wait()
 		if _, ok := npmResolutions.Get(rc.resolutionKey(name, "^1")); ok {
 			t.Fatal("refresh resurrected purge")
-		}
-		keys, err := fs.List("npm-resolution-slots/v1/")
-		if err != nil || len(keys) != 0 {
-			t.Fatalf("purge backups: %v %v", keys, err)
 		}
 		blocked = nil
 		for i := range 512 {
@@ -134,9 +121,8 @@ func TestNpmResolutionCache(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		keys, err = fs.List("npm-resolution-slots/v1/")
-		if err != nil || len(keys) > 256 || npmResolutions.Len() > 256 {
-			t.Fatal("unbounded cache", err)
+		if npmResolutions.Len() > 256 {
+			t.Fatal("unbounded cache")
 		}
 		deleteCacheItemsWithPrefix("npm:" + name + "@")
 	})

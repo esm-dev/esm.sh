@@ -159,13 +159,13 @@ func legacyESM(w http.ResponseWriter, r *http.Request, fs storage.Storage, build
 			// add a leading `@` to the package name
 			specifier = "/@" + pathname[4:]
 		}
+		// strip the "external all" flag before splitting, `/*@scope/pkg` must keep its scope
+		asteriskFlag := strings.HasPrefix(specifier, "/*")
+		if asteriskFlag {
+			specifier = "/" + specifier[2:]
+		}
 		pkgName, pkgVersion, subPath := splitEsmPath(specifier)
 		_, target, _ := parseSubPath(subPath)
-		var asteriskFlag bool
-		if len(pkgName) > 1 && pkgName[0] == '*' {
-			asteriskFlag = true
-			pkgName = pkgName[1:]
-		}
 		if !npm.ValidatePackageName(pkgName) {
 			writeStatus(w, 400, "Invalid Package Name")
 			return true
