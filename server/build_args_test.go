@@ -183,5 +183,7 @@ func TestResolveBuildArgsCanceled(t *testing.T) {
 		if !errors.Is(err, context.DeadlineExceeded) || time.Since(start) > time.Second {
 			t.Fatalf("err = %v after %v, want %v after 1s", err, time.Since(start), context.DeadlineExceeded)
 		}
+		time.Sleep(npmQueryTimeout + time.Second)
+		synctest.Wait()
 	})
 }
