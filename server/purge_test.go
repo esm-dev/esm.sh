@@ -220,6 +220,9 @@ func TestPurgePackageCache(t *testing.T) {
 	if err := metaDB.Put(externalAllBuildPath, encodeBuildMeta(&BuildMeta{})); err != nil {
 		t.Fatal(err)
 	}
+	aliasKey := "alias:/example@1.0.0/es2022/index.mjs"
+	cacheLRU.Add(aliasKey, esm)
+	defer cacheLRU.Remove(aliasKey)
 	setCacheItem("npm:example@latest", &npm.PackageJSON{Version: "1.0.0"}, time.Minute)
 	setCacheItem("404:example@latest", "boom", time.Minute)
 	setCacheItem("npm:example@1.0.0", &npm.PackageJSON{Version: "1.0.0"}, time.Minute)
@@ -273,6 +276,9 @@ func TestPurgePackageCache(t *testing.T) {
 		if _, err := metaDB.Get(key); err == nil {
 			t.Fatalf("expected build metadata %s to be purged", key)
 		}
+	}
+	if cacheLRU.Contains(aliasKey) {
+		t.Fatal("an alias mapping survived the purge")
 	}
 	// every resolution cache of the package must be invalidated: the exact
 	// version, the bare-name/dist-tag entry, the raw semver range and the

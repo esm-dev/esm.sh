@@ -160,7 +160,7 @@ func purgePackageCache(npmrc *NpmRC, metaDB *BuildMetaDB, esmStorage storage.Sto
 	}
 	resp.Purged = append(resp.Purged, keys...)
 	for _, key := range append(metaDB.cache.Keys(), cacheLRU.Keys()...) {
-		if strings.HasPrefix(key, "/"+pkgId+"/") || strings.HasPrefix(key, "/*"+pkgId+"/") {
+		if p := strings.TrimPrefix(key, "alias:"); strings.HasPrefix(p, "/"+pkgId+"/") || strings.HasPrefix(p, "/*"+pkgId+"/") {
 			metaDB.cache.Remove(key)
 			cacheLRU.Remove(key)
 		}

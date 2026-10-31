@@ -6,7 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -587,81 +590,136 @@ func TestBuildQueueParallelRelease(t *testing.T) {
 	})
 }
 
-func TestBuildQueueResolve(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		// concurrency 1: the main module task stays pending while the alias task runs
-		q := NewBuildQueue(1, time.Minute)
-		aliasPath, mainPath := "/"+t.Name()+"/index", "/"+t.Name()+"/main"
-		release := make(chan struct{})
-		var alias *BuildContext
-		alias = newBuildQueueTestContext(aliasPath, func() (*BuildMeta, error) {
-			<-release
-			if t := alias.Context().Value(buildTaskKey{}).(*buildTask).resolve(mainPath); t != nil {
-				return nil, errors.New("waits for a pending task")
-			}
-			return &BuildMeta{Dts: "alias"}, nil
-		})
-		main := newBuildQueueTestContext(mainPath, func() (*BuildMeta, error) {
-			return nil, errors.New("the main module is built twice")
-		})
-		results := make(chan string, 3)
-		build := func(b *BuildContext) {
-			meta, err := q.Build(context.Background(), b)
-			if err != nil {
-				t.Error(err)
-				return
-			}
-			results <- meta.Dts
-		}
-		go build(alias)
-		synctest.Wait()
-		go build(main)
-		synctest.Wait()
-		close(release)
-		synctest.Wait()
-		if len(results) != 2 || len(q.Snapshot()) != 0 || q.running != 0 {
-			t.Fatalf("results=%d, running=%d, tasks=%+v", len(results), q.running, q.Snapshot())
-		}
-		for range 2 {
-			if got := <-results; got != "alias" {
-				t.Fatalf("got %q, want the alias build result", got)
-			}
-		}
+type buildAliasTestStorage struct {
+	storage.Storage
+	get func(key string) (*BuildMeta, error)
+	put func()
+}
 
-		// concurrency 2: the alias task waits for the running main module task
-		q = NewBuildQueue(2, time.Minute)
-		finishMain := make(chan struct{})
-		alias = newBuildQueueTestContext(aliasPath, func() (*BuildMeta, error) {
-			task := alias.Context().Value(buildTaskKey{}).(*buildTask)
-			running := task.resolve(mainPath)
-			if running == nil {
-				return nil, errors.New("does not wait for the running task")
+func (s buildAliasTestStorage) Get(key string) (io.ReadCloser, storage.Stat, error) {
+	meta, err := s.get(key)
+	if err != nil {
+		return nil, nil, err
+	}
+	return io.NopCloser(bytes.NewReader(encodeBuildMeta(meta))), nil, nil
+}
+
+func (s buildAliasTestStorage) Put(string, io.Reader) error {
+	s.put()
+	return nil
+}
+
+func TestBuildQueueAlias(t *testing.T) {
+	workDir := config.WorkDir
+	config.WorkDir = t.TempDir()
+	defer func() { config.WorkDir = workDir }()
+	pkgDir := filepath.Join(config.WorkDir, "npm", "queue-alias@1.0.0", "node_modules", "queue-alias")
+	if err := os.MkdirAll(pkgDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	for name, content := range map[string]string{
+		"package.json": `{"name":"queue-alias","version":"1.0.0","main":"./index.css"}`,
+		"index.css":    `a{}`,
+	} {
+		if err := os.WriteFile(filepath.Join(pkgDir, name), []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	newBuild := func(subPath string, db *BuildMetaDB) *BuildContext {
+		return &BuildContext{npmrc: newTestNpmRC(), metaDB: db, target: "es2022", esmPath: EsmPath{PkgName: "queue-alias", PkgVersion: "1.0.0", SubPath: subPath}}
+	}
+	aliasPath, mainPath := newBuild("index.css", nil).Path(), newBuild("", nil).Path()
+
+	t.Run("built", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			useNegativeCache(t)
+			defer cacheLRU.Remove("alias:" + aliasPath)
+			defer cacheLRU.Remove(mainPath)
+			var puts atomic.Int32
+			db := NewBuildMetaDB(buildAliasTestStorage{get: func(key string) (*BuildMeta, error) {
+				if key == normalizeMetaStoreKey(mainPath) {
+					cacheLRU.Add(mainPath, &BuildMeta{CSSEntry: "main"})
+				}
+				return nil, storage.ErrNotFound
+			}, put: func() { puts.Add(1) }})
+			meta, err := NewBuildQueue(1, time.Minute).Build(context.Background(), newBuild("index.css", db))
+			if err != nil || meta.CSSEntry != "main" || puts.Load() != 0 {
+				t.Fatalf("meta=%+v, err=%v, puts=%d: the alias build did not reuse the finished main build", meta, err, puts.Load())
 			}
-			task.release()
-			<-running.done
-			return running.meta, running.err
 		})
-		main = newBuildQueueTestContext(mainPath, func() (*BuildMeta, error) {
-			<-finishMain
-			return &BuildMeta{Dts: "main"}, nil
-		})
-		go build(main)
-		synctest.Wait()
-		go build(alias)
-		synctest.Wait()
-		if q.running != 1 {
-			t.Fatalf("running=%d, want the waiting alias task to free its slot", q.running)
-		}
-		close(finishMain)
-		synctest.Wait()
-		for range 2 {
-			if got := <-results; got != "main" {
-				t.Fatalf("got %q, want the main build result", got)
+	})
+
+	t.Run("pending", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			useNegativeCache(t)
+			defer cacheLRU.Remove("alias:" + aliasPath)
+			defer cacheLRU.Remove(mainPath)
+			var puts atomic.Int32
+			unblockLookup, unblockPut := make(chan struct{}), make(chan struct{})
+			db := NewBuildMetaDB(buildAliasTestStorage{get: func(key string) (*BuildMeta, error) {
+				if key == normalizeMetaStoreKey(aliasPath) {
+					<-unblockLookup
+				}
+				return nil, storage.ErrNotFound
+			}, put: func() {
+				puts.Add(1)
+				<-unblockPut
+			}})
+			q := NewBuildQueue(2, time.Minute)
+			finishBlocker := make(chan struct{})
+			go q.Build(context.Background(), newBuildQueueTestContext("/"+t.Name()+"/blocker", func() (*BuildMeta, error) {
+				<-finishBlocker
+				return &BuildMeta{}, nil
+			}))
+			synctest.Wait()
+			results := make(chan *BuildMeta, 2)
+			for _, build := range []*BuildContext{newBuild("index.css", db), newBuild("", db)} {
+				go func() {
+					meta, err := q.Build(context.Background(), build)
+					if err != nil {
+						t.Error(err)
+					}
+					results <- meta
+				}()
+				synctest.Wait()
 			}
-		}
-		if len(q.Snapshot()) != 0 || q.running != 0 {
-			t.Fatalf("queue did not drain: running=%d, tasks=%+v", q.running, q.Snapshot())
-		}
+			close(unblockLookup)
+			synctest.Wait()
+			close(finishBlocker)
+			synctest.Wait()
+			if q.running != 1 || puts.Load() != 1 {
+				t.Fatalf("running=%d, puts=%d: the pending main task started while the alias task builds it", q.running, puts.Load())
+			}
+			close(unblockPut)
+			synctest.Wait()
+			if a, b := <-results, <-results; a == nil || a != b || puts.Load() != 1 {
+				t.Fatalf("results=%+v, %+v, puts=%d", a, b, puts.Load())
+			}
+			if len(q.Snapshot()) != 0 || q.running != 0 {
+				t.Fatalf("queue did not drain: running=%d, tasks=%+v", q.running, q.Snapshot())
+			}
+		})
+	})
+
+	t.Run("timeout", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			useNegativeCache(t)
+			defer cacheLRU.Remove("alias:" + aliasPath)
+			unblockPut := make(chan struct{})
+			defer close(unblockPut)
+			db := NewBuildMetaDB(buildAliasTestStorage{get: func(string) (*BuildMeta, error) {
+				return nil, storage.ErrNotFound
+			}, put: func() { <-unblockPut }})
+			q := NewBuildQueue(1, time.Minute)
+			want := "build timeout after 60 seconds"
+			if _, err := q.Build(context.Background(), newBuild("index.css", db)); err == nil || err.Error() != want {
+				t.Fatalf("expected build timeout, got %v", err)
+			}
+			start := time.Now()
+			if _, err := q.Build(context.Background(), newBuild("", db)); err == nil || err.Error() != want || time.Since(start) != 0 {
+				t.Fatalf("err=%v, waited %v: a retry of the main module skipped the timeout cooldown", err, time.Since(start))
+			}
+		})
 	})
 }
 
@@ -672,7 +730,6 @@ func TestBuildQueueBuiltMeta(t *testing.T) {
 		build := newBuildQueueTestContext(path, nil)
 		defer cacheLRU.Remove(path)
 		cacheLRU.Add(path, &BuildMeta{Dts: "built"})
-		// a full queue must not delay a module that is built already
 		block := make(chan struct{})
 		defer close(block)
 		go q.Build(context.Background(), newBuildQueueTestContext("/"+t.Name()+"/running", func() (*BuildMeta, error) {
@@ -682,7 +739,7 @@ func TestBuildQueueBuiltMeta(t *testing.T) {
 		synctest.Wait()
 		meta, err := q.Build(context.Background(), build)
 		if err != nil || meta.Dts != "built" {
-			t.Fatalf("meta=%+v, err=%v", meta, err)
+			t.Fatalf("meta=%+v, err=%v: a full queue delayed a built module", meta, err)
 		}
 	})
 }

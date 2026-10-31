@@ -30,9 +30,9 @@ type buildTask struct {
 	meta        *BuildMeta
 	err         error
 	waitClients int
-	slot        bool       // holds a build slot
-	alias       string     // the path the install resolved to, also held by this task
-	follower    *buildTask // the pending task of the alias path, finished with this task
+	slot        bool // holds a build slot
+	alias       string
+	follower    *buildTask
 	createdAt   time.Time
 	startedAt   time.Time
 	elem        *list.Element
@@ -72,10 +72,8 @@ func (q *BuildQueue) Build(ctx context.Context, build *BuildContext) (*BuildMeta
 	if task == nil {
 		// [warning] a build may finish after the caller's lookup, queuing again would wait for a slot only to read the meta
 		if meta, ok := cacheLRU.Get(path); ok {
-			if meta, ok := meta.(*BuildMeta); ok {
-				q.lock.Unlock()
-				return meta, nil
-			}
+			q.lock.Unlock()
+			return meta.(*BuildMeta), nil
 		}
 		task = &buildTask{
 			queue:     q,
@@ -128,7 +126,6 @@ func (q *BuildQueue) Snapshot() []map[string]any {
 
 	tasks := make([]*buildTask, 0, len(q.tasks))
 	for path, task := range q.tasks {
-		// skip the alias entry of a task
 		if path == task.path {
 			tasks = append(tasks, task)
 		}
@@ -191,34 +188,6 @@ func (task *buildTask) acquire() {
 	}
 }
 
-// resolve moves a running build to the path its install resolved to, so the same module is never built twice.
-// It returns the running task of the path to wait for, or takes the path, with its pending task, over.
-func (task *buildTask) resolve(path string) *buildTask {
-	q := task.queue
-	q.lock.Lock()
-	defer q.lock.Unlock()
-	select {
-	case <-task.done:
-		// a finished (timed out) task never takes a path, its build only exits
-		return nil
-	default:
-	}
-	t := q.tasks[path]
-	if t != nil && !t.startedAt.IsZero() {
-		return t
-	}
-	if t != nil {
-		q.pending.Remove(t.elem)
-		t.startedAt = time.Now()
-		t.ctx.status.Store("build")
-		task.follower = t
-	} else {
-		q.tasks[path] = task
-	}
-	task.alias = path
-	return nil
-}
-
 // scheduleLocked resumes released builds, then starts pending tasks while capacity is available.
 func (q *BuildQueue) scheduleLocked() {
 	for q.running < q.concurrency && len(q.resumes) > 0 {
@@ -244,9 +213,16 @@ func (q *BuildQueue) run(task *buildTask) {
 	defer cancel()
 	timeoutErr := fmt.Errorf("build timeout after %d seconds", q.timeout/time.Second)
 	// [warning] a build may block in a call that ignores ctx, the timeout must not wait for it to exit
-	key := "404-path:" + task.ctx.esmPath.PackageId() + "/build:" + task.path
+	key := "404-path:" + task.ctx.esmPath.PackageId() + "/build:"
 	stop := context.AfterFunc(ctx, func() {
-		negativeCache.put(key, timeoutErr.Error(), buildTimeoutTTL)
+		q.lock.Lock()
+		alias := task.alias
+		q.lock.Unlock()
+		negativeCache.put(key+task.path, timeoutErr.Error(), buildTimeoutTTL)
+		// [warning] the router looks an alias sub-path up by its main module path, a retry would bypass the cooldown
+		if alias != "" {
+			negativeCache.put(key+alias, timeoutErr.Error(), buildTimeoutTTL)
+		}
 		q.finish(task, nil, timeoutErr)
 	})
 	var meta *BuildMeta

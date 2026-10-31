@@ -17,6 +17,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/esm-dev/esm.sh/internal/npm"
@@ -211,15 +212,18 @@ func (ctx *BuildContext) Build(buildCtx context.Context) (meta *BuildMeta, err e
 
 	// check previous build again if the sub-module path has been changed by the `install` function
 	if ctx.Path() != prevPath {
-		// let the router look up the main module of the alias sub-path directly, without a build
 		cacheLRU.Add("alias:"+prevPath, ctx.esmPath)
 		meta, ok, err = ctx.Exists()
 		if err != nil || ok {
 			return
 		}
+		// [warning] the main module may be built, building or queued under its own path, never build it twice
 		if task, _ := ctx.Context().Value(buildTaskKey{}).(*buildTask); task != nil {
-			if t := task.resolve(ctx.Path()); t != nil {
-				// [warning] the main module is building under its own path, wait for it without holding the slot
+			q, path := task.queue, ctx.Path()
+			q.lock.Lock()
+			t := q.tasks[path]
+			if t != nil && !t.startedAt.IsZero() {
+				q.lock.Unlock()
 				task.release()
 				select {
 				case <-t.done:
@@ -228,6 +232,26 @@ func (ctx *BuildContext) Build(buildCtx context.Context) (meta *BuildMeta, err e
 					return nil, ctx.Context().Err()
 				}
 			}
+			// [warning] a main build caches its meta before its task leaves the queue, it may finish after the lookup above
+			if v, ok := cacheLRU.Get(path); ok && t == nil {
+				q.lock.Unlock()
+				return v.(*BuildMeta), nil
+			}
+			select {
+			case <-task.done:
+				// [warning] a timed out task must not take the path, nothing would remove it from the queue
+			default:
+				if t != nil {
+					q.pending.Remove(t.elem)
+					t.startedAt = time.Now()
+					t.ctx.status.Store("build")
+					task.follower = t
+				} else {
+					q.tasks[path] = task
+				}
+				task.alias = path
+			}
+			q.lock.Unlock()
 		}
 	}
 	if err = ctx.checkCanceled(); err != nil {
