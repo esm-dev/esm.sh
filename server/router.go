@@ -76,6 +76,8 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 		metaDB     = NewBuildMetaDB(esmStorage)
 	)
 
+	npmrc.resolutionStorage = esmStorage
+
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		pathname := r.URL.Path
 		header := w.Header()

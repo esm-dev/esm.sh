@@ -66,7 +66,7 @@ func TestS3StorageTimeout(t *testing.T) {
 }
 
 func TestS3StorageBuildCancellation(t *testing.T) {
-	for _, method := range []string{"HEAD", "PUT"} {
+	for _, method := range []string{"HEAD", "GET", "PUT"} {
 		t.Run(method, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
 				s := &s3Storage{apiEndpoint: "https://storage.test"}
@@ -88,6 +88,8 @@ func TestS3StorageBuildCancellation(t *testing.T) {
 					var err error
 					if method == "HEAD" {
 						_, err = s.StatContext(ctx, "types/pkg@1/index.d.ts")
+					} else if method == "GET" {
+						_, _, err = s.GetContext(ctx, "npm-resolution-slots/v1/01.json")
 					} else {
 						err = s.PutContext(ctx, "types/pkg@1/index.d.ts", bytes.NewBufferString("export {}"))
 					}

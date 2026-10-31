@@ -10,7 +10,70 @@ import (
 	"testing"
 	"testing/synctest"
 	"time"
+
+	"github.com/esm-dev/esm.sh/internal/npm"
 )
+
+func TestCanceledResolutionWait(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		const name = "cancel-resolution-test"
+		const key = "npm:" + name + "@^1"
+		rc := &NpmRC{globalRegistry: &NpmRegistry{NpmRegistryConfig: NpmRegistryConfig{Registry: npmRegistry}}}
+		t.Cleanup(func() {
+			deleteCacheItemsWithPrefix("npm:" + name + "@")
+			npmResolutions.Remove(rc.resolutionKey(name, "^1"))
+		})
+		started, release := make(chan struct{}), make(chan struct{})
+		calls := 0
+		fetch := func(ctx context.Context) (*npm.PackageJSONRaw, error) {
+			calls++
+			if calls == 1 {
+				close(started)
+			}
+			select {
+			case <-release:
+				var raw npm.PackageJSONRaw
+				raw.Name, raw.Version = name, "1.0.0"
+				return &raw, nil
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		}
+		leader := make(chan error, 1)
+		go func() {
+			_, err := rc.cachedResolution(context.Background(), name, "^1", key, fetch)
+			leader <- err
+		}()
+		defer func() {
+			close(release)
+			if err := <-leader; err != nil {
+				t.Errorf("shared resolution failed: %v", err)
+			}
+		}()
+		<-started
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		waiter := make(chan error, 1)
+		go func() {
+			_, err := rc.cachedResolution(ctx, name, "^1", key, fetch)
+			waiter <- err
+		}()
+		synctest.Wait()
+		cancel()
+		synctest.Wait()
+		select {
+		case err := <-waiter:
+			if !errors.Is(err, context.Canceled) {
+				t.Fatal(err)
+			}
+		default:
+			t.Fatal("canceled caller is still waiting for the shared resolution")
+		}
+		if calls != 1 {
+			t.Fatalf("fetch calls = %d, want 1", calls)
+		}
+	})
+}
 
 func TestCanceledMetadataWait(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
@@ -51,6 +114,67 @@ func TestCanceledMetadataWait(t *testing.T) {
 		synctest.Wait()
 		if calls != 1 {
 			t.Fatalf("registry calls = %d, want 1", calls)
+		}
+	})
+}
+
+func TestNpmResolutionPurgeSkipsPendingMetadata(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		const name = "purge-pending-resolution"
+		rc := &NpmRC{globalRegistry: &NpmRegistry{NpmRegistryConfig: NpmRegistryConfig{Registry: npmRegistry}}}
+		t.Cleanup(func() {
+			deleteCacheItemsWithPrefix("npm:" + name + "@")
+			npmResolutions.Remove(rc.resolutionKey(name, "latest"))
+		})
+		started, release := make(chan struct{}), make(chan struct{})
+		previous := http.DefaultTransport
+		defer func() {
+			close(release)
+			synctest.Wait()
+			http.DefaultTransport = previous
+		}()
+		calls := 0
+		http.DefaultTransport = ghTestTransport(func(r *http.Request) (*http.Response, error) {
+			calls++
+			version := "2.0.0"
+			if calls == 1 {
+				close(started)
+				<-release
+				version = "1.0.0"
+			}
+			return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"name":"` + name + `","version":"` + version + `"}`))}, nil
+		})
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		first := make(chan error, 1)
+		go func() {
+			_, err := rc.getPackageInfoContext(ctx, name, "latest")
+			first <- err
+		}()
+		<-started
+		cancel()
+		if err := <-first; !errors.Is(err, context.Canceled) {
+			t.Fatal(err)
+		}
+		if err := rc.purgeResolutions(name); err != nil {
+			t.Fatal(err)
+		}
+		next := make(chan *npm.PackageJSON, 1)
+		go func() {
+			info, err := rc.getPackageInfo(name, "latest")
+			if err != nil {
+				t.Error(err)
+			}
+			next <- info
+		}()
+		synctest.Wait()
+		select {
+		case info := <-next:
+			if info == nil || info.Version != "2.0.0" {
+				t.Fatalf("resolution after purge = %+v, want 2.0.0", info)
+			}
+		default:
+			t.Fatal("resolution after purge joined an old metadata fetch")
 		}
 	})
 }

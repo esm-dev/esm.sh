@@ -98,6 +98,11 @@ func purgePackageCache(npmrc *NpmRC, metaDB *BuildMetaDB, esmStorage storage.Sto
 	// specifier may be a bare name, a semver range, a dist-tag, a date or a
 	// git ref, each cached under its own key, so matching a single resolved
 	// version is not enough — a purge must force a fresh resolution.
+	if !esmPath.GhPrefix && !esmPath.PrPrefix {
+		if err := npmrc.purgeResolutions(esmPath.PkgName); err != nil {
+			return nil, err
+		}
+	}
 	registry := npmrc.getRegistryByPackageName(esmPath.PkgName).Registry
 	packumentCache.Remove(registry + esmPath.PkgName)
 	prefixes := []string{

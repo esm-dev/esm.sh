@@ -395,7 +395,7 @@ func TestRouterCacheRegressions(t *testing.T) {
 			{"owner/repo", "/github.com/", "abcdef0", "gh/owner/repo@latest"},
 			{"owner/repo/@scope/pkg", "/pr/", "abcdef0", "pr/owner/repo/@scope/pkg@latest"},
 			{"owner/repo/@scope/pkg", "/pkg.pr.new/", "abcdef0", "pr/owner/repo/@scope/pkg@latest"},
-			{"@scope/redirect-test", "/jsr/", "1.0.0", "npm:@jsr/scope__redirect-test@latest"},
+			{"@scope/redirect-test", "/jsr/", "1.0.0", DefaultNpmRC().resolutionFreshKey("@jsr/scope__redirect-test", "npm:@jsr/scope__redirect-test@latest")},
 		} {
 			if strings.HasPrefix(test.key, "npm:") {
 				setCacheItem(test.key, &npm.PackageJSON{Version: test.resolved}, time.Minute)

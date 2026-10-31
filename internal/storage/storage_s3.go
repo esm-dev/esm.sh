@@ -212,6 +212,10 @@ func (s3 *s3Storage) StatContext(ctx context.Context, name string) (stat Stat, e
 }
 
 func (s3 *s3Storage) Get(name string) (content io.ReadCloser, stat Stat, err error) {
+	return s3.GetContext(context.Background(), name)
+}
+
+func (s3 *s3Storage) GetContext(ctx context.Context, name string) (content io.ReadCloser, stat Stat, err error) {
 	if name == "" {
 		return nil, nil, errors.New("name is required")
 	}
@@ -229,7 +233,7 @@ func (s3 *s3Storage) Get(name string) (content io.ReadCloser, stat Stat, err err
 		// ignore error
 	}
 	epoch := s3.cacheEpoch.Load()
-	req, err := http.NewRequest("GET", s3.apiEndpoint+"/"+escapePath(name), nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", s3.apiEndpoint+"/"+escapePath(name), nil)
 	if err != nil {
 		return
 	}
@@ -584,7 +588,7 @@ func (s3 *s3Storage) sign(req *http.Request) {
 }
 
 func (s3 *s3Storage) shouldUseFSCache(name string) bool {
-	if s3.fsCache == nil || isMetaKey(name) {
+	if s3.fsCache == nil || isMetaKey(name) || strings.HasPrefix(name, "npm-resolution-slots/") {
 		return false
 	}
 	if strings.HasSuffix(name, ".mjs.map") || strings.HasSuffix(name, ".d.ts") || strings.HasSuffix(name, ".d.mts") || strings.HasSuffix(name, ".d.cts") {
