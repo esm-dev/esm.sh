@@ -179,6 +179,7 @@ func TestBuildQueueFailure(t *testing.T) {
 	for _, failure := range []string{"error", "panic", "timeout"} {
 		t.Run(failure, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
+				useNegativeCache(t)
 				q := NewBuildQueue(1, time.Second)
 				release := make(chan struct{})
 				path := "/" + t.Name()
@@ -225,15 +226,14 @@ func TestBuildQueueFailure(t *testing.T) {
 				}()
 				synctest.Wait()
 				if failure == "timeout" {
-					time.Sleep(time.Second)
-					synctest.Wait()
-					if len(nextStarted) != 0 {
-						t.Fatal("released capacity before the timed out build exited")
-					}
+					// the build ignores its canceled context, the queue must not wait for it,
+					// only for the batched write of the timeout record
+					time.Sleep(time.Second + negativeCache.MaxBatchDelay)
+				} else {
+					close(release)
 				}
-				close(release)
 				synctest.Wait()
-				if len(errorsReceived) != 2 || len(nextStarted) != 1 || len(q.Snapshot()) != 0 {
+				if len(errorsReceived) != 2 || len(nextStarted) != 1 || len(q.Snapshot()) != 0 || q.running != 0 {
 					t.Fatalf("failure did not release waiters and capacity: errors=%d, next=%d, queue=%+v", len(errorsReceived), len(nextStarted), q.Snapshot())
 				}
 				for range 2 {
@@ -242,6 +242,17 @@ func TestBuildQueueFailure(t *testing.T) {
 					}
 				}
 				retry := newBuildQueueTestContext(path, func() (*BuildMeta, error) { return &BuildMeta{}, nil })
+				if failure == "timeout" {
+					close(release)
+					synctest.Wait()
+					if q.running != 0 {
+						t.Fatalf("the exit of a timed out build changed the running count: %d", q.running)
+					}
+					if _, err := q.Build(context.Background(), retry); err == nil || err.Error() != want {
+						t.Fatalf("retried a timed out build within %v: %v", buildTimeoutTTL, err)
+					}
+					time.Sleep(buildTimeoutTTL)
+				}
 				if _, err := q.Build(context.Background(), retry); err != nil {
 					t.Fatalf("retry failed: %v", err)
 				}
@@ -447,10 +458,10 @@ func TestBuildQueueRelease(t *testing.T) {
 		wake, finish := make(chan struct{}), make(chan struct{})
 		var waiting *BuildContext
 		waiting = newBuildQueueTestContext("/"+t.Name()+"/waiting", func() (*BuildMeta, error) {
-			q := waiting.Context().Value(buildQueueKey{}).(*BuildQueue)
-			q.release()
+			task := waiting.Context().Value(buildTaskKey{}).(*buildTask)
+			task.release()
 			<-wake
-			q.acquire()
+			task.acquire()
 			events <- "waiting"
 			return &BuildMeta{}, nil
 		})
@@ -481,6 +492,52 @@ func TestBuildQueueRelease(t *testing.T) {
 		}
 		if len(q.Snapshot()) != 0 {
 			t.Fatal("finished tasks remain in the queue")
+		}
+	})
+}
+
+func TestBuildQueueReleasedTimeout(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		q := NewBuildQueue(1, time.Minute)
+		exited, finish := make(chan struct{}, 1), make(chan struct{})
+		var released *BuildContext
+		released = newBuildQueueTestContext("/"+t.Name()+"/released", func() (*BuildMeta, error) {
+			task := released.Context().Value(buildTaskKey{}).(*buildTask)
+			task.release()
+			<-released.Context().Done()
+			task.acquire()
+			exited <- struct{}{}
+			return nil, released.Context().Err()
+		})
+		running := newBuildQueueTestContext("/"+t.Name()+"/running", func() (*BuildMeta, error) {
+			<-finish
+			return &BuildMeta{}, nil
+		})
+		done := make(chan error, 1)
+		go func() {
+			_, err := q.Build(context.Background(), released)
+			done <- err
+		}()
+		synctest.Wait()
+		time.Sleep(time.Second)
+		go q.Build(context.Background(), running)
+		synctest.Wait()
+		// the running build holds the only slot past the deadline of the released one
+		time.Sleep(time.Minute - time.Second)
+		synctest.Wait()
+		if len(exited) != 1 {
+			t.Fatal("a timed out build waited for a slot to exit")
+		}
+		if err := <-done; err == nil || err.Error() != "build timeout after 60 seconds" {
+			t.Fatalf("expected build timeout, got %v", err)
+		}
+		if q.running != 1 {
+			t.Fatalf("running = %d, want 1", q.running)
+		}
+		close(finish)
+		synctest.Wait()
+		if len(q.Snapshot()) != 0 || q.running != 0 {
+			t.Fatalf("queue did not drain: running=%d, tasks=%+v", q.running, q.Snapshot())
 		}
 	})
 }

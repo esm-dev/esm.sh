@@ -14,6 +14,8 @@ import (
 
 const (
 	packageNotFoundTTL = 10 * time.Minute
+	// a timed out build is not retried meanwhile, every retry would hold a build slot for the whole timeout again
+	buildTimeoutTTL = 10 * time.Minute
 	// cap of "permanent" (ttl 0) records, whose keys can come from arbitrary request paths
 	negativeCacheMaxTTL = 7 * 24 * time.Hour
 )

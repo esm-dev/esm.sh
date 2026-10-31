@@ -197,6 +197,8 @@ func TestTransformDTSStorageTimeout(t *testing.T) {
 				ctx := &BuildContext{storage: s, wd: root, target: "types", esmPath: EsmPath{PkgName: "pkg", PkgVersion: "1.0.0", SubPath: "index.d.ts"}, pkgJson: &npm.PackageJSON{}}
 				start := time.Now()
 				_, err := queue.Build(context.Background(), ctx)
+				// the queue returns at the deadline, let the canceled build exit before restoring the client
+				synctest.Wait()
 				if err == nil || err.Error() != "build timeout after 1 seconds" {
 					t.Fatalf("expected build timeout, got %v", err)
 				}
