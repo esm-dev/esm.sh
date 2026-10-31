@@ -47,47 +47,54 @@ func TestNpmStoreRestore(t *testing.T) {
 			if err := os.MkdirAll(filepath.Join(s.dir, key, "node_modules", "nested@1.0.0"), 0755); err != nil {
 				t.Fatal(err)
 			}
-			old := time.Now().Add(-24 * time.Hour)
-			if err := os.Chtimes(filepath.Join(s.dir, key), old, old); err != nil {
-				t.Fatal(err)
-			}
 		}
 		outside := t.TempDir()
 		if err := os.Symlink(outside, filepath.Join(s.dir, keys[0], "node_modules", "dep")); err != nil {
 			t.Fatal(err)
 		}
-		if err := s.restore(); err != nil {
+		// an unreadable directory before the other packages must not stop the walk, root can read it
+		locked := os.Geteuid() != 0
+		if err := os.Mkdir(filepath.Join(s.dir, "locked"), 0); err != nil {
 			t.Fatal(err)
 		}
+		if err := s.restore(); (err != nil) != locked {
+			t.Fatalf("restore error = %v", err)
+		}
+		s.mu.Lock()
 		if len(s.items) != len(keys) {
 			t.Fatalf("registered %d packages, want %d", len(s.items), len(keys))
 		}
+		expires := map[time.Time]bool{}
 		for _, key := range keys {
-			if s.items[key] == nil {
+			item := s.items[key]
+			if item == nil {
 				t.Fatalf("missing package key %q", key)
 			}
+			if ttl := time.Until(item.expires); ttl < npmPackageTTL || ttl >= 2*npmPackageTTL {
+				t.Fatalf("restored TTL of %s = %v", key, ttl)
+			}
+			expires[item.expires] = true
 		}
-		time.Sleep(9 * time.Minute)
+		s.mu.Unlock()
+		if len(expires) == 1 {
+			t.Fatal("restored packages expire at the same time")
+		}
+		time.Sleep(npmPackageTTL - time.Second)
+		synctest.Wait()
 		for _, key := range keys {
 			if !existsDir(filepath.Join(s.dir, key)) {
-				t.Fatalf("old package %s expired before its new TTL", key)
+				t.Fatalf("package %s expired before its new TTL", key)
 			}
 		}
-		s.use(keys[0])()
-		time.Sleep(time.Minute)
+		time.Sleep(npmPackageTTL + time.Second)
 		synctest.Wait()
-		for _, key := range keys[1:] {
+		for _, key := range keys {
 			if existsDir(filepath.Join(s.dir, key)) {
 				t.Fatalf("unused package %s remains", key)
 			}
 		}
-		if !existsDir(filepath.Join(s.dir, keys[0])) {
-			t.Fatal("used package expired before its refreshed TTL")
-		}
-		time.Sleep(9 * time.Minute)
-		synctest.Wait()
-		if existsDir(filepath.Join(s.dir, keys[0])) || len(s.items) != 0 {
-			t.Fatal("refreshed package did not expire")
+		if len(s.items) != 0 {
+			t.Fatalf("expired items remain: %d", len(s.items))
 		}
 		for _, dir := range []string{outside, filepath.Join(s.dir, ".install-123"), filepath.Join(s.dir, ".loaders")} {
 			if !existsDir(dir) {
@@ -100,6 +107,37 @@ func TestNpmStoreRestore(t *testing.T) {
 	})
 }
 
+func TestNpmStoreKeys(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		s := useNpmStore(t)
+		for _, key := range []string{"", "@babel", "gh", "gh/owner", "pkg@1.0.0/deps-abc", "pkg@1.0.0/node_modules/dep@1.0.0", "../x@1.0.0", "./x@1.0.0", ".purge-x@1.0.0", "/x@1.0.0", "a//b@1.0.0"} {
+			s.use(key, npmPackageTTL)()
+		}
+		if len(s.items) != 0 {
+			t.Fatalf("registered keys that are not package roots: %v", s.items)
+		}
+		const key = "pkg@1.0.0"
+		wd := filepath.Join(s.dir, key, "deps-abc")
+		pkgDir := filepath.Join(s.dir, "dep@1.0.0", "node_modules", "dep")
+		for _, dir := range []string{pkgDir, filepath.Join(wd, "node_modules", "plain"), filepath.Join(s.dir, "@babel", "node_modules", "x")} {
+			if err := os.MkdirAll(dir, 0755); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := os.Symlink(pkgDir, filepath.Join(wd, "node_modules", "dep")); err != nil {
+			t.Fatal(err)
+		}
+		ctx, release := withNpmPackageScope(context.Background())
+		defer release()
+		for _, name := range []string{"plain", "missing", "../../../@babel/node_modules/x", "dep"} {
+			useNpmPackageDir(ctx, filepath.Join(wd, "node_modules", name))()
+		}
+		if len(s.items) != 1 || s.items["dep@1.0.0"] == nil {
+			t.Fatalf("dir keys = %v, want the link target only", s.items)
+		}
+	})
+}
+
 func TestNpmStoreActiveUse(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		s := useNpmStore(t)
@@ -108,9 +146,9 @@ func TestNpmStoreActiveUse(t *testing.T) {
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			t.Fatal(err)
 		}
-		s.use(key)()
-		time.Sleep(9 * time.Minute)
-		release := s.use(key)
+		s.use(key, npmPackageTTL)()
+		time.Sleep(npmPackageTTL - time.Minute)
+		release := s.use(key, npmPackageTTL)
 		ctx, releaseScope := withNpmPackageScope(context.Background())
 		useNpmPackage(ctx, key)()
 		useNpmPackage(ctx, key)()
@@ -124,12 +162,12 @@ func TestNpmStoreActiveUse(t *testing.T) {
 		time.Sleep(npmPackageTTL - time.Second)
 		synctest.Wait()
 		if !existsDir(dir) {
-			t.Fatal("package expired before ten idle minutes")
+			t.Fatal("package expired before its TTL")
 		}
 		time.Sleep(time.Second)
 		synctest.Wait()
 		if existsDir(dir) {
-			t.Fatal("package remains after ten idle minutes")
+			t.Fatal("package remains after its TTL")
 		}
 	})
 }
@@ -153,8 +191,8 @@ func TestNpmStoreAccess(t *testing.T) {
 						t.Fatal(err)
 					}
 				}
-				s.use(pkg.String())()
-				time.Sleep(9 * time.Minute)
+				s.use(pkg.String(), npmPackageTTL)()
+				time.Sleep(npmPackageTTL - time.Minute)
 				npmrc := newTestNpmRC()
 				switch access {
 				case "install":
@@ -229,7 +267,7 @@ func TestNpmStoreInstall(t *testing.T) {
 			t.Fatal("dependency expired during a build")
 		}
 		release()
-		time.Sleep(9 * time.Minute)
+		time.Sleep(npmPackageTTL - time.Minute)
 		ctx, release = withNpmPackageScope(context.Background())
 		build := &BuildContext{ctx: ctx, wd: wd, npmrc: npmrc}
 		if _, _, err := build.resolveDependency("alias", false); err != nil {

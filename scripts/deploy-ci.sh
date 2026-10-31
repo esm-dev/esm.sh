@@ -88,9 +88,9 @@ ssh esm.sh << EOF
   fi
 
   if [ -d /esm/npm ]; then
-    mv -T /esm/npm /esm/_npm || exit 1
-    nohup rm -rf /esm/_npm </dev/null >/dev/null 2>&1 &
+    mv -T /esm/npm /esm/_npm.\$(date +%s)
   fi
+  nohup rm -rf /esm/_npm.* </dev/null >/dev/null 2>&1 &
 
   if [ "\$reload" == "yes" ]; then
     systemctl daemon-reload

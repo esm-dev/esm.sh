@@ -19,6 +19,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/Masterminds/semver/v3"
@@ -289,9 +290,9 @@ func (npmrc *NpmRC) getPackageInfoContext(ctx context.Context, pkgName string, v
 	// [warning] don't cache the installed package.json: it has no `dist` field, and the store
 	// may be purged before the cache expires, then the installer would fetch an empty tarball url
 	if npm.IsExactVersion(version) {
-		defer useNpmPackage(ctx, pkgName+"@"+version)()
 		var raw npm.PackageJSONRaw
 		if utils.ParseJSONFile(filepath.Join(npmrc.StoreDir(), pkgName+"@"+version, "node_modules", pkgName, "package.json"), &raw) == nil {
+			useNpmPackage(ctx, pkgName+"@"+version)()
 			return raw.ToNpmPackage(), nil
 		}
 	}
@@ -413,13 +414,23 @@ func lockInstall(ctx context.Context, key string) (func(), error) {
 }
 
 func (npmrc *NpmRC) installPackageContext(ctx context.Context, pkg npm.Package) (packageJson *npm.PackageJSON, err error) {
-	defer useNpmPackage(ctx, pkg.String())()
+	packageJson, err = npmrc.installPackageOnce(ctx, pkg)
+	// the idle purge keeps the packages held by running builds
+	if errors.Is(err, syscall.ENOSPC) && ctx.Err() == nil && npmStore != nil {
+		npmStore.purgeIdle()
+		packageJson, err = npmrc.installPackageOnce(ctx, pkg)
+	}
+	return
+}
+
+func (npmrc *NpmRC) installPackageOnce(ctx context.Context, pkg npm.Package) (packageJson *npm.PackageJSON, err error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	if message := npmrc.getCachedPackageNotFound(pkg); message != "" {
 		return nil, errors.New(message)
 	}
+	defer useNpmPackage(ctx, pkg.String())()
 	finalDir := filepath.Join(npmrc.StoreDir(), pkg.String())
 	packageJsonPath := filepath.Join(finalDir, "node_modules", pkg.Name, "package.json")
 
