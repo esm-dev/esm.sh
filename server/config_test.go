@@ -122,6 +122,35 @@ func TestNpmQueryCacheTTL(t *testing.T) {
 	}
 }
 
+func TestNpmStoreTTL(t *testing.T) {
+	for _, test := range []struct {
+		input    string
+		env      string
+		expected uint32
+	}{
+		{`{}`, "", 86400},
+		{`{}`, "3600", 3600},
+		{`{}`, "0", 86400},
+		{`{}`, "invalid", 86400},
+		{`{}`, "-1", 86400},
+		{`{}`, "4294967296", 86400},
+		{`{"npmStoreTTL":7200}`, "3600", 7200},
+		{`{"npmStoreTTL":0}`, "3600", 3600},
+	} {
+		t.Run(test.input+test.env, func(t *testing.T) {
+			t.Setenv("NPM_STORE_TTL", test.env)
+			var c Config
+			if err := json.Unmarshal([]byte(test.input), &c); err != nil {
+				t.Fatal(err)
+			}
+			normalizeConfig(&c)
+			if c.NpmStoreTTL != test.expected {
+				t.Fatalf("NpmStoreTTL = %d, want %d", c.NpmStoreTTL, test.expected)
+			}
+		})
+	}
+}
+
 func TestNpmBackupRegistry(t *testing.T) {
 	for _, test := range []struct {
 		backup   string

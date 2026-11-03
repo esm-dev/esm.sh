@@ -125,6 +125,7 @@ Available environment variables:
 - `ACCESS_LOG`: Enable access log, default is `false`.
 - `MINIFY`: Minify the built JS/CSS files, default is `true`.
 - `NPM_QUERY_CACHE_TTL`: The cache TTL for NPM query, default is 10 minutes.
+- `NPM_STORE_TTL`: The idle TTL for local npm packages, in seconds. Default is `86400` (one day). A positive `npmStoreTTL` in the config file overrides this value. Zero or invalid environment values use the default. After restart, packages use one to two times the TTL to spread deletion.
 - `NPM_REGISTRY`: The global NPM registry, default is "https://registry.npmjs.org/".
 - `NPM_TOKEN`: The access token for the global NPM registry.
 - `NPM_USER`: The access user for the global NPM registry.

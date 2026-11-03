@@ -96,6 +96,8 @@
   // The cache TTL for npm packages query, default is 600 seconds (10 minutes).
   "npmQueryCacheTTL": 600,
 
+  "npmStoreTTL": 86400,
+
   // Cache purge API configuration.
   "purgeAPI": {
     // Enable cache purging (`POST /purge`), default is true.

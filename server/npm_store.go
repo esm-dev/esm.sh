@@ -16,8 +16,6 @@ import (
 	"github.com/ije/gox/log"
 )
 
-const npmPackageTTL = time.Hour
-
 var npmStore *npmPackageStore
 
 type npmPackageStore struct {
@@ -134,6 +132,7 @@ func (s *npmPackageStore) purgeIdle() {
 }
 
 func (s *npmPackageStore) restore() (errs error) {
+	ttl := time.Duration(config.NpmStoreTTL) * time.Second
 	filepath.WalkDir(s.dir, func(name string, d fs.DirEntry, err error) error {
 		if err != nil {
 			// [warning] skip an unreadable directory, the walk must still reach the other packages
@@ -151,7 +150,7 @@ func (s *npmPackageStore) restore() (errs error) {
 		if strings.LastIndexByte(d.Name(), '@') > 0 {
 			key, _ := filepath.Rel(s.dir, name)
 			// [warning] spread the expiry, the restored packages must not all expire at once
-			s.use(filepath.ToSlash(key), npmPackageTTL+rand.N(npmPackageTTL))()
+			s.use(filepath.ToSlash(key), ttl+rand.N(ttl))()
 			return fs.SkipDir
 		}
 		return nil
@@ -184,15 +183,16 @@ func useNpmPackage(ctx context.Context, key string) func() {
 	if npmStore == nil {
 		return func() {}
 	}
+	ttl := time.Duration(config.NpmStoreTTL) * time.Second
 	if scope, ok := ctx.Value(npmPackageScopeKey{}).(*npmPackageScope); ok {
 		scope.mu.Lock()
 		if scope.releases[key] == nil {
-			scope.releases[key] = npmStore.use(key, npmPackageTTL)
+			scope.releases[key] = npmStore.use(key, ttl)
 		}
 		scope.mu.Unlock()
 		return func() {}
 	}
-	return npmStore.use(key, npmPackageTTL)
+	return npmStore.use(key, ttl)
 }
 
 func useNpmPackageDir(ctx context.Context, dir string) func() {

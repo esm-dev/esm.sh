@@ -49,6 +49,7 @@ type Config struct {
 	NpmPassword         string                       `json:"npmPassword"`
 	NpmScopedRegistries map[string]NpmRegistryConfig `json:"npmScopedRegistries"`
 	NpmQueryCacheTTL    uint32                       `json:"npmQueryCacheTTL"`
+	NpmStoreTTL         uint32                       `json:"npmStoreTTL"`
 	PurgeAPI            PurgeAPIConfig               `json:"purgeAPI"`
 	MinifyRaw           json.RawMessage              `json:"minify"`
 	SourceMapRaw        json.RawMessage              `json:"sourceMap"`
@@ -287,6 +288,14 @@ func normalizeConfig(config *Config) {
 		if v := os.Getenv("NPM_QUERY_CACHE_TTL"); v != "" {
 			if i, err := strconv.ParseUint(v, 10, 32); err == nil {
 				config.NpmQueryCacheTTL = uint32(i)
+			}
+		}
+	}
+	if config.NpmStoreTTL == 0 {
+		config.NpmStoreTTL = 86400
+		if v := os.Getenv("NPM_STORE_TTL"); v != "" {
+			if i, err := strconv.ParseUint(v, 10, 32); err == nil && i > 0 {
+				config.NpmStoreTTL = uint32(i)
 			}
 		}
 	}

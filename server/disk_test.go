@@ -108,8 +108,8 @@ func TestInstallPackageDiskRecovery(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			s.use("idle@1.0.0", npmPackageTTL)()
-			defer s.use("used@1.0.0", npmPackageTTL)()
+			s.use("idle@1.0.0", time.Hour)()
+			defer s.use("used@1.0.0", time.Hour)()
 			var requests atomic.Int32
 			http.DefaultTransport = ghTestTransport(func(r *http.Request) (*http.Response, error) {
 				var body io.Reader = bytes.NewReader(testPackageTarball(`{"name":"disk-recovery","version":"1.0.0"}`))
@@ -153,7 +153,7 @@ func TestNpmStorePurgeIdle(t *testing.T) {
 		if err := os.MkdirAll(filepath.Join(s.dir, key), 0755); err != nil {
 			t.Fatal(err)
 		}
-		s.use(key, npmPackageTTL)()
+		s.use(key, time.Hour)()
 		time.Sleep(time.Millisecond)
 	}
 	// the least recently used package goes first, and the purge stops once the disk is ok
