@@ -22,6 +22,7 @@ type BuildArgs struct {
 	KeepNames         bool
 	IgnoreAnnotations bool
 	ExternalRequire   bool
+	WasmInstance      bool
 }
 
 func decodeBuildArgs(argsString string) (args BuildArgs, err error) {
@@ -58,6 +59,8 @@ func decodeBuildArgs(argsString string) (args BuildArgs, err error) {
 					args.KeepNames = true
 				case "i":
 					args.IgnoreAnnotations = true
+				case "w":
+					args.WasmInstance = true
 				}
 			}
 		}
@@ -116,6 +119,9 @@ func encodeBuildArgs(args BuildArgs, isDts bool) string {
 		}
 		if args.IgnoreAnnotations {
 			lines = append(lines, "i")
+		}
+		if args.WasmInstance {
+			lines = append(lines, "w")
 		}
 	}
 	if len(lines) > 0 {

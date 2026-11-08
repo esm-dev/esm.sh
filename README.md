@@ -203,6 +203,20 @@ Other supported options of esbuild:
   import foo from "https://esm.sh/foo?ignore-annotations";
   ```
 
+### WebAssembly
+
+For packages that import WebAssembly instance exports, add `?wasm=instance`:
+
+```js
+import { get_encoding } from "https://esm.sh/tiktoken@1.0.22?wasm=instance&target=es2022";
+```
+
+This option applies to the package and its dependencies and requires top-level await support. Without it, `.wasm`
+imports return bytes. Explicit `with { type: "bytes" }` imports still return bytes, and `.wasm?module` imports still
+return a compiled `WebAssembly.Module`. External bytes and compiled-module wrappers also require top-level await.
+WASM import module names are resolved as ESM specifiers; host-provided import objects such as WASI are not supplied.
+Instance identity follows generated ESM URLs; different dependency export URLs may create separate instances.
+
 ### CSS-In-JS
 
 esm.sh supports importing CSS files in JS directly:

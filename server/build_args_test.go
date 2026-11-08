@@ -31,6 +31,7 @@ func TestEncodeBuildArgs(t *testing.T) {
 			ExternalRequire:   true,
 			KeepNames:         true,
 			IgnoreAnnotations: true,
+			WasmInstance:      true,
 		},
 		false,
 	)
@@ -58,6 +59,12 @@ func TestEncodeBuildArgs(t *testing.T) {
 	}
 	if !args.IgnoreAnnotations {
 		t.Fatal("ignoreAnnotations should be true")
+	}
+	if !args.WasmInstance {
+		t.Fatal("wasmInstance should be true")
+	}
+	if encodeBuildArgs(BuildArgs{WasmInstance: true}, true) != "" {
+		t.Fatal("wasmInstance should not change declaration URLs")
 	}
 }
 

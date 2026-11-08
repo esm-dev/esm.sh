@@ -2,8 +2,10 @@ package server
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
+	"os"
 	"path"
 
 	"github.com/esm-dev/esm.sh/internal/npm"
@@ -12,6 +14,46 @@ import (
 
 func generatedLoaderPath(npmrc *NpmRC, name string) string {
 	return path.Join(npmrc.StoreDir(), ".loaders", name)
+}
+
+func transformWasm(ctx context.Context, npmrc *NpmRC, filename string) (*LoaderOutput, error) {
+	wasm, err := os.ReadFile(filename)
+	if err != nil {
+		return nil, err
+	}
+	loaderExecPath := generatedLoaderPath(npmrc, "wasm-1.js")
+	err = doOnce(loaderExecPath, func() error {
+		if existsFile(loaderExecPath) {
+			return nil
+		}
+		return buildLoader(npmrc.StoreDir(), `
+		  const { stdin, stdout } = Deno;
+		  const write = async data => {
+		    for (let buf = new TextEncoder().encode(data); buf.length > 0;) buf = buf.subarray(await stdout.write(buf));
+		  };
+		  try {
+		    let base64 = "";
+		    for await (const text of stdin.readable.pipeThrough(new TextDecoderStream())) base64 += text;
+		    const binary = "Uint8Array.from(atob(" + JSON.stringify(base64) + "), c => c.charCodeAt(0))";
+		    // Only compile here; the module's start function must run in the client.
+		    const module = await WebAssembly.compile(Uint8Array.from(atob(base64), c => c.charCodeAt(0)));
+		    const imports = [...new Set(WebAssembly.Module.imports(module).map(i => i.module))];
+		    const lines = imports.map((name, i) => "import * as m" + i + " from " + JSON.stringify(name) + ";");
+		    const importObject = imports.map((name, i) => "[" + JSON.stringify(name) + "]: m" + i).join(",");
+		    lines.push("const { instance } = await WebAssembly.instantiate(" + binary + ", {" + importObject + "});");
+		    WebAssembly.Module.exports(module).forEach(({ name }, i) => {
+		      lines.push("const e" + i + " = instance.exports[" + JSON.stringify(name) + "]; export { e" + i + " as " + JSON.stringify(name) + " };");
+		    });
+		    await write("1\n" + lines.join("\n"));
+		  } catch (err) {
+		    await write("0\n" + err.message);
+		  }
+		`, loaderExecPath)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return runLoaderContext(ctx, loaderExecPath, filename, base64.StdEncoding.EncodeToString(wasm))
 }
 
 func transformSvelte(ctx context.Context, npmrc *NpmRC, svelteVersion string, filename string, code string) (output *LoaderOutput, err error) {
