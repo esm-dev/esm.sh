@@ -18,10 +18,13 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"testing/iotest"
 	"testing/synctest"
 	"time"
+
+	bolt "go.etcd.io/bbolt"
 )
 
 func TestS3StorageTimeout(t *testing.T) {
@@ -740,6 +743,153 @@ func TestS3StorageMetaCache(t *testing.T) {
 	if _, stat := s3.getMetaCache("meta/stale"); stat != nil {
 		t.Fatal("a read that raced with a delete was cached")
 	}
+}
+
+func TestS3StorageLocalCache(t *testing.T) {
+	var mu sync.Mutex
+	var requests []string
+	remote := map[string]string{}
+	client := http.DefaultClient
+	t.Cleanup(func() { http.DefaultClient = client })
+	http.DefaultClient = &http.Client{Transport: s3TestTransport(func(req *http.Request) (*http.Response, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		requests = append(requests, req.Method+" "+req.URL.Path)
+		if req.Method == http.MethodPut {
+			data, _ := io.ReadAll(req.Body)
+			remote[req.URL.Path] = string(data)
+			return &http.Response{StatusCode: 200, Body: http.NoBody}, nil
+		}
+		data, ok := remote[req.URL.Path]
+		if !ok {
+			return &http.Response{StatusCode: 404, Body: http.NoBody}, nil
+		}
+		return &http.Response{StatusCode: 200, Header: http.Header{
+			"Content-Length": {fmt.Sprint(len(data))},
+			"Last-Modified":  {"Tue, 20 Oct 2026 00:00:00 GMT"},
+		}, Body: io.NopCloser(strings.NewReader(data))}, nil
+	})}
+	options := &StorageOptions{Endpoint: "https://storage.test", AccessKeyID: "test", SecretAccessKey: "test", CacheDir: t.TempDir(), MetaCacheFile: filepath.Join(t.TempDir(), "meta-cache.db")}
+	storage, err := NewS3Storage(options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s3 := storage.(*s3Storage)
+	t.Cleanup(func() { s3.metaCache.Close() })
+	sent := func() []string {
+		mu.Lock()
+		defer mu.Unlock()
+		defer func() { requests = nil }()
+		return requests
+	}
+	read := func(name string) string {
+		content, _, err := s3.Get(name)
+		if err != nil {
+			t.Fatalf("get %s: %v", name, err)
+		}
+		defer content.Close()
+		data, _ := io.ReadAll(content)
+		return string(data)
+	}
+
+	// a miss is asked once, a put ends it
+	for _, name := range []string{"modules/pkg@1.0.0/es2022/pkg.mjs", "meta/pkg@1.0.0/a"} {
+		for range 2 {
+			if _, _, err := s3.Get(name); err != ErrNotFound {
+				t.Fatalf("get %s: %v", name, err)
+			}
+			if _, err := s3.Stat(name); err != ErrNotFound {
+				t.Fatalf("stat %s: %v", name, err)
+			}
+		}
+		if got := sent(); len(got) != 1 {
+			t.Fatalf("a miss of %s was asked again: %v", name, got)
+		}
+		if err := s3.Put(name, strings.NewReader("data")); err != nil {
+			t.Fatal(err)
+		}
+		if got := read(name); got != "data" {
+			t.Fatalf("content of %s after a miss: %q", name, got)
+		}
+		if got := sent(); !slices.Equal(got, []string{"PUT /" + name}) {
+			t.Fatalf("requests after the put of %s: %v", name, got)
+		}
+	}
+	// a miss that raced with a put is dropped
+	seq := s3.putSeq("modules/raced.mjs").Load()
+	s3.markPut("modules/raced.mjs")
+	s3.addMiss("modules/raced.mjs", seq)
+	if s3.isMissing("modules/raced.mjs") {
+		t.Fatal("a miss that raced with a put was recorded")
+	}
+	sent()
+
+	// types and exports are never uploaded, the old ones are still read from S3
+	remote["/types/pkg@1.0.0/old.d.ts"] = "old"
+	for _, name := range []string{"types/pkg@1.0.0/index.d.ts", "exports/pkg@1.0.0/es2022/pkg_hash.mjs"} {
+		if err := s3.Put(name, strings.NewReader("local")); err != nil {
+			t.Fatal(err)
+		}
+		if got := read(name); got != "local" {
+			t.Fatalf("content of %s: %q", name, got)
+		}
+	}
+	if got := sent(); len(got) != 0 {
+		t.Fatalf("local keys hit S3: %v", got)
+	}
+	if got := read("types/pkg@1.0.0/old.d.ts"); got != "old" {
+		t.Fatalf("old types: %q", got)
+	}
+	if got := read("types/pkg@1.0.0/old.d.ts"); got != "old" || len(sent()) != 1 {
+		t.Fatalf("old types were not cached: %q", got)
+	}
+
+	// a source map is uploaded on the first read
+	const sourceMap = "modules/pkg@1.0.0/es2022/pkg.mjs.map"
+	if err := s3.Put(sourceMap, strings.NewReader("map")); err != nil {
+		t.Fatal(err)
+	}
+	if got := sent(); len(got) != 0 {
+		t.Fatalf("source map was uploaded on put: %v", got)
+	}
+	if got := read(sourceMap); got != "map" {
+		t.Fatalf("source map: %q", got)
+	}
+	for range 1000 {
+		if _, err := s3.fsCache.Stat(sourceMap); err == ErrNotFound {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if got := sent(); !slices.Equal(got, []string{"PUT /" + sourceMap}) {
+		t.Fatalf("source map upload: %v", got)
+	}
+	if got := read(sourceMap); got != "map" || !slices.Equal(sent(), []string{"GET /" + sourceMap}) {
+		t.Fatalf("uploaded source map: %q", got)
+	}
+	if _, err := s3.fsCache.Stat(sourceMap); err != ErrNotFound {
+		t.Fatalf("uploaded source map was cached again: %v", err)
+	}
+
+	// a source map without a read is removed after the TTL
+	const unused = "modules/pkg@1.0.0/es2022/unused.mjs.map"
+	if err := s3.Put(unused, strings.NewReader("map")); err != nil {
+		t.Fatal(err)
+	}
+	s3.sweepSourceMaps(time.Now().Add(-time.Hour))
+	if _, err := s3.fsCache.Stat(unused); err != nil {
+		t.Fatalf("fresh source map was removed: %v", err)
+	}
+	s3.sweepSourceMaps(time.Now().Add(time.Hour))
+	if _, _, err := s3.Get(unused); err != ErrNotFound {
+		t.Fatalf("expired source map: %v", err)
+	}
+	s3.metaCache.View(func(tx *bolt.Tx) error {
+		if n := tx.Bucket(sourceMapsBucket).Stats().KeyN; n != 0 {
+			t.Fatalf("%d source map records left", n)
+		}
+		return nil
+	})
 }
 
 func TestS3StorageSignsWirePath(t *testing.T) {

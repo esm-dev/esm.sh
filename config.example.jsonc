@@ -65,6 +65,8 @@
     "secretAccessKey": "",
     // cache files on local file system for s3 storage, default is disabled.
     // the build metadata is cached in `{workDir}/meta-cache.db`.
+    // with a cache dir, the type declarations and the `?exports` builds are saved in it only,
+    // and a source map is uploaded on its first request, or removed after 7 days without one.
     "cacheDir": ""
   },
 

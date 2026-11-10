@@ -168,7 +168,7 @@ func purgePackageCache(npmrc *NpmRC, metaDB *BuildMetaDB, esmStorage storage.Sto
 
 	// Remove normal and external-all builds, source maps and declarations.
 	externalAllId := normalizeSavePath("*" + pkgId)
-	for _, dir := range []string{"modules/", "types/"} {
+	for _, dir := range []string{"modules/", "types/", "exports/"} {
 		for _, id := range []string{pkgId, externalAllId} {
 			keys, err := esmStorage.DeleteAll(dir + id + "/")
 			if err != nil {

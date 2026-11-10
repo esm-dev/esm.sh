@@ -136,7 +136,6 @@ func (db *BuildMetaDB) Get(key string) (value []byte, err error) {
 		return
 	}
 	r, _, err := db.storage.Get(storeKey)
-	legacy := false
 	legacyKey := "meta/" + path.Base(storeKey)
 	if err == storage.ErrNotFound && storeKey != legacyKey {
 		r, _, err = db.storage.Get(legacyKey)
@@ -150,7 +149,6 @@ func (db *BuildMetaDB) Get(key string) (value []byte, err error) {
 				}
 				return nil, storage.ErrNotFound
 			}
-			legacy = true
 		}
 	}
 	if err != nil {
@@ -158,9 +156,6 @@ func (db *BuildMetaDB) Get(key string) (value []byte, err error) {
 	}
 	defer r.Close()
 	value, err = io.ReadAll(r)
-	if err == nil && legacy {
-		err = db.storage.Put(storeKey, bytes.NewReader(value))
-	}
 	if err == nil {
 		db.cache.Add(key, value)
 	}

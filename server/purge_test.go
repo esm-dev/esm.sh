@@ -838,8 +838,8 @@ func TestPurgeLegacyMetadata(t *testing.T) {
 	if _, err := metaDB.Get(paths[0]); err != nil {
 		t.Fatalf("legacy metadata was not reused: %v", err)
 	}
-	if _, err := fs.Stat(normalizeMetaStoreKey(paths[0])); err != nil {
-		t.Fatalf("legacy metadata was not migrated: %v", err)
+	if _, err := fs.Stat(normalizeMetaStoreKey(paths[0])); err != storage.ErrNotFound {
+		t.Fatalf("legacy metadata was written back: %v", err)
 	}
 	if _, err := purgePackageCache(newTestNpmRC(), metaDB, fs, logger, esm, true, "", "/purge-legacy@1.0.0"); err != nil {
 		t.Fatal(err)
