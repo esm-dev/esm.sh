@@ -9,6 +9,7 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
+	"hash/maphash"
 	"html"
 	"io"
 	"net/http"
@@ -19,13 +20,22 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
+	lru "github.com/hashicorp/golang-lru/v2"
 	bolt "go.etcd.io/bbolt"
 )
 
-var metaCacheBucket = []byte("meta")
+// [warning] a source map that nobody reads within the TTL is removed, it is never uploaded
+const sourceMapTTL = 7 * 24 * time.Hour
+
+var (
+	metaCacheBucket  = []byte("meta")
+	sourceMapsBucket = []byte("source-maps")
+	missSeed         = maphash.MakeSeed()
+)
 
 // [warning] only the wait for response headers is bounded, a body stream may take longer than any fixed timeout.
 var s3Transport = func() *http.Transport {
@@ -45,6 +55,12 @@ type s3Storage struct {
 	metaCache       *bolt.DB
 	// [warning] bumped after every S3 delete, a cache write that started before it must be dropped
 	cacheEpoch atomic.Uint64
+	// keys that S3 does not have, by hash
+	misses *lru.Cache[uint64, struct{}]
+	// [warning] a put bumps the slot of its key, a miss recorded across the bump must be dropped
+	puts      [1024]atomic.Uint32
+	uploads   sync.Map
+	lastSweep atomic.Int64
 }
 
 // NewS3Storage creates a new S3-compatible storage.
@@ -71,6 +87,7 @@ func NewS3Storage(options *StorageOptions) (Storage, error) {
 		accessKeyID:     options.AccessKeyID,
 		secretAccessKey: options.SecretAccessKey,
 	}
+	storage.misses, _ = lru.New[uint64, struct{}](1 << 19)
 	if options.CacheDir != "" {
 		fs, err := NewFSStorage(options.CacheDir)
 		if err != nil {
@@ -88,6 +105,9 @@ func NewS3Storage(options *StorageOptions) (Storage, error) {
 		}
 		err = db.Update(func(tx *bolt.Tx) error {
 			_, err := tx.CreateBucketIfNotExists(metaCacheBucket)
+			if err == nil {
+				_, err = tx.CreateBucketIfNotExists(sourceMapsBucket)
+			}
 			return err
 		})
 		if err != nil {
@@ -160,13 +180,17 @@ func (s3 *s3Storage) StatContext(ctx context.Context, name string) (stat Stat, e
 			return
 		}
 	}
-	if s3.shouldUseFSCache(name) {
+	if s3.shouldUseFSCache(name) || s3.isLazySourceMap(name) {
 		stat, err = s3.fsCache.Stat(name)
 		if err == nil {
 			return
 		}
 		// ignore error
 	}
+	if s3.isMissing(name) {
+		return nil, ErrNotFound
+	}
+	seq := s3.putSeq(name).Load()
 	req, err := http.NewRequestWithContext(ctx, "HEAD", s3.apiEndpoint+"/"+escapePath(name), nil)
 	if err != nil {
 		return
@@ -177,6 +201,7 @@ func (s3 *s3Storage) StatContext(ctx context.Context, name string) (stat Stat, e
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == 404 {
+		s3.addMiss(name, seq)
 		err = ErrNotFound
 		return
 	}
@@ -225,13 +250,20 @@ func (s3 *s3Storage) GetContext(ctx context.Context, name string) (content io.Re
 			return io.NopCloser(bytes.NewReader(data)), stat, nil
 		}
 	}
-	if s3.shouldUseFSCache(name) {
+	if s3.shouldUseFSCache(name) || s3.isLazySourceMap(name) {
 		content, stat, err = s3.fsCache.Get(name)
 		if err == nil {
+			if s3.isLazySourceMap(name) {
+				go s3.uploadSourceMap(name)
+			}
 			return
 		}
 		// ignore error
 	}
+	if s3.isMissing(name) {
+		return nil, nil, ErrNotFound
+	}
+	seq := s3.putSeq(name).Load()
 	epoch := s3.cacheEpoch.Load()
 	req, err := http.NewRequestWithContext(ctx, "GET", s3.apiEndpoint+"/"+escapePath(name), nil)
 	if err != nil {
@@ -247,6 +279,7 @@ func (s3 *s3Storage) GetContext(ctx context.Context, name string) (content io.Re
 		}
 	}()
 	if resp.StatusCode == 404 {
+		s3.addMiss(name, seq)
 		err = ErrNotFound
 		return
 	}
@@ -359,6 +392,21 @@ func (s3 *s3Storage) PutContext(ctx context.Context, name string, content io.Rea
 			return
 		}
 		content = bytes.NewReader(metaData)
+	} else if s3.isLocalKey(name) || s3.isLazySourceMap(name) {
+		if err = s3.fsCache.Put(name, content); err != nil {
+			return
+		}
+		if s3.isLazySourceMap(name) {
+			now := time.Now()
+			err = s3.metaCache.Batch(func(tx *bolt.Tx) error {
+				return tx.Bucket(sourceMapsBucket).Put(append(binary.BigEndian.AppendUint64(nil, uint64(now.Unix())), name...), nil)
+			})
+			if last := s3.lastSweep.Load(); now.Unix()-last > 3600 && s3.lastSweep.CompareAndSwap(last, now.Unix()) {
+				go s3.sweepSourceMaps(now.Add(-sourceMapTTL))
+			}
+		}
+		s3.markPut(name)
+		return
 	} else if s3.shouldUseFSCache(name) {
 		pr, pw := io.Pipe()
 		done := make(chan struct{})
@@ -394,6 +442,7 @@ func (s3 *s3Storage) PutContext(ctx context.Context, name string, content io.Rea
 	if resp.StatusCode >= 400 {
 		return parseS3Error(resp)
 	}
+	s3.markPut(name)
 	if s3.shouldUseMetaCache(name) {
 		s3.putMetaCache(name, metaData, time.Now(), epoch)
 	}
@@ -423,7 +472,7 @@ func (s3 *s3Storage) Delete(name string) (err error) {
 			return tx.Bucket(metaCacheBucket).Delete([]byte(name))
 		})
 	}
-	if s3.shouldUseFSCache(name) {
+	if s3.shouldUseFSCache(name) || s3.isLazySourceMap(name) {
 		s3.cacheEpoch.Add(1)
 		s3.fsCache.Delete(name)
 	}
@@ -588,13 +637,112 @@ func (s3 *s3Storage) sign(req *http.Request) {
 }
 
 func (s3 *s3Storage) shouldUseFSCache(name string) bool {
-	if s3.fsCache == nil || isMetaKey(name) || strings.HasPrefix(name, "npm-resolution-slots/") {
+	return s3.fsCache != nil && !isMetaKey(name) && !strings.HasPrefix(name, "npm-resolution-slots/") && !strings.HasSuffix(name, ".mjs.map")
+}
+
+// isLocalKey reports whether the key is saved in the local cache only.
+// [warning] the objects are rebuilt when the cache is lost, use it for cheap builds only
+func (s3 *s3Storage) isLocalKey(name string) bool {
+	return s3.fsCache != nil && (strings.HasPrefix(name, "types/") || strings.HasPrefix(name, "exports/"))
+}
+
+// isLazySourceMap reports whether the source map waits in the local cache for its first read before the upload.
+func (s3 *s3Storage) isLazySourceMap(name string) bool {
+	return s3.fsCache != nil && s3.metaCache != nil && strings.HasSuffix(name, ".mjs.map")
+}
+
+// uploadSourceMap moves a source map from the local cache to S3.
+func (s3 *s3Storage) uploadSourceMap(name string) {
+	if _, uploading := s3.uploads.LoadOrStore(name, nil); uploading {
+		return
+	}
+	defer s3.uploads.Delete(name)
+	file, stat, err := s3.fsCache.Get(name)
+	if err != nil {
+		return
+	}
+	defer file.Close()
+	req, err := http.NewRequest("PUT", s3.apiEndpoint+"/"+escapePath(name), file)
+	if err != nil {
+		return
+	}
+	req.ContentLength = stat.Size()
+	if stat.Size() == 0 {
+		req.Body = http.NoBody
+	}
+	resp, err := s3.do(req)
+	if err != nil {
+		return
+	}
+	resp.Body.Close()
+	// [warning] keep a file that was written again during the upload, it is not uploaded yet
+	if cur, err := s3.fsCache.Stat(name); resp.StatusCode < 400 && err == nil && cur.ModTime().Equal(stat.ModTime()) {
+		s3.fsCache.Delete(name)
+	}
+}
+
+// sweepSourceMaps removes the source maps written before the cutoff that are still in the local cache.
+func (s3 *s3Storage) sweepSourceMaps(cutoff time.Time) {
+	for {
+		var keys [][]byte
+		s3.metaCache.View(func(tx *bolt.Tx) error {
+			cursor := tx.Bucket(sourceMapsBucket).Cursor()
+			for k, _ := cursor.First(); k != nil && len(keys) < 1000 && int64(binary.BigEndian.Uint64(k)) < cutoff.Unix(); k, _ = cursor.Next() {
+				keys = append(keys, bytes.Clone(k))
+			}
+			return nil
+		})
+		// [warning] remove the files outside of the write transaction, it blocks the metadata cache
+		for _, k := range keys {
+			// a rebuild writes the file again, keep it for its own record
+			if stat, err := s3.fsCache.Stat(string(k[8:])); err == nil && stat.ModTime().Before(cutoff) {
+				s3.fsCache.Delete(string(k[8:]))
+			}
+		}
+		err := s3.metaCache.Update(func(tx *bolt.Tx) error {
+			for _, k := range keys {
+				if err := tx.Bucket(sourceMapsBucket).Delete(k); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+		if len(keys) < 1000 || err != nil {
+			return
+		}
+	}
+}
+
+func (s3 *s3Storage) putSeq(name string) *atomic.Uint32 {
+	return &s3.puts[maphash.String(missSeed, name)%uint64(len(s3.puts))]
+}
+
+// isMissing reports whether S3 is known to not have the key.
+func (s3 *s3Storage) isMissing(name string) bool {
+	if s3.misses == nil {
 		return false
 	}
-	if strings.HasSuffix(name, ".mjs.map") || strings.HasSuffix(name, ".d.ts") || strings.HasSuffix(name, ".d.mts") || strings.HasSuffix(name, ".d.cts") {
-		return false
+	_, ok := s3.misses.Get(maphash.String(missSeed, name))
+	return ok
+}
+
+// addMiss records a 404 of S3, seq is the put sequence of the key before the request.
+func (s3 *s3Storage) addMiss(name string, seq uint32) {
+	if s3.misses != nil {
+		s3.misses.Add(maphash.String(missSeed, name), struct{}{})
+		// [warning] check after the add, a put that ended in between has already removed its miss
+		if s3.putSeq(name).Load() != seq {
+			s3.misses.Remove(maphash.String(missSeed, name))
+		}
 	}
-	return true
+}
+
+// markPut drops the miss of a key that has been written.
+func (s3 *s3Storage) markPut(name string) {
+	s3.putSeq(name).Add(1)
+	if s3.misses != nil {
+		s3.misses.Remove(maphash.String(missSeed, name))
+	}
 }
 
 func (s3 *s3Storage) shouldUseMetaCache(name string) bool {

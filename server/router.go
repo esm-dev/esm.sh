@@ -1327,7 +1327,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 							defer f.Close()
 							xxh := xxhash.New()
 							xxh.Write([]byte(strings.Join(exports, ",")))
-							savePath = strings.TrimSuffix(savePath, ".mjs") + "_" + base64.RawURLEncoding.EncodeToString(xxh.Sum(nil)) + ".mjs"
+							savePath = "exports" + strings.TrimSuffix(strings.TrimPrefix(savePath, "modules"), ".mjs") + "_" + base64.RawURLEncoding.EncodeToString(xxh.Sum(nil)) + ".mjs"
 							f2, stat, err := esmStorage.Get(savePath)
 							if err == nil {
 								header.Set("Content-Length", fmt.Sprintf("%d", stat.Size()))
@@ -1924,7 +1924,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 					defer f.Close()
 					xxh := xxhash.New()
 					xxh.Write([]byte(strings.Join(exports, ",")))
-					savePath = strings.TrimSuffix(savePath, ".mjs") + "_" + base64.RawURLEncoding.EncodeToString(xxh.Sum(nil)) + ".mjs"
+					savePath = "exports" + strings.TrimSuffix(strings.TrimPrefix(savePath, "modules"), ".mjs") + "_" + base64.RawURLEncoding.EncodeToString(xxh.Sum(nil)) + ".mjs"
 					f2, stat, err := esmStorage.Get(savePath)
 					if err == nil {
 						header.Set("Content-Length", fmt.Sprintf("%d", stat.Size()))
