@@ -1,5 +1,13 @@
 # Server Changelog
 
+## v140_3
+
+* Add `npmStoreTTL` and `NPM_STORE_TTL` to control idle package expiry in seconds. Increase the default from one hour to one day. (#1506)
+* Cache missing S3 keys in memory to reduce repeated requests. This cache assumes one server per bucket. (#1514)
+* Keep type declarations and `?exports` builds only in `storage.cacheDir` when enabled, and cache type declarations read from S3. (#1514)
+* With `storage.cacheDir` enabled, upload source maps on their first request. Remove source maps after seven days without a request. (#1514)
+* Stop duplicate writes of legacy build metadata. (#1514)
+
 ## v140_2
 
 * Remove `npmStoreMaxSize`, `storage.cacheMaxSize`, and automatic local S3 cache purging. (#1495, #1501)
