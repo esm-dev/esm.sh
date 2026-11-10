@@ -91,8 +91,18 @@ func (ctx *BuildContext) transformDTS(dts string) error {
 
 // transformDTS transforms a `.d.ts` file for deno/editor-lsp
 func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, transform *dtsTransform) (n int, err error) {
+	pkgDir := ctx.esmPath.PackageId()
+	if ctx.externalAll {
+		pkgDir = "*" + pkgDir
+	}
 	entry := transform == nil
 	if entry {
+		// [warning] different entries can share declarations; hold the lock until all uploads finish.
+		unlock, lockErr := cacheMutex.LockContext(ctx.Context(), "dts:"+normalizeSavePath(path.Join("types", pkgDir, buildArgsPrefix)))
+		if lockErr != nil {
+			return 0, lockErr
+		}
+		defer unlock()
 		buildCtx, cancel := context.WithCancel(ctx.Context())
 		defer cancel()
 		transform = &dtsTransform{ctx: buildCtx, storage: ctx.storage, files: map[string]*dtsFile{}, resolutions: map[dtsResolutionKey]dtsResolution{}, slots: make(chan struct{}, 16)}
@@ -107,10 +117,6 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, transfo
 		return
 	}
 
-	pkgDir := ctx.esmPath.PackageId()
-	if ctx.externalAll {
-		pkgDir = "*" + pkgDir
-	}
 	savePath := normalizeSavePath(path.Join("types", pkgDir, buildArgsPrefix, dts))
 	file := transform.stat(savePath)
 	if file.visited {

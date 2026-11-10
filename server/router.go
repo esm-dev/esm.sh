@@ -76,6 +76,48 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 		metaDB     = NewBuildMetaDB(esmStorage)
 	)
 
+	getModule := func(ctx context.Context, savePath string, pkg npm.Package, exports []string, target esbuild.Target) (io.ReadCloser, int64, time.Time, error) {
+		var variantPath string
+		if len(exports) > 0 {
+			xxh := xxhash.New()
+			xxh.Write([]byte(strings.Join(exports, ",")))
+			variantPath = strings.TrimSuffix(savePath, ".mjs") + "_" + base64.RawURLEncoding.EncodeToString(xxh.Sum(nil)) + ".mjs"
+			unlock, err := cacheMutex.LockContext(ctx, "exports:"+variantPath)
+			if err != nil {
+				return nil, 0, time.Time{}, err
+			}
+			defer unlock()
+			content, stat, err := esmStorage.Get(variantPath)
+			if err == nil {
+				return content, stat.Size(), stat.ModTime(), nil
+			}
+			if err != storage.ErrNotFound {
+				return nil, 0, time.Time{}, err
+			}
+		}
+		content, stat, err := esmStorage.Get(savePath)
+		if err != nil {
+			return nil, 0, time.Time{}, err
+		}
+		if variantPath == "" {
+			return content, stat.Size(), stat.ModTime(), nil
+		}
+		defer content.Close()
+		code, err := io.ReadAll(content)
+		if err != nil {
+			return nil, 0, time.Time{}, err
+		}
+		code, err = treeShake(npmrc, pkg, code, exports, target)
+		if err != nil {
+			return nil, 0, time.Time{}, err
+		}
+		// [warning] finish the upload before releasing the lock, or another request may upload the same variant.
+		if err := esmStorage.PutContext(ctx, variantPath, bytes.NewReader(code)); err != nil {
+			logger.Errorf("storage.put(%s): %v", variantPath, err)
+		}
+		return io.NopCloser(bytes.NewReader(code)), int64(len(code)), stat.ModTime(), nil
+	}
+
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		pathname := r.URL.Path
 		header := w.Header()
@@ -127,6 +169,15 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 				}
 				hash := hex.EncodeToString(h.Sum(nil))
 				savePath := normalizeSavePath(fmt.Sprintf("modules/transform/%s.mjs", hash))
+				unlock, err := cacheMutex.LockContext(r.Context(), "transform:"+hash)
+				if err != nil {
+					return
+				}
+				defer func() {
+					if unlock != nil {
+						unlock()
+					}
+				}()
 
 				// if previous build exists, return it directly
 				if file, _, err := esmStorage.Get(savePath); err == nil {
@@ -139,15 +190,28 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 					output := TransformOutput{
 						Code: string(data),
 					}
-					file, _, err = esmStorage.Get(savePath + ".map")
-					if err == nil {
+					if options.SourceMap == "external" {
+						file, _, err = esmStorage.Get(savePath + ".map")
+						if err != nil {
+							writeJSONError(w, 500, "failed to read source map")
+							return
+						}
 						data, err = io.ReadAll(file)
 						file.Close()
-						if err == nil {
-							output.Map = string(data)
+						if err != nil {
+							writeJSONError(w, 500, "failed to read source map")
+							return
 						}
+						output.Map = string(data)
 					}
+					unlock()
+					unlock = nil
+					header.Set("Cache-Control", ccMustRevalidate)
 					writeJSON(w, 200, output)
+					return
+				} else if err != storage.ErrNotFound {
+					logger.Errorf("storage.get(%s): %v", savePath, err)
+					writeJSONError(w, 500, "failed to read code")
 					return
 				}
 
@@ -183,6 +247,8 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 					writeJSONError(w, 500, "failed to store transformed code")
 					return
 				}
+				unlock()
+				unlock = nil
 				header.Set("Cache-Control", ccMustRevalidate)
 				writeJSON(w, 200, output)
 				return
@@ -775,6 +841,17 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 		// parse the query
 		// todo: validate query
 		query := r.URL.Query()
+		var exports []string
+		if query.Has("exports") {
+			idents := set.New[string]()
+			for name := range strings.SplitSeq(query.Get("exports"), ",") {
+				if name = strings.TrimSpace(name); isJsIdentifier(name) {
+					idents.Add(name)
+				}
+			}
+			exports = idents.Values()
+			sort.Strings(exports)
+		}
 		// `?no-dts` only drops the `X-TypeScript-Types` header, it never changes the module
 		noDts := query.Has("no-dts") || query.Has("no-check")
 
@@ -1275,7 +1352,15 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 					savePath = path.Join("modules", pathname)
 				}
 				savePath = normalizeSavePath(savePath)
-				f, stat, err := esmStorage.Get(savePath)
+				var moduleExports []string
+				if pathKind == EsmBuild && strings.HasSuffix(savePath, ".mjs") && !query.Has("worker") {
+					moduleExports = exports
+				}
+				buildTarget := esbuild.ES2022
+				if t, ok := targets[target]; ok {
+					buildTarget = t
+				}
+				f, size, modTime, err := getModule(r.Context(), savePath, esmPath.Package(), moduleExports, buildTarget)
 				if err != nil {
 					if err != storage.ErrNotFound {
 						logger.Errorf("storage.get(%s): %v", savePath, err)
@@ -1288,7 +1373,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 					}
 				}
 				if err == nil {
-					header.Set("Last-Modified", stat.ModTime().UTC().Format(http.TimeFormat))
+					header.Set("Last-Modified", modTime.UTC().Format(http.TimeFormat))
 					header.Set("Cache-Control", ccImmutable)
 					if pathKind == EsmDts {
 						header.Set("Content-Type", ctTypeScript)
@@ -1298,18 +1383,6 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 						header.Set("Content-Type", ctCSS)
 					} else {
 						header.Set("Content-Type", ctJavaScript)
-						// check `?exports` query
-						jsIndentSet := set.New[string]()
-						if query.Has("exports") {
-							for p := range strings.SplitSeq(query.Get("exports"), ",") {
-								p = strings.TrimSpace(p)
-								if isJsIdentifier(p) {
-									jsIndentSet.Add(p)
-								}
-							}
-						}
-						exports := jsIndentSet.Values()
-						sort.Strings(exports)
 						if query.Has("worker") {
 							defer f.Close()
 							moduleUrl := origin + pathname
@@ -1323,45 +1396,6 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 							))
 							return
 						}
-						if len(exports) > 0 {
-							defer f.Close()
-							xxh := xxhash.New()
-							xxh.Write([]byte(strings.Join(exports, ",")))
-							savePath = strings.TrimSuffix(savePath, ".mjs") + "_" + base64.RawURLEncoding.EncodeToString(xxh.Sum(nil)) + ".mjs"
-							f2, stat, err := esmStorage.Get(savePath)
-							if err == nil {
-								header.Set("Content-Length", fmt.Sprintf("%d", stat.Size()))
-								writeReader(w, f2)
-								return
-							}
-							if err != storage.ErrNotFound {
-								logger.Errorf("storage.get(%s): %v", savePath, err)
-								writeStatus(w, 500, "Storage error, please try again")
-								return
-							}
-							code, err := io.ReadAll(f)
-							if err != nil {
-								writeStatus(w, 500, err.Error())
-								return
-							}
-							target := esbuild.ES2022
-							// check target in the pathname
-							for seg := range strings.SplitSeq(pathname, "/") {
-								if t, ok := targets[seg]; ok {
-									target = t
-									break
-								}
-							}
-							ret, err := treeShake(npmrc, esmPath.Package(), code, exports, target)
-							if err != nil {
-								writeStatus(w, 500, err.Error())
-								return
-							}
-							// note: the source map is dropped
-							go esmStorage.Put(savePath, bytes.NewReader(ret))
-							writeBody(w, ret)
-							return
-						}
 					}
 					if pathKind == EsmDts {
 						defer f.Close()
@@ -1373,7 +1407,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 						writeBody(w, bytes.ReplaceAll(buffer, []byte("{ESM_CDN_ORIGIN}"), []byte(origin)))
 						return
 					}
-					header.Set("Content-Length", fmt.Sprintf("%d", stat.Size()))
+					header.Set("Content-Length", fmt.Sprintf("%d", size))
 					writeReader(w, f)
 					return
 				}
@@ -1848,19 +1882,6 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 			return
 		}
 
-		// check `?exports` query
-		jsIdentSet := set.New[string]()
-		if query.Has("exports") {
-			for p := range strings.SplitSeq(query.Get("exports"), ",") {
-				p = strings.TrimSpace(p)
-				if isJsIdentifier(p) {
-					jsIdentSet.Add(p)
-				}
-			}
-		}
-		exports := jsIdentSet.Values()
-		sort.Strings(exports)
-
 		// if the path is `ESMBuild`, return the built js/css content
 		if pathKind == EsmBuild {
 			if esmPath.SubPath != build.esmPath.SubPath {
@@ -1880,7 +1901,11 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 				path, _ := utils.SplitByLastByte(savePath, '.')
 				savePath = path + ".css"
 			}
-			f, fi, err := esmStorage.Get(savePath)
+			var moduleExports []string
+			if !buildMeta.CJS && strings.HasSuffix(savePath, ".mjs") && !query.Has("worker") {
+				moduleExports = exports
+			}
+			f, size, modTime, err := getModule(r.Context(), savePath, esmPath.Package(), moduleExports, targets[target])
 			if err != nil {
 				if err == storage.ErrNotFound {
 					// seems the build output file is not found in the storage
@@ -1895,7 +1920,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 				writeStatus(w, 500, "Storage error, please try again")
 				return
 			}
-			header.Set("Last-Modified", fi.ModTime().UTC().Format(http.TimeFormat))
+			header.Set("Last-Modified", modTime.UTC().Format(http.TimeFormat))
 			header.Set("Cache-Control", ccImmutable)
 			if strings.HasSuffix(savePath, ".css") {
 				header.Set("Content-Type", ctCSS)
@@ -1920,39 +1945,8 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 					header.Set("X-TypeScript-Types", origin+buildMeta.Dts)
 					header.Set("Access-Control-Expose-Headers", "X-TypeScript-Types")
 				}
-				if !buildMeta.CJS && len(exports) > 0 {
-					defer f.Close()
-					xxh := xxhash.New()
-					xxh.Write([]byte(strings.Join(exports, ",")))
-					savePath = strings.TrimSuffix(savePath, ".mjs") + "_" + base64.RawURLEncoding.EncodeToString(xxh.Sum(nil)) + ".mjs"
-					f2, stat, err := esmStorage.Get(savePath)
-					if err == nil {
-						header.Set("Content-Length", fmt.Sprintf("%d", stat.Size()))
-						writeReader(w, f2)
-						return
-					}
-					if err != storage.ErrNotFound {
-						logger.Errorf("storage.get(%s): %v", savePath, err)
-						writeStatus(w, 500, "Storage error, please try again")
-						return
-					}
-					code, err := io.ReadAll(f)
-					if err != nil {
-						writeStatus(w, 500, err.Error())
-						return
-					}
-					ret, err := treeShake(npmrc, esmPath.Package(), code, exports, targets[target])
-					if err != nil {
-						writeStatus(w, 500, err.Error())
-						return
-					}
-					go esmStorage.Put(savePath, bytes.NewReader(ret))
-					// note: the source map is dropped
-					writeBody(w, ret)
-					return
-				}
 			}
-			header.Set("Content-Length", fmt.Sprintf("%d", fi.Size()))
+			header.Set("Content-Length", fmt.Sprintf("%d", size))
 			writeReader(w, f)
 			return
 		}

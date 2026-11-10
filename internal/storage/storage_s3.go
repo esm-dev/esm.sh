@@ -588,13 +588,7 @@ func (s3 *s3Storage) sign(req *http.Request) {
 }
 
 func (s3 *s3Storage) shouldUseFSCache(name string) bool {
-	if s3.fsCache == nil || isMetaKey(name) || strings.HasPrefix(name, "npm-resolution-slots/") {
-		return false
-	}
-	if strings.HasSuffix(name, ".mjs.map") || strings.HasSuffix(name, ".d.ts") || strings.HasSuffix(name, ".d.mts") || strings.HasSuffix(name, ".d.cts") {
-		return false
-	}
-	return true
+	return s3.fsCache != nil && !isMetaKey(name) && !strings.HasPrefix(name, "npm-resolution-slots/")
 }
 
 func (s3 *s3Storage) shouldUseMetaCache(name string) bool {

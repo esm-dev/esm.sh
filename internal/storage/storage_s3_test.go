@@ -639,6 +639,61 @@ func TestS3StoragePutEmpty(t *testing.T) {
 	}
 }
 
+func TestS3StorageArtifactCache(t *testing.T) {
+	for _, name := range []string{"types/pkg@1/index.d.ts", "types/pkg@1/index.d.mts", "types/pkg@1/index.d.cts", "modules/pkg@1/index.mjs.map"} {
+		for _, fill := range []string{"GET", "PUT"} {
+			t.Run(name+"/"+fill, func(t *testing.T) {
+				cache, err := NewFSStorage(t.TempDir())
+				if err != nil {
+					t.Fatal(err)
+				}
+				client := http.DefaultClient
+				t.Cleanup(func() { http.DefaultClient = client })
+				var requests []string
+				http.DefaultClient = &http.Client{Transport: s3TestTransport(func(req *http.Request) (*http.Response, error) {
+					requests = append(requests, req.Method)
+					if req.Body != nil {
+						io.Copy(io.Discard, req.Body)
+					}
+					return &http.Response{StatusCode: 200, Header: http.Header{
+						"Content-Length": {"4"},
+						"Last-Modified":  {"Tue, 10 Nov 2026 00:00:00 GMT"},
+					}, Body: io.NopCloser(strings.NewReader("data"))}, nil
+				})}
+				s3 := &s3Storage{apiEndpoint: "https://storage.test", fsCache: cache.(*fsStorage)}
+				if fill == "PUT" {
+					if err := s3.Put(name, strings.NewReader("data")); err != nil {
+						t.Fatal(err)
+					}
+				}
+				for range 2 {
+					content, stat, err := s3.Get(name)
+					if err != nil {
+						t.Fatal(err)
+					}
+					data, err := io.ReadAll(content)
+					content.Close()
+					if err != nil || string(data) != "data" || stat.Size() != 4 {
+						t.Fatalf("read: %q, %v", data, err)
+					}
+					if stat, err := s3.Stat(name); err != nil || stat.Size() != 4 {
+						t.Fatalf("stat: %v, %v", stat, err)
+					}
+				}
+				if !slices.Equal(requests, []string{fill}) {
+					t.Fatalf("cached artifact reached S3: %v", requests)
+				}
+				if err := s3.Delete(name); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := cache.Stat(name); !errors.Is(err, ErrNotFound) {
+					t.Fatalf("deleted artifact remains cached: %v", err)
+				}
+			})
+		}
+	}
+}
+
 func TestS3StorageMetaCache(t *testing.T) {
 	var requests []string
 	client := http.DefaultClient

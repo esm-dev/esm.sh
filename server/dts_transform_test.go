@@ -168,6 +168,49 @@ func TestTransformDTSConcurrent(t *testing.T) {
 	}
 }
 
+func TestTransformDTSConcurrentEntries(t *testing.T) {
+	root := t.TempDir()
+	pkgDir := filepath.Join(root, "node_modules", "pkg")
+	if err := os.MkdirAll(pkgDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	for name, code := range map[string]string{
+		"first.d.ts":  `export * from "./shared.d.ts";`,
+		"second.d.ts": `export * from "./shared.d.ts";`,
+		"shared.d.ts": `export * from "./cycle.d.ts";`,
+		"cycle.d.ts":  `export * from "./shared.d.ts";`,
+	} {
+		if err := os.WriteFile(filepath.Join(pkgDir, name), []byte(code), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	fs, err := storage.NewFSStorage(filepath.Join(root, "storage"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	synctest.Test(t, func(t *testing.T) {
+		s := &dtsTestStorage{Storage: fs, puts: map[string]int{}, delay: time.Second}
+		var pending sync.WaitGroup
+		for _, entry := range []string{"first.d.ts", "second.d.ts", "shared.d.ts"} {
+			pending.Go(func() {
+				ctx := &BuildContext{storage: s, wd: root, esmPath: EsmPath{PkgName: "pkg", PkgVersion: "1.0.0"}, pkgJson: &npm.PackageJSON{}}
+				if _, err := transformDTS(ctx, "./"+entry, "", nil); err != nil {
+					t.Errorf("%s: %v", entry, err)
+				}
+			})
+		}
+		pending.Wait()
+		if len(s.puts) != 4 {
+			t.Fatalf("missing declarations: %v", s.puts)
+		}
+		for name, n := range s.puts {
+			if n != 1 {
+				t.Errorf("uploaded %s %d times, want once", name, n)
+			}
+		}
+	})
+}
+
 func TestTransformDTSStorageTimeout(t *testing.T) {
 	for _, method := range []string{http.MethodHead, http.MethodPut} {
 		t.Run(method, func(t *testing.T) {
