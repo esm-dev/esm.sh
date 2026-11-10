@@ -536,16 +536,68 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 				return
 			}
 
+			build.OnResolve(esbuild.OnResolveOptions{Filter: ".*", Namespace: "wasm-external"}, func(args esbuild.OnResolveArgs) (esbuild.OnResolveResult, error) {
+				return esbuild.OnResolveResult{Path: args.Path, External: true}, nil
+			})
+			build.OnLoad(esbuild.OnLoadOptions{Filter: ".*", Namespace: "wasm-external"}, func(args esbuild.OnLoadArgs) (esbuild.OnLoadResult, error) {
+				// Keep dynamic-only imports lazy instead of hoisting the external import out of the proxy.
+				code := fmt.Sprintf("const { default: value } = await import(%q); export { value as default };", args.Path)
+				return esbuild.OnLoadResult{Contents: &code, Loader: esbuild.LoaderJS}, nil
+			})
+
 			// resovler
 			build.OnResolve(
 				esbuild.OnResolveOptions{Filter: ".*"},
-				func(args esbuild.OnResolveArgs) (esbuild.OnResolveResult, error) {
+				func(args esbuild.OnResolveArgs) (ret esbuild.OnResolveResult, err error) {
 					if err := ctx.checkCanceled(); err != nil {
 						return esbuild.OnResolveResult{}, err
 					}
 					if args.PluginData == nativeResolve {
 						return esbuild.OnResolveResult{}, nil
 					}
+					withType := ""
+					var filename string
+					var nativeResult *esbuild.ResolveResult
+					if args.With["type"] == "json" {
+						withType = "json"
+					}
+					if !isHttpSpecifier(args.Path) && !(ctx.args.ExternalRequire && args.Kind == esbuild.ResolveJSRequireCall && entry.module) {
+						if strings.HasSuffix(args.Path, ".wasm?module") {
+							args.Path, withType = strings.TrimSuffix(args.Path, "?module"), "wasm-module"
+						} else if strings.HasSuffix(args.Path, ".wasm") && (args.With["type"] == "bytes" || args.Kind == esbuild.ResolveJSRequireCall) {
+							withType = "bytes"
+						}
+					}
+					defer func() {
+						if err == nil && ret.Path == "" && nativeResult == nil && (withType == "bytes" || withType == "wasm-module") && filename != "" && existsFile(filename) {
+							resolved := build.Resolve(filename, esbuild.ResolveOptions{Importer: args.Importer, ResolveDir: args.ResolveDir, Kind: args.Kind, With: args.With, PluginData: nativeResolve})
+							nativeResult = &resolved
+						}
+						if err == nil && ret.Path == "" && nativeResult != nil {
+							ret = esbuild.OnResolveResult{Path: nativeResult.Path, Namespace: nativeResult.Namespace, Suffix: nativeResult.Suffix, External: nativeResult.External, Errors: nativeResult.Errors, Warnings: nativeResult.Warnings, PluginData: nativeResult.PluginData}
+							if !nativeResult.SideEffects {
+								ret.SideEffects = esbuild.SideEffectsFalse
+							}
+						}
+						if err != nil || len(ret.Errors) > 0 || ret.Path == "" {
+							return
+						}
+						if withType == "wasm-module" {
+							if !ret.External {
+								ret.Suffix = "?module"
+							} else if args.Kind != esbuild.ResolveJSRequireCall && !isRelPathSpecifier(ret.Path) && !strings.HasPrefix(ret.Path, "/") && !isHttpSpecifier(ret.Path) {
+								ret.Path += "?module"
+							}
+						} else if withType == "bytes" {
+							if !ret.External && args.Kind == esbuild.ResolveJSRequireCall {
+								// A synchronous require must not share the asynchronously instantiated ESM module.
+								ret.Suffix = "?bytes"
+							} else if ret.External && args.Kind != esbuild.ResolveJSRequireCall && (isRelPathSpecifier(ret.Path) || strings.HasPrefix(ret.Path, "/")) {
+								// The proxy consumes the bytes attribute; its external target is already JavaScript.
+								ret.External, ret.Namespace = false, "wasm-external"
+							}
+						}
+					}()
 
 					// entry point
 					if rootVersion != nil && (args.Path == ctx.pkgJson.Name || strings.HasPrefix(args.Path, ctx.pkgJson.Name+"/")) && !isExternalModule(args.Path, ctx.args.External) {
@@ -573,7 +625,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 							}
 							if version := cached.(string); version != "" {
 								specifier := ctx.pkgJson.Name + "@" + version + strings.TrimPrefix(args.Path, ctx.pkgJson.Name)
-								externalPath, sideEffects, err := ctx.resolveExternalModule(specifier, args.Kind, args.With["type"] == "json", analyzeMode)
+								externalPath, sideEffects, err := ctx.resolveExternalModule(specifier, args.Kind, withType, analyzeMode)
 								return esbuild.OnResolveResult{Path: externalPath, SideEffects: sideEffects, External: true}, err
 							}
 						}
@@ -627,7 +679,6 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 
 					pkgJson := ctx.pkgJson
 					specifier := normalizeImportSpecifier(args.Path)
-					withTypeJSON := len(args.With) > 0 && args.With["type"] == "json"
 
 					originalSpecifier := specifier
 					if len(ctx.args.Alias) > 0 && !isRelPathSpecifier(specifier) {
@@ -641,7 +692,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 					}
 
 					if implicitExternal.Has(args.Path) || implicitExternal.Has(specifier) {
-						externalPath, sideEffects, err := ctx.resolveExternalModule(specifier, args.Kind, withTypeJSON, analyzeMode)
+						externalPath, sideEffects, err := ctx.resolveExternalModule(specifier, args.Kind, withType, analyzeMode)
 						if err != nil {
 							return esbuild.OnResolveResult{}, err
 						}
@@ -721,6 +772,25 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 						}
 					}
 
+					// Package mappings can reveal a WASM import mode after the original specifier was read.
+					if !isHttpSpecifier(specifier) {
+						if strings.HasSuffix(specifier, ".wasm?module") {
+							specifier, withType = strings.TrimSuffix(specifier, "?module"), "wasm-module"
+						} else if withType == "" && (args.With["type"] == "bytes" || args.Kind == esbuild.ResolveJSRequireCall) {
+							wasmPath := specifier
+							if !strings.HasSuffix(wasmPath, ".wasm") && !isNodeBuiltinSpecifier(specifier) && !ctx.externalAll && !isExternalModule(specifier, ctx.args.External) {
+								resolved := build.Resolve(specifier, esbuild.ResolveOptions{Importer: args.Importer, ResolveDir: args.ResolveDir, Kind: args.Kind, With: args.With, PluginData: nativeResolve})
+								wasmPath = resolved.Path
+								if strings.HasSuffix(wasmPath, ".wasm") {
+									nativeResult = &resolved
+								}
+							}
+							if strings.HasSuffix(wasmPath, ".wasm") {
+								withType = "bytes"
+							}
+						}
+					}
+
 					if args.Kind == esbuild.ResolveJSRequireCall && !ctx.externalAll && pkgJson.OptionalPeers.Len() > 0 && strings.HasPrefix(args.Importer, ctx.getPkgFullPath("")+"/") {
 						pkgName := toPackageName(specifier)
 						if pkgJson.OptionalPeers.Has(pkgName) && pkgJson.Dependencies[pkgName] == "" && ctx.args.Deps[pkgName] == "" && !isExternalModule(specifier, ctx.args.External) {
@@ -730,7 +800,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 
 					// nodejs builtin module
 					if isNodeBuiltinSpecifier(specifier) {
-						externalPath, sideEffects, err := ctx.resolveExternalModule(specifier, args.Kind, withTypeJSON, analyzeMode)
+						externalPath, sideEffects, err := ctx.resolveExternalModule(specifier, args.Kind, withType, analyzeMode)
 						if err != nil {
 							return esbuild.OnResolveResult{}, err
 						}
@@ -741,7 +811,6 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 						}, nil
 					}
 
-					var filename string
 					if strings.HasPrefix(specifier, "/") {
 						filename = specifier
 						specifier = strings.TrimPrefix(filename, path.Join(ctx.wd, "node_modules")+"/")
@@ -796,11 +865,11 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 						}
 					}
 					if ctx.esmPath.SubPath != "" && isSelfRef && ctx.bundleMode != BundleDeps {
-						externalPath, sideEffects, err := ctx.resolveExternalModule(ctx.esmPath.PkgName, args.Kind, withTypeJSON, analyzeMode)
+						externalPath, sideEffects, err := ctx.resolveExternalModule(ctx.esmPath.PkgName, args.Kind, withType, analyzeMode)
 						if err != nil {
 							return esbuild.OnResolveResult{}, err
 						}
-						if withTypeJSON {
+						if withType == "json" {
 							externalPath += "?module"
 						}
 						return esbuild.OnResolveResult{
@@ -813,7 +882,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 					// bundles all dependencies in `bundle` mode, apart from peerDependencies and `?external` flag
 					if !isRelPathSpecifier(specifier) {
 						pkgName := toPackageName(specifier)
-						if ctx.bundleMode == BundleDeps && !isExternalModule(specifier, ctx.args.External) && !implicitExternal.Has(specifier) {
+						if ctx.bundleMode == BundleDeps && !ctx.externalAll && !isExternalModule(specifier, ctx.args.External) && !implicitExternal.Has(specifier) {
 							_, ok := pkgJson.PeerDependencies[pkgName]
 							_, originalPeer := pkgJson.PeerDependencies[toPackageName(originalSpecifier)]
 							if !ok && !originalPeer {
@@ -864,7 +933,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 									}, nil
 								}
 								if !isRelPathSpecifier(path) {
-									externalPath, sideEffects, err := ctx.resolveExternalModule(path, args.Kind, withTypeJSON, analyzeMode)
+									externalPath, sideEffects, err := ctx.resolveExternalModule(path, args.Kind, withType, analyzeMode)
 									if err != nil {
 										return esbuild.OnResolveResult{}, err
 									}
@@ -904,7 +973,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 									if match {
 										exportAs = path.Join(pkgJson.Name, stripModuleExt(exportName))
 										if exportAs != entrySpecifier && exportAs != entrySpecifier+"/index" {
-											externalPath, sideEffects, err := ctx.resolveExternalModule(path.Join(pkgJson.Name, exportName), args.Kind, withTypeJSON, analyzeMode)
+											externalPath, sideEffects, err := ctx.resolveExternalModule(path.Join(pkgJson.Name, exportName), args.Kind, withType, analyzeMode)
 											if err != nil {
 												return esbuild.OnResolveResult{}, err
 											}
@@ -938,7 +1007,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 						if ctx.esmPath.SubPath != "" && pkgJson.SideEffects.Len() > 0 {
 							shortPath := strings.TrimPrefix(modulePath, "./")
 							if pkgJson.SideEffects.Has(modulePath) || pkgJson.SideEffects.Has(shortPath) {
-								externalPath, sideEffects, err := ctx.resolveExternalModule(path.Join(pkgJson.Name, stripModuleExt(shortPath)), args.Kind, withTypeJSON, analyzeMode)
+								externalPath, sideEffects, err := ctx.resolveExternalModule(path.Join(pkgJson.Name, stripModuleExt(shortPath)), args.Kind, withType, analyzeMode)
 								if err != nil {
 									return esbuild.OnResolveResult{}, err
 								}
@@ -953,7 +1022,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 						// bundled export stars lose names when their source is external
 						if entry.module && exportAs == "" && args.Kind == esbuild.ResolveJSImportStatement && args.PluginData != probeResolve {
 							if hasExternalExportStar(resolvedFilename) {
-								externalPath, sideEffects, err := ctx.resolveExternalModule(specifier, args.Kind, withTypeJSON, analyzeMode)
+								externalPath, sideEffects, err := ctx.resolveExternalModule(specifier, args.Kind, withType, analyzeMode)
 								if err != nil {
 									return esbuild.OnResolveResult{}, err
 								}
@@ -966,14 +1035,14 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 						// - it's not a conditional export
 						// - it's not a dynamic import and the `?bundle=false` flag is not present
 						// - it's not in the `splitting` list
-						isDynamicImport := args.Kind == esbuild.ResolveJSDynamicImport && !bundledDynamicImports.Has(resolvedFilename)
+						moduleKey := resolvedFilename
+						if strings.HasSuffix(resolvedFilename, ".wasm") && withType != "" {
+							// Different WASM modes must not trigger each other's dynamic bundling.
+							moduleKey += "?" + withType
+						}
+						isDynamicImport := args.Kind == esbuild.ResolveJSDynamicImport && !bundledDynamicImports.Has(moduleKey)
 						bundleInternalModule := exportAs == "" && !isDynamicImport && ctx.shouldBundleInternalModules()
 						if modulePath == entry.main || exportAs == entrySpecifier || (!isDynamicImport && !noBundle) || bundleInternalModule {
-							suffix := ""
-							if strings.HasSuffix(resolvedFilename, ".wasm?module") {
-								resolvedFilename = strings.TrimSuffix(resolvedFilename, "?module")
-								suffix = "?module"
-							}
 							if existsFile(resolvedFilename) {
 								if strings.HasSuffix(resolvedFilename, ".css") {
 									return esbuild.OnResolveResult{Path: resolvedFilename}, nil
@@ -988,7 +1057,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 								}
 								if !analyzeMode && ctx.splitting != nil && ctx.splitting.Has(short) {
 									specifier = pkgJson.Name + utils.NormalizePathname(stripEntryModuleExt(short))
-									externalPath, sideEffects, err := ctx.resolveExternalModule(specifier, args.Kind, withTypeJSON, false)
+									externalPath, sideEffects, err := ctx.resolveExternalModule(specifier, args.Kind, withType, false)
 									if err != nil {
 										return esbuild.OnResolveResult{}, err
 									}
@@ -999,14 +1068,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 									}, nil
 								}
 								if !probe {
-									bundledModules.Add(resolvedFilename + suffix)
-								}
-								if strings.HasSuffix(resolvedFilename, ".wasm") {
-									return esbuild.OnResolveResult{
-										Path:      resolvedFilename,
-										Namespace: "wasm",
-										Suffix:    suffix,
-									}, nil
+									bundledModules.Add(moduleKey)
 								}
 								// transfrom svelte component
 								if strings.HasSuffix(resolvedFilename, ".svelte") {
@@ -1028,7 +1090,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 							return esbuild.OnResolveResult{}, nil
 						}
 						if isDynamicImport {
-							dynamicImports.Add(resolvedFilename)
+							dynamicImports.Add(moduleKey)
 						}
 					}
 
@@ -1107,7 +1169,7 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 					}
 
 					// dynamic external
-					externalPath, sideEffects, err := ctx.resolveExternalModule(specifier, args.Kind, withTypeJSON, analyzeMode)
+					externalPath, sideEffects, err := ctx.resolveExternalModule(specifier, args.Kind, withType, analyzeMode)
 					if err != nil {
 						return esbuild.OnResolveResult{}, err
 					}
@@ -1167,10 +1229,20 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 				},
 			)
 
-			// wasm module exclude loader
+			// wasm loader
 			build.OnLoad(
-				esbuild.OnLoadOptions{Filter: ".*", Namespace: "wasm"},
+				esbuild.OnLoadOptions{Filter: `\.wasm$`, Namespace: "file"},
 				func(args esbuild.OnLoadArgs) (ret esbuild.OnLoadResult, err error) {
+					if args.Suffix == "" && args.With["type"] != "bytes" {
+						if args.Path == entryModuleFilename && entry.code != "" {
+							return esbuild.OnLoadResult{Contents: &entry.code, ResolveDir: path.Dir(args.Path), Loader: esbuild.LoaderJS}, nil
+						}
+						output, err := transformWasm(ctx.Context(), ctx.npmrc, args.Path)
+						if err != nil {
+							return ret, err
+						}
+						return esbuild.OnLoadResult{Contents: &output.Code, ResolveDir: path.Dir(args.Path), Loader: esbuild.LoaderJS}, nil
+					}
 					wasm, err := os.ReadFile(args.Path)
 					if err != nil {
 						return
@@ -1468,9 +1540,9 @@ REBUILD:
 
 	// A separate dynamic build duplicates modules already bundled by static imports.
 	rebuild := false
-	for _, filename := range dynamicImports.Values() {
-		if bundledModules.Has(filename) && !bundledDynamicImports.Has(filename) {
-			bundledDynamicImports.Add(filename)
+	for _, moduleKey := range dynamicImports.Values() {
+		if bundledModules.Has(moduleKey) && !bundledDynamicImports.Has(moduleKey) {
+			bundledDynamicImports.Add(moduleKey)
 			rebuild = true
 		}
 	}

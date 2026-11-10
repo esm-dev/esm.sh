@@ -1637,7 +1637,7 @@ func TestBuildModuleWasm(t *testing.T) {
 				t.Fatal(err)
 			}
 			for name, data := range map[string][]byte{
-				"index.js":    []byte(`export { default as bytes } from "./module.wasm"; export { default as module } from "./module.wasm?module"; export const loadModule = () => import("./module.wasm?module"); export const loadBytes = () => import("./module.wasm");`),
+				"index.js":    []byte(`export { default as bytes } from "./module.wasm" with { type: "bytes" }; export { default as module } from "./module.wasm?module"; export const loadModule = () => import("./module.wasm?module"); export const loadBytes = () => import("./module.wasm", { with: { type: "bytes" } });`),
 				"module.wasm": {0, 97, 115, 109, 1, 0, 0, 0},
 			} {
 				if err := os.WriteFile(filepath.Join(pkgDir, name), data, 0644); err != nil {
