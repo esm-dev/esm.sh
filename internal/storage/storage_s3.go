@@ -180,7 +180,7 @@ func (s3 *s3Storage) StatContext(ctx context.Context, name string) (stat Stat, e
 			return
 		}
 	}
-	if s3.shouldUseFSCache(name) || s3.isLazySourceMap(name) {
+	if s3.shouldUseFSCache(name) || s3.isLazySourceMap(name) || (s3.fsCache != nil && isMetaKey(name)) {
 		stat, err = s3.fsCache.Stat(name)
 		if err == nil {
 			return
@@ -250,7 +250,7 @@ func (s3 *s3Storage) GetContext(ctx context.Context, name string) (content io.Re
 			return io.NopCloser(bytes.NewReader(data)), stat, nil
 		}
 	}
-	if s3.shouldUseFSCache(name) || s3.isLazySourceMap(name) {
+	if s3.shouldUseFSCache(name) || s3.isLazySourceMap(name) || (s3.fsCache != nil && isMetaKey(name)) {
 		content, stat, err = s3.fsCache.Get(name)
 		if err == nil {
 			if s3.isLazySourceMap(name) {
@@ -310,15 +310,7 @@ func (s3 *s3Storage) GetContext(ctx context.Context, name string) (content io.Re
 		contentLength: size,
 		lastModified:  lastModified,
 	}
-	if s3.shouldUseMetaCache(name) {
-		var data []byte
-		if data, err = io.ReadAll(resp.Body); err != nil {
-			return nil, nil, err
-		}
-		resp.Body.Close()
-		s3.putMetaCache(name, data, lastModified, epoch)
-		content = io.NopCloser(bytes.NewReader(data))
-	} else if s3.shouldUseFSCache(name) {
+	if s3.shouldUseFSCache(name) {
 		pr, pw := io.Pipe()
 		go func() {
 			defer resp.Body.Close()
@@ -386,13 +378,7 @@ func (s3 *s3Storage) PutContext(ctx context.Context, name string, content io.Rea
 		return
 	}
 	epoch := s3.cacheEpoch.Load()
-	var metaData []byte
-	if s3.shouldUseMetaCache(name) {
-		if metaData, err = io.ReadAll(content); err != nil {
-			return
-		}
-		content = bytes.NewReader(metaData)
-	} else if s3.isLocalKey(name) || s3.isLazySourceMap(name) {
+	if s3.isLocalKey(name) || s3.isLazySourceMap(name) {
 		if err = s3.fsCache.Put(name, content); err != nil {
 			return
 		}
@@ -443,9 +429,6 @@ func (s3 *s3Storage) PutContext(ctx context.Context, name string, content io.Rea
 		return parseS3Error(resp)
 	}
 	s3.markPut(name)
-	if s3.shouldUseMetaCache(name) {
-		s3.putMetaCache(name, metaData, time.Now(), epoch)
-	}
 	return nil
 }
 
@@ -758,18 +741,6 @@ func (s3 *s3Storage) getMetaCache(name string) (content []byte, stat Stat) {
 		return nil
 	})
 	return
-}
-
-func (s3 *s3Storage) putMetaCache(name string, content []byte, modTime time.Time, epoch uint64) {
-	value := binary.BigEndian.AppendUint64(make([]byte, 0, 8+len(content)), uint64(modTime.UnixMilli()))
-	value = append(value, content...)
-	s3.metaCache.Batch(func(tx *bolt.Tx) error {
-		// [warning] check the epoch in the transaction, a delete commits its cache delete after the bump
-		if s3.cacheEpoch.Load() != epoch {
-			return nil
-		}
-		return tx.Bucket(metaCacheBucket).Put([]byte(name), value)
-	})
 }
 
 func isMetaKey(name string) bool {

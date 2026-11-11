@@ -214,7 +214,7 @@ func TestNpmStoreAccess(t *testing.T) {
 					}
 					logger := new(log.Logger)
 					logger.SetOutput(io.Discard)
-					handler := esmRouter(fs, logger)
+					handler := esmRouter(fs, newTestBuildMetaDB(t, fs), logger)
 					url := "http://localhost/" + pkg.String() + "/style.css"
 					if access == "css module" {
 						url += "?module"

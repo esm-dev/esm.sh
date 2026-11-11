@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/md5"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/xml"
 	"errors"
 	"fmt"
@@ -688,12 +689,18 @@ func TestS3StorageMetaCache(t *testing.T) {
 		return string(data)
 	}
 
-	for _, name := range []string{"meta/pkg@1.0.0/a", "meta/pkg@1.0.0/b", "meta/pkg@1.0.0/c", "meta/pkg@1.0.10/a"} {
-		if err := s3.Put(name, strings.NewReader(name)); err != nil {
-			t.Fatal(err)
+	if err := s3.metaCache.Update(func(tx *bolt.Tx) error {
+		for _, name := range []string{"meta/pkg@1.0.0/a", "meta/pkg@1.0.0/b", "meta/pkg@1.0.0/c", "meta/pkg@1.0.10/a", "meta-purged/pkg@1.0.0"} {
+			value := binary.BigEndian.AppendUint64(nil, uint64(time.Now().UnixMilli()))
+			if strings.HasPrefix(name, "meta/") {
+				value = append(value, name...)
+			}
+			if err := tx.Bucket(metaCacheBucket).Put([]byte(name), value); err != nil {
+				return err
+			}
 		}
-	}
-	if err := s3.Put("meta-purged/pkg@1.0.0", strings.NewReader("")); err != nil {
+		return nil
+	}); err != nil {
 		t.Fatal(err)
 	}
 	requests = nil
@@ -709,14 +716,21 @@ func TestS3StorageMetaCache(t *testing.T) {
 	if got := read("meta/remote"); got != "remote" {
 		t.Fatalf("remote content %q", got)
 	}
-	if stat, err := s3.Stat("meta/remote"); err != nil || stat.Size() != 6 || !stat.ModTime().Equal(time.Date(2026, 10, 20, 0, 0, 0, 0, time.UTC)) {
-		t.Fatalf("cached stat of a remote read: %v, %v", stat, err)
+	if _, stat := s3.getMetaCache("meta/remote"); stat != nil {
+		t.Fatal("a metadata import filled the old cache")
 	}
-	if got := read("meta/remote"); got != "remote" || len(requests) != 1 {
-		t.Fatalf("remote read was not cached: %q, %v", got, requests)
+	if got := read("meta/remote"); got != "remote" || len(requests) != 2 {
+		t.Fatalf("metadata import changed the old cache: %q, %v", got, requests)
 	}
 	if entries, err := os.ReadDir(cacheDir); err != nil || len(entries) != 0 {
 		t.Fatalf("meta keys were cached as files: %v, %v", entries, err)
+	}
+	if err := s3.fsCache.Put("meta/old-file", strings.NewReader("old")); err != nil {
+		t.Fatal(err)
+	}
+	requests = nil
+	if got := read("meta/old-file"); got != "old" || len(requests) != 0 {
+		t.Fatalf("old cache file was not reused: %q, %v", got, requests)
 	}
 
 	if err := s3.Delete("meta/remote"); err != nil {
@@ -734,14 +748,6 @@ func TestS3StorageMetaCache(t *testing.T) {
 		if _, stat := s3.getMetaCache(name); stat == nil {
 			t.Fatalf("%s was deleted by an unrelated prefix", name)
 		}
-	}
-
-	// a read that raced with a delete is not cached
-	epoch := s3.cacheEpoch.Load()
-	s3.cacheEpoch.Add(1)
-	s3.putMetaCache("meta/stale", []byte("stale"), time.Now(), epoch)
-	if _, stat := s3.getMetaCache("meta/stale"); stat != nil {
-		t.Fatal("a read that raced with a delete was cached")
 	}
 }
 
@@ -811,7 +817,11 @@ func TestS3StorageLocalCache(t *testing.T) {
 		if got := read(name); got != "data" {
 			t.Fatalf("content of %s after a miss: %q", name, got)
 		}
-		if got := sent(); !slices.Equal(got, []string{"PUT /" + name}) {
+		want := []string{"PUT /" + name}
+		if isMetaKey(name) {
+			want = append(want, "GET /"+name)
+		}
+		if got := sent(); !slices.Equal(got, want) {
 			t.Fatalf("requests after the put of %s: %v", name, got)
 		}
 	}

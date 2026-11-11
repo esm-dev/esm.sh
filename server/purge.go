@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"math/rand/v2"
@@ -17,6 +18,7 @@ import (
 	"github.com/esm-dev/esm.sh/internal/npm"
 	"github.com/esm-dev/esm.sh/internal/storage"
 	"github.com/ije/gox/log"
+	bolt "go.etcd.io/bbolt"
 )
 
 // purgeRequest is the JSON body of `POST /purge`.
@@ -148,13 +150,23 @@ func purgePackageCache(npmrc *NpmRC, metaDB *BuildMetaDB, esmStorage storage.Sto
 	// [warning] wait for a running install before locking the metadata, a slow download would block every meta read
 	unlockInstall, _ := lockInstall(context.Background(), pkgId)
 	defer unlockInstall()
-	// Block legacy metadata before deleting the package's metadata namespace.
+	// [warning] block imports and delete metadata in one transaction, old storage must not restore a purged build
 	unlock := sync.OnceFunc(metaDB.lockPackage("meta/"+pkgId, true))
 	defer unlock()
-	if err := esmStorage.Put("meta-purged/"+pkgId, strings.NewReader("")); err != nil {
-		return nil, err
-	}
-	keys, err = esmStorage.DeleteAll("meta/" + pkgId + "/")
+	keys = nil
+	err = metaDB.Update(func(tx *bolt.Tx) error {
+		if err := tx.Bucket([]byte("purged")).Put([]byte("meta/"+pkgId), []byte{1}); err != nil {
+			return err
+		}
+		cursor, prefix := tx.Bucket([]byte("meta")).Cursor(), []byte("meta/"+pkgId+"/")
+		for k, _ := cursor.Seek(prefix); bytes.HasPrefix(k, prefix); k, _ = cursor.Next() {
+			keys = append(keys, string(k))
+			if err := cursor.Delete(); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}

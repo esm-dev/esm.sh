@@ -39,7 +39,8 @@ func TestRawFileExports(t *testing.T) {
 	}
 	logger := new(log.Logger)
 	logger.SetOutput(io.Discard)
-	handler := esmRouter(fs, logger)
+	metaDB := newTestBuildMetaDB(t, fs)
+	handler := esmRouter(fs, metaDB, logger)
 	http.DefaultTransport = ghTestTransport(func(r *http.Request) (*http.Response, error) {
 		t.Errorf("unexpected request: %s", r.URL)
 		return &http.Response{StatusCode: 500, Body: http.NoBody}, nil
@@ -120,7 +121,8 @@ func TestRouterModuleResponses(t *testing.T) {
 	}
 	logger := new(log.Logger)
 	logger.SetOutput(io.Discard)
-	handler := esmRouter(fs, logger)
+	metaDB := newTestBuildMetaDB(t, fs)
+	handler := esmRouter(fs, metaDB, logger)
 
 	t.Run("css module installation", func(t *testing.T) {
 		var archive bytes.Buffer
@@ -234,7 +236,7 @@ func TestRouterModuleResponses(t *testing.T) {
 	t.Run("commonjs default export", func(t *testing.T) {
 		build := &BuildContext{esmPath: EsmPath{PkgName: "cjs-exports-test", PkgVersion: "1.0.0"}, target: "es2022"}
 		defer cacheLRU.Remove(build.Path())
-		if err := NewBuildMetaDB(fs).Put(build.Path(), encodeBuildMeta(&BuildMeta{CJS: true, ExportDefault: true})); err != nil {
+		if err := metaDB.Put(build.Path(), encodeBuildMeta(&BuildMeta{CJS: true, ExportDefault: true})); err != nil {
 			t.Fatal(err)
 		}
 		for _, exports := range []string{"default", "answer,default", "answer"} {
@@ -313,7 +315,8 @@ func TestRouterCacheRegressions(t *testing.T) {
 	}
 	logger := new(log.Logger)
 	logger.SetOutput(io.Discard)
-	handler := esmRouter(fs, logger)
+	metaDB := newTestBuildMetaDB(t, fs)
+	handler := esmRouter(fs, metaDB, logger)
 	http.DefaultTransport = ghTestTransport(func(r *http.Request) (*http.Response, error) {
 		t.Errorf("unexpected request: %s", r.URL)
 		return &http.Response{StatusCode: 500, Body: http.NoBody}, nil
@@ -445,7 +448,7 @@ func TestRouterCacheRegressions(t *testing.T) {
 		build := &BuildContext{esmPath: EsmPath{PkgName: name, PkgVersion: "1.0.0"}, target: "es2022"}
 		defer cacheLRU.Remove(build.Path())
 		dts := "/" + name + "@1.0.0/index.d.ts"
-		if err := NewBuildMetaDB(fs).Put(build.Path(), encodeBuildMeta(&BuildMeta{TypesOnly: true, Dts: dts})); err != nil {
+		if err := metaDB.Put(build.Path(), encodeBuildMeta(&BuildMeta{TypesOnly: true, Dts: dts})); err != nil {
 			t.Fatal(err)
 		}
 		for _, version := range []string{"", "@latest", "@^1", "@1.0.0"} {
@@ -473,7 +476,7 @@ func TestRouterCacheRegressions(t *testing.T) {
 		const name = "module-cache-test"
 		build := &BuildContext{esmPath: EsmPath{PkgName: name, PkgVersion: "1.0.0"}, target: "es2022"}
 		defer cacheLRU.Remove(build.Path())
-		if err := NewBuildMetaDB(fs).Put(build.Path(), encodeBuildMeta(&BuildMeta{CSSInJS: true, Integrity: "sha384-test"})); err != nil {
+		if err := metaDB.Put(build.Path(), encodeBuildMeta(&BuildMeta{CSSInJS: true, Integrity: "sha384-test"})); err != nil {
 			t.Fatal(err)
 		}
 		for _, version := range []string{"@1.0.0", "", "@latest", "@^1"} {
@@ -557,7 +560,8 @@ func TestVersionedPathNotFoundCache(t *testing.T) {
 		deleteCacheItemsWithPrefix("npm:negative-path-test@")
 	})
 	fs, _, logger := newPurgeTestEnv(t)
-	handler := esmRouter(fs, logger)
+	metaDB := newTestBuildMetaDB(t, fs)
+	handler := esmRouter(fs, metaDB, logger)
 	const pkg = "negative-path-test"
 	for _, version := range []string{"1.0.0", "2.0.0"} {
 		dir := filepath.Join(config.WorkDir, "npm", pkg+"@"+version, "node_modules", pkg)
@@ -625,7 +629,8 @@ func TestGhRawAssets(t *testing.T) {
 	}
 	logger := new(log.Logger)
 	logger.SetOutput(io.Discard)
-	handler := esmRouter(fs, logger)
+	metaDB := newTestBuildMetaDB(t, fs)
+	handler := esmRouter(fs, metaDB, logger)
 	for _, test := range []struct {
 		name        string
 		path        string
@@ -762,7 +767,7 @@ func TestRouterPathRegressions(t *testing.T) {
 	}
 	logger := new(log.Logger)
 	logger.SetOutput(io.Discard)
-	handler := esmLegacyRouter(fs, esmRouter(fs, logger))
+	handler := esmLegacyRouter(fs, esmRouter(fs, newTestBuildMetaDB(t, fs), logger))
 	http.DefaultTransport = ghTestTransport(func(r *http.Request) (*http.Response, error) {
 		t.Errorf("unexpected request: %s", r.URL)
 		return &http.Response{StatusCode: 500, Body: http.NoBody}, nil

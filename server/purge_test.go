@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -186,7 +187,7 @@ func newPurgeTestEnv(t *testing.T) (storage.Storage, *BuildMetaDB, *log.Logger) 
 		t.Fatal(err)
 	}
 	logger.SetOutput(io.Discard)
-	return fs, NewBuildMetaDB(fs), logger
+	return fs, newTestBuildMetaDB(t, fs), logger
 }
 
 func TestPurgePackageCache(t *testing.T) {
@@ -693,7 +694,7 @@ func TestPowChallengeRoute(t *testing.T) {
 	}
 	logger := new(log.Logger)
 	logger.SetOutput(io.Discard)
-	handler := esmRouter(fs, logger)
+	handler := esmRouter(fs, newTestBuildMetaDB(t, fs), logger)
 
 	request := func(target string) *httptest.ResponseRecorder {
 		res := httptest.NewRecorder()
@@ -796,6 +797,11 @@ func TestPurgeAllBuildMetadata(t *testing.T) {
 				}
 				t.Cleanup(func() { cacheLRU.Remove(key) })
 			}
+			cold := "/" + pkgId + "/es2022/not-imported.mjs"
+			if err := fs.Put(normalizeMetaStoreKey(cold), bytes.NewReader(encodeBuildMeta(&BuildMeta{}))); err != nil {
+				t.Fatal(err)
+			}
+			paths = append(paths, cold)
 			sibling := "/" + pkgId + "-other/es2022/pkg.mjs"
 			if err := metaDB.Put(sibling, encodeBuildMeta(&BuildMeta{})); err != nil {
 				t.Fatal(err)
@@ -803,16 +809,17 @@ func TestPurgeAllBuildMetadata(t *testing.T) {
 			if _, err := purgePackageCache(newTestNpmRC(), metaDB, fs, logger, esm, true, "", "/"+pkgId); err != nil {
 				t.Fatal(err)
 			}
+			metaDB = reopenTestBuildMetaDB(t, metaDB)
 			for _, key := range paths {
 				build := &BuildContext{path: key, metaDB: metaDB}
 				if _, ok, err := build.Exists(); err != nil || ok {
 					t.Errorf("cached metadata survived purge: %s (%v)", key, err)
 				}
-				if _, err := NewBuildMetaDB(fs).Get(key); !errors.Is(err, storage.ErrNotFound) {
+				if _, err := metaDB.Get(key); !errors.Is(err, storage.ErrNotFound) {
 					t.Errorf("persisted metadata survived purge: %s (%v)", key, err)
 				}
 			}
-			if _, err := NewBuildMetaDB(fs).Get(sibling); err != nil {
+			if _, err := metaDB.Get(sibling); err != nil {
 				t.Fatalf("sibling metadata was removed: %v", err)
 			}
 		})
@@ -844,15 +851,17 @@ func TestPurgeLegacyMetadata(t *testing.T) {
 	if _, err := purgePackageCache(newTestNpmRC(), metaDB, fs, logger, esm, true, "", "/purge-legacy@1.0.0"); err != nil {
 		t.Fatal(err)
 	}
+	metaDB = reopenTestBuildMetaDB(t, metaDB)
 	for _, key := range paths {
-		if _, err := NewBuildMetaDB(fs).Get(key); !errors.Is(err, storage.ErrNotFound) {
+		if _, err := metaDB.Get(key); !errors.Is(err, storage.ErrNotFound) {
 			t.Fatalf("legacy metadata survived purge and restart: %s (%v)", key, err)
 		}
 	}
 	if err := metaDB.Put(paths[0], encodeBuildMeta(&BuildMeta{ExportDefault: true})); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := NewBuildMetaDB(fs).Get(paths[0]); err != nil {
+	metaDB = reopenTestBuildMetaDB(t, metaDB)
+	if _, err := metaDB.Get(paths[0]); err != nil {
 		t.Fatalf("purge marker blocked new metadata: %v", err)
 	}
 }
@@ -903,11 +912,12 @@ func TestPurgeWaitsForMetadataLookup(t *testing.T) {
 	if metaDB.cache.Contains(key) {
 		t.Error("lookup repopulated metadata after the purge")
 	}
-	if _, err := NewBuildMetaDB(fs).Get(key); !errors.Is(err, storage.ErrNotFound) {
-		t.Errorf("metadata survived purge: %v", err)
-	}
 	if len(metaDB.locks.locks) != 0 {
 		t.Error("idle package locks were retained")
+	}
+	metaDB = reopenTestBuildMetaDB(t, metaDB)
+	if _, err := metaDB.Get(key); !errors.Is(err, storage.ErrNotFound) {
+		t.Errorf("metadata survived purge: %v", err)
 	}
 }
 
@@ -939,7 +949,7 @@ func TestPurgeRouteRegressions(t *testing.T) {
 	config, defaultNpmRC = &cfg, nil
 	t.Cleanup(func() { config, defaultNpmRC = oldConfig, oldNpmRC })
 	fs, _, logger := newPurgeTestEnv(t)
-	handler := esmRouter(fs, logger)
+	handler := esmRouter(fs, newTestBuildMetaDB(t, fs), logger)
 
 	t.Run("negative cache", func(t *testing.T) {
 		key := "404:purge-missing@latest"
