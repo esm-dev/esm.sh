@@ -147,7 +147,9 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 				})
 				for _, name := range keys {
 					conditions, _ := pkgJson.Exports.Get(name)
-					name = stripEntryModuleExt(name)
+					if subPath == stripEntryModuleExt(subPath) {
+						name = stripEntryModuleExt(name)
+					}
 					if name == "./"+subPath {
 						if s, ok := conditions.(string); ok {
 							/**
@@ -246,6 +248,10 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 					entry.types = "./" + path.Join(subPath, p.Types)
 				}
 			}
+		}
+
+		if entry.main == "" && endsWith(subPath, ".js", ".mjs", ".cjs") && ctx.existsPkgFile(subPath) {
+			entry.update("./"+subPath, strings.HasSuffix(subPath, ".mjs") || (strings.HasSuffix(subPath, ".js") && pkgJson.Type == "module"))
 		}
 
 		// lookup entry from the sub-module directory if it's not defined in `package.json`
@@ -526,6 +532,12 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 	}
 
 	ctx.finalizeBuildEntry(&entry)
+	if entry.isEmpty() {
+		if subPath := stripEntryModuleExt(esm.SubPath); subPath != esm.SubPath {
+			esm.SubPath = subPath
+			return ctx.resolveEntry(esm)
+		}
+	}
 	return
 }
 
@@ -874,7 +886,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 				PrPrefix:   ctx.esmPath.PrPrefix,
 				PkgName:    ctx.esmPath.PkgName,
 				PkgVersion: ctx.esmPath.PkgVersion,
-				SubPath:    stripEntryModuleExt(subPath),
+				SubPath:    ctx.normalizeSubPath(subPath),
 			}
 			if ctx.pkgJson.SideEffectsFalse {
 				sideEffects = esbuild.SideEffectsFalse
@@ -938,7 +950,7 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 	dep := EsmPath{
 		PkgName:    pkgName,
 		PkgVersion: pkgVersion,
-		SubPath:    stripEntryModuleExt(subPath),
+		SubPath:    subPath,
 	}
 
 	// resolve alias in dependencies
@@ -1194,7 +1206,7 @@ func (ctx *BuildContext) getImportPath(esm EsmPath, buildArgsPrefix string, exte
 			name = strings.ReplaceAll(name, "/#/", "/%23/")
 		}
 		// [warning] a name ending with a build flag suffix would be parsed as the flag, the router strips the ".js" mark
-		if endsWith(name, ".bundle", ".nobundle", ".development") {
+		if hasBuildFlagSuffix(name) {
 			name += ".js"
 		}
 	}
@@ -1271,6 +1283,24 @@ func (ctx *BuildContext) resloveSubModule(subPath string) (string, bool) {
 	return "", false
 }
 
+func (ctx *BuildContext) normalizeSubPath(subPath string) string {
+	if short := stripEntryModuleExt(subPath); short != subPath {
+		if v, ok := ctx.subPaths.Load(subPath); ok {
+			return v.(string)
+		}
+		esm := ctx.esmPath
+		esm.SubPath = subPath
+		entry := ctx.resolveEntry(esm)
+		esm.SubPath = short
+		if entry == ctx.resolveEntry(esm) {
+			ctx.subPaths.Store(subPath, short)
+			return short
+		}
+		ctx.subPaths.Store(subPath, subPath)
+	}
+	return subPath
+}
+
 func (ctx *BuildContext) resolveDependency(specifier string, isDts bool) (esm EsmPath, packageJson *npm.PackageJSON, err error) {
 	pkgName, version, subPath := splitEsmPath(specifier)
 lookup:
@@ -1280,7 +1310,7 @@ lookup:
 			esm = EsmPath{
 				PkgName:    pkgName,
 				PkgVersion: packageJson.Version,
-				SubPath:    stripEntryModuleExt(subPath),
+				SubPath:    subPath,
 			}
 		}
 		return
@@ -1293,7 +1323,7 @@ lookup:
 		esm = EsmPath{
 			PkgName:    pkgName,
 			PkgVersion: raw.Version,
-			SubPath:    stripEntryModuleExt(subPath),
+			SubPath:    subPath,
 		}
 		packageJson = raw.ToNpmPackage()
 		return
@@ -1329,7 +1359,7 @@ lookup:
 					PrPrefix:   p.PkgPrNew,
 					PkgName:    p.Name,
 					PkgVersion: p.Version,
-					SubPath:    stripEntryModuleExt(subPath),
+					SubPath:    subPath,
 				}
 			}
 			return
@@ -1344,7 +1374,7 @@ lookup:
 		esm = EsmPath{
 			PkgName:    pkgName,
 			PkgVersion: packageJson.Version,
-			SubPath:    stripEntryModuleExt(subPath),
+			SubPath:    subPath,
 		}
 	}
 	if err != nil && strings.HasSuffix(err.Error(), " not found") && isDts && !strings.HasPrefix(pkgName, "@types/") {
@@ -1469,6 +1499,13 @@ func stripModuleExt(s string) string {
 		}
 	}
 	return s
+}
+
+func hasBuildFlagSuffix(name string) bool {
+	for strings.HasSuffix(name, ".js") {
+		name = strings.TrimSuffix(name, ".js")
+	}
+	return endsWith(name, ".bundle", ".nobundle", ".development")
 }
 
 // stripEntryModuleExt strips the entry module extension from the given string.

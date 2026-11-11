@@ -25,7 +25,7 @@ func TestAnalyzeSplittingInvalidCache(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			cachePath := filepath.Join(wd, "splitting-v2-es2022.txt")
+			cachePath := filepath.Join(wd, "splitting-v3-es2022.txt")
 			if err := os.WriteFile(cachePath, []byte(contents), 0644); err != nil {
 				t.Fatal(err)
 			}
@@ -104,7 +104,7 @@ func TestAnalyzeSplittingCacheKey(t *testing.T) {
 	errCtx.n.Store(1)
 	canceled.ctx = errCtx
 	canceled.analyzeSplitting()
-	if _, err := os.Stat(filepath.Join(wd, "splitting-v2-es2022.txt")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(wd, "splitting-v3-es2022.txt")); !os.IsNotExist(err) {
 		t.Fatalf("canceled analysis was cached: %v", err)
 	}
 
@@ -166,7 +166,7 @@ func TestAnalyzeSplittingCodeError(t *testing.T) {
 	}
 	// an export that fails with a code error must not block caching, or every build would redo the analysis
 	ctx.analyzeSplitting()
-	data, err := os.ReadFile(filepath.Join(wd, "splitting-v2-es2022.txt"))
+	data, err := os.ReadFile(filepath.Join(wd, "splitting-v3-es2022.txt"))
 	if err != nil {
 		t.Fatal(err)
 	}
