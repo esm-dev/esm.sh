@@ -126,7 +126,7 @@ func parseEsmPathSyntax(pathname string) (esm EsmPath, extraQuery string, exactV
 		esm = EsmPath{
 			PkgName:    pkgName,
 			PkgVersion: version,
-			SubPath:    stripEntryModuleExt(subPath),
+			SubPath:    subPath,
 			PrPrefix:   true,
 		}
 		exactVersion = isCommitish(esm.PkgVersion)
@@ -199,7 +199,7 @@ func parseEsmPathSyntax(pathname string) (esm EsmPath, extraQuery string, exactV
 	esm = EsmPath{
 		PkgName:    pkgName,
 		PkgVersion: version,
-		SubPath:    stripEntryModuleExt(subPath),
+		SubPath:    subPath,
 		GhPrefix:   ghPrefix,
 	}
 
@@ -220,14 +220,14 @@ func parseSubPath(subPathRaw string) (subPath string, target string, xArgs *Buil
 			args, err := decodeBuildArgs(el0)
 			if err == nil {
 				if _, ok := targets[el1]; ok {
-					return strings.Join(segments[2:], "/"), el1, &args
+					return stripEntryModuleExt(strings.Join(segments[2:], "/")), el1, &args
 				}
 				return strings.Join(segments[1:], "/"), "", &args
 			}
 		}
 		_, ok := targets[el0]
 		if ok {
-			return strings.Join(segments[1:], "/"), el0, nil
+			return stripEntryModuleExt(strings.Join(segments[1:], "/")), el0, nil
 		}
 	}
 	return strings.Join(segments, "/"), "", nil

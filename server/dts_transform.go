@@ -310,7 +310,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, transfo
 				entry := ctx.resolveEntry(EsmPath{
 					PkgName:    depPkgName,
 					PkgVersion: ctx.esmPath.PkgVersion,
-					SubPath:    stripEntryModuleExt(subPath),
+					SubPath:    subPath,
 				})
 				if entry.types != "" {
 					return fmt.Sprintf(
@@ -383,7 +383,7 @@ func transformDTS(ctx *BuildContext, dts string, buildArgsPrefix string, transfo
 		dtsModule := EsmPath{
 			PkgName:    p.Name,
 			PkgVersion: p.Version,
-			SubPath:    stripEntryModuleExt(subPath),
+			SubPath:    subPath,
 		}
 		if dep.GhPrefix || dep.PrPrefix {
 			dep.SubPath = dtsModule.SubPath

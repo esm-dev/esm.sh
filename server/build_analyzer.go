@@ -21,7 +21,6 @@ func (ctx *BuildContext) analyzeSplitting() {
 	exportNames := set.New[string]()
 
 	for _, exportName := range ctx.pkgJson.Exports.Keys() {
-		exportName := stripEntryModuleExt(exportName)
 		if (exportName == "." || (strings.HasPrefix(exportName, "./") && !strings.ContainsRune(exportName, '*'))) && !endsWith(exportName, ".json", ".css", ".wasm", ".d.ts", ".d.mts", ".d.cts") {
 			v, _ := ctx.pkgJson.Exports.Get(exportName)
 			if s, ok := v.(string); ok {
@@ -37,13 +36,13 @@ func (ctx *BuildContext) analyzeSplitting() {
 			if exportName == "." {
 				exportNames.Add("")
 			} else if strings.HasPrefix(exportName, "./") {
-				exportNames.Add(exportName[2:])
+				exportNames.Add(ctx.normalizeSubPath(exportName[2:]))
 			}
 		}
 	}
 
 	if exportNames.Len() > 1 {
-		name := "splitting-v2-" + ctx.target
+		name := "splitting-v3-" + ctx.target
 		if ctx.dev {
 			name += "-dev"
 		}
