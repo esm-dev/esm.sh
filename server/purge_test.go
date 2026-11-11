@@ -912,6 +912,9 @@ func TestPurgeWaitsForMetadataLookup(t *testing.T) {
 	if metaDB.cache.Contains(key) {
 		t.Error("lookup repopulated metadata after the purge")
 	}
+	if _, err := fs.Stat(normalizeMetaStoreKey(key)); err != storage.ErrNotFound {
+		t.Errorf("storage metadata survived purge: %v", err)
+	}
 	if len(metaDB.locks.locks) != 0 {
 		t.Error("idle package locks were retained")
 	}

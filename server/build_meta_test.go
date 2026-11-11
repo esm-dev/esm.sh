@@ -25,14 +25,14 @@ func newTestBuildMetaDB(t *testing.T, backStorage storage.Storage) *BuildMetaDB 
 		t.Fatal(err)
 	}
 	// [warning] queue tests use synctest.Wait, which does not advance the batch timer
-	db.MaxBatchSize = 1
+	db.db.MaxBatchSize = 1
 	t.Cleanup(func() { db.Close() })
 	return db
 }
 
 func reopenTestBuildMetaDB(t *testing.T, db *BuildMetaDB) *BuildMetaDB {
 	t.Helper()
-	filename := db.Path()
+	filename := db.db.Path()
 	if err := db.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -223,7 +223,7 @@ func TestBuildMetaS3ConcurrentSubmodules(t *testing.T) {
 		t.Fatal(err)
 	}
 	db := newTestBuildMetaDB(t, s3)
-	db.MaxBatchSize = 1000
+	db.db.MaxBatchSize = 1000
 	q := NewBuildQueue(16, time.Minute)
 	finished := make(chan error, 16)
 	for i := range 16 {
