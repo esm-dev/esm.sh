@@ -148,7 +148,7 @@ func purgePackageCache(npmrc *NpmRC, metaDB *BuildMetaDB, esmStorage storage.Sto
 	// [warning] wait for a running install before locking the metadata, a slow download would block every meta read
 	unlockInstall, _ := lockInstall(context.Background(), pkgId)
 	defer unlockInstall()
-	// Block legacy metadata before deleting the package's metadata namespace.
+	// [warning] block imports before deleting the metadata, old storage must not restore a purged build
 	unlock := sync.OnceFunc(metaDB.lockPackage("meta/"+pkgId, true))
 	defer unlock()
 	if err := esmStorage.Put("meta-purged/"+pkgId, strings.NewReader("")); err != nil {
@@ -159,9 +159,13 @@ func purgePackageCache(npmrc *NpmRC, metaDB *BuildMetaDB, esmStorage storage.Sto
 		return nil, err
 	}
 	resp.Purged = append(resp.Purged, keys...)
-	for _, key := range append(metaDB.cache.Keys(), cacheLRU.Keys()...) {
+	keys, err = metaDB.Purge(pkgId)
+	if err != nil {
+		return nil, err
+	}
+	resp.Purged = append(resp.Purged, keys...)
+	for _, key := range cacheLRU.Keys() {
 		if strings.HasPrefix(key, "/"+pkgId+"/") || strings.HasPrefix(key, "/*"+pkgId+"/") {
-			metaDB.cache.Remove(key)
 			cacheLRU.Remove(key)
 		}
 	}

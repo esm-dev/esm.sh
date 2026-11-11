@@ -28,9 +28,9 @@ func (s buildQueueTestStorage) Get(string) (io.ReadCloser, storage.Stat, error) 
 	return io.NopCloser(bytes.NewReader(encodeBuildMeta(meta))), nil, nil
 }
 
-func newBuildQueueTestContext(path string, get func() (*BuildMeta, error)) *BuildContext {
+func newBuildQueueTestContext(t *testing.T, path string, get func() (*BuildMeta, error)) *BuildContext {
 	cacheLRU.Remove(path)
-	return &BuildContext{path: path, metaDB: NewBuildMetaDB(buildQueueTestStorage{get: get})}
+	return &BuildContext{path: path, metaDB: newTestBuildMetaDB(t, buildQueueTestStorage{get: get})}
 }
 
 func TestBuildQueueScheduling(t *testing.T) {
@@ -45,7 +45,7 @@ func TestBuildQueueScheduling(t *testing.T) {
 				release := make([]chan struct{}, count)
 				for i := range count {
 					release[i] = make(chan struct{})
-					build := newBuildQueueTestContext(fmt.Sprintf("/%s/%d", t.Name(), i), func() (*BuildMeta, error) {
+					build := newBuildQueueTestContext(t, fmt.Sprintf("/%s/%d", t.Name(), i), func() (*BuildMeta, error) {
 						started <- i
 						<-release[i]
 						return &BuildMeta{Dts: fmt.Sprint(i)}, nil
@@ -107,7 +107,7 @@ func TestBuildQueueWaitCancellation(t *testing.T) {
 				q := NewBuildQueue(1, time.Minute)
 				unblock := make(chan struct{})
 				if pending {
-					blocker := newBuildQueueTestContext("/"+t.Name()+"/blocker", func() (*BuildMeta, error) {
+					blocker := newBuildQueueTestContext(t, "/"+t.Name()+"/blocker", func() (*BuildMeta, error) {
 						<-unblock
 						return &BuildMeta{}, nil
 					})
@@ -120,7 +120,7 @@ func TestBuildQueueWaitCancellation(t *testing.T) {
 				}
 				release := make(chan struct{})
 				path := "/" + t.Name() + "/shared"
-				build := newBuildQueueTestContext(path, func() (*BuildMeta, error) {
+				build := newBuildQueueTestContext(t, path, func() (*BuildMeta, error) {
 					<-release
 					return &BuildMeta{ExportDefault: true}, nil
 				})
@@ -185,8 +185,8 @@ func TestBuildQueueFailure(t *testing.T) {
 				release := make(chan struct{})
 				path := "/" + t.Name()
 				want := "failed"
-				build := newBuildQueueTestContext(path, nil)
-				build.metaDB = NewBuildMetaDB(buildQueueTestStorage{get: func() (*BuildMeta, error) {
+				build := newBuildQueueTestContext(t, path, nil)
+				build.metaDB = newTestBuildMetaDB(t, buildQueueTestStorage{get: func() (*BuildMeta, error) {
 					if failure == "timeout" {
 						<-build.Context().Done()
 					}
@@ -216,7 +216,7 @@ func TestBuildQueueFailure(t *testing.T) {
 					errorsReceived <- err
 				}()
 				nextStarted := make(chan struct{}, 1)
-				next := newBuildQueueTestContext(path+"/next", func() (*BuildMeta, error) {
+				next := newBuildQueueTestContext(t, path+"/next", func() (*BuildMeta, error) {
 					nextStarted <- struct{}{}
 					return &BuildMeta{}, nil
 				})
@@ -242,7 +242,7 @@ func TestBuildQueueFailure(t *testing.T) {
 						t.Fatalf("got %v, want %q", err, want)
 					}
 				}
-				retry := newBuildQueueTestContext(path, func() (*BuildMeta, error) { return &BuildMeta{}, nil })
+				retry := newBuildQueueTestContext(t, path, func() (*BuildMeta, error) { return &BuildMeta{}, nil })
 				if failure == "timeout" {
 					close(release)
 					synctest.Wait()
@@ -266,7 +266,7 @@ func TestBuildQueueAbandonedPending(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		q := NewBuildQueue(1, time.Minute)
 		release := make(chan struct{})
-		blocker := newBuildQueueTestContext("/"+t.Name()+"/blocker", func() (*BuildMeta, error) {
+		blocker := newBuildQueueTestContext(t, "/"+t.Name()+"/blocker", func() (*BuildMeta, error) {
 			<-release
 			return &BuildMeta{}, nil
 		})
@@ -277,7 +277,7 @@ func TestBuildQueueAbandonedPending(t *testing.T) {
 		}()
 		synctest.Wait()
 		path := "/" + t.Name() + "/pending"
-		build := newBuildQueueTestContext(path, func() (*BuildMeta, error) {
+		build := newBuildQueueTestContext(t, path, func() (*BuildMeta, error) {
 			t.Error("started an abandoned pending build")
 			return &BuildMeta{}, nil
 		})
@@ -318,16 +318,16 @@ func TestBuildQueuePathChange(t *testing.T) {
 		q := NewBuildQueue(2, time.Minute)
 		aliasPath, canonicalPath := "/"+t.Name()+"/index", "/"+t.Name()+"/root"
 		releaseAlias, releaseCanonical := make(chan struct{}), make(chan struct{})
-		alias := newBuildQueueTestContext(aliasPath, nil)
+		alias := newBuildQueueTestContext(t, aliasPath, nil)
 		alias.esmPath.SubPath = "index"
-		alias.metaDB = NewBuildMetaDB(buildQueueTestStorage{get: func() (*BuildMeta, error) {
+		alias.metaDB = newTestBuildMetaDB(t, buildQueueTestStorage{get: func() (*BuildMeta, error) {
 			alias.path = canonicalPath
 			alias.esmPath.SubPath = ""
 			alias.status.Store("install")
 			<-releaseAlias
 			return &BuildMeta{}, nil
 		}})
-		canonical := newBuildQueueTestContext(canonicalPath, func() (*BuildMeta, error) {
+		canonical := newBuildQueueTestContext(t, canonicalPath, func() (*BuildMeta, error) {
 			<-releaseCanonical
 			return &BuildMeta{}, nil
 		})
@@ -380,8 +380,8 @@ func TestBuildQueueSnapshotDuringBuild(t *testing.T) {
 		q := NewBuildQueue(1, time.Minute)
 		start, release := make(chan struct{}), make(chan struct{})
 		path := "/" + t.Name()
-		build := newBuildQueueTestContext(path, nil)
-		build.metaDB = NewBuildMetaDB(buildQueueTestStorage{get: func() (*BuildMeta, error) {
+		build := newBuildQueueTestContext(t, path, nil)
+		build.metaDB = newTestBuildMetaDB(t, buildQueueTestStorage{get: func() (*BuildMeta, error) {
 			<-start
 			for range 1000 {
 				build.path = path + "/resolved"
@@ -421,7 +421,7 @@ func TestBuildQueueInstallTimeout(t *testing.T) {
 		}
 		defer unlock()
 		q := NewBuildQueue(1, time.Minute)
-		build := newBuildQueueTestContext("/"+t.Name(), func() (*BuildMeta, error) {
+		build := newBuildQueueTestContext(t, "/"+t.Name(), func() (*BuildMeta, error) {
 			return nil, storage.ErrNotFound
 		})
 		build.npmrc = &NpmRC{}
@@ -433,7 +433,7 @@ func TestBuildQueueInstallTimeout(t *testing.T) {
 		}()
 		synctest.Wait()
 		// a build waiting for the install of another build frees its slot
-		next := newBuildQueueTestContext("/"+t.Name()+"/next", func() (*BuildMeta, error) {
+		next := newBuildQueueTestContext(t, "/"+t.Name()+"/next", func() (*BuildMeta, error) {
 			return &BuildMeta{}, nil
 		})
 		if _, err := q.Build(context.Background(), next); err != nil {
@@ -458,7 +458,7 @@ func TestBuildQueueRelease(t *testing.T) {
 		events := make(chan string, 3)
 		wake, finish := make(chan struct{}), make(chan struct{})
 		var waiting *BuildContext
-		waiting = newBuildQueueTestContext("/"+t.Name()+"/waiting", func() (*BuildMeta, error) {
+		waiting = newBuildQueueTestContext(t, "/"+t.Name()+"/waiting", func() (*BuildMeta, error) {
 			task := waiting.Context().Value(buildTaskKey{}).(*buildTask)
 			task.release()
 			<-wake
@@ -466,12 +466,12 @@ func TestBuildQueueRelease(t *testing.T) {
 			events <- "waiting"
 			return &BuildMeta{}, nil
 		})
-		running := newBuildQueueTestContext("/"+t.Name()+"/running", func() (*BuildMeta, error) {
+		running := newBuildQueueTestContext(t, "/"+t.Name()+"/running", func() (*BuildMeta, error) {
 			events <- "running"
 			<-finish
 			return &BuildMeta{}, nil
 		})
-		pending := newBuildQueueTestContext("/"+t.Name()+"/pending", func() (*BuildMeta, error) {
+		pending := newBuildQueueTestContext(t, "/"+t.Name()+"/pending", func() (*BuildMeta, error) {
 			events <- "pending"
 			return &BuildMeta{}, nil
 		})
@@ -502,7 +502,7 @@ func TestBuildQueueReleasedTimeout(t *testing.T) {
 		q := NewBuildQueue(1, time.Minute)
 		exited, finish := make(chan struct{}, 1), make(chan struct{})
 		var released *BuildContext
-		released = newBuildQueueTestContext("/"+t.Name()+"/released", func() (*BuildMeta, error) {
+		released = newBuildQueueTestContext(t, "/"+t.Name()+"/released", func() (*BuildMeta, error) {
 			task := released.Context().Value(buildTaskKey{}).(*buildTask)
 			task.release()
 			<-released.Context().Done()
@@ -510,7 +510,7 @@ func TestBuildQueueReleasedTimeout(t *testing.T) {
 			exited <- struct{}{}
 			return nil, released.Context().Err()
 		})
-		running := newBuildQueueTestContext("/"+t.Name()+"/running", func() (*BuildMeta, error) {
+		running := newBuildQueueTestContext(t, "/"+t.Name()+"/running", func() (*BuildMeta, error) {
 			<-finish
 			return &BuildMeta{}, nil
 		})
@@ -548,7 +548,7 @@ func TestBuildQueueParallelRelease(t *testing.T) {
 		q := NewBuildQueue(1, 0)
 		wake, finish := make(chan struct{}), make(chan struct{})
 		var waiting *BuildContext
-		waiting = newBuildQueueTestContext("/"+t.Name()+"/waiting", func() (*BuildMeta, error) {
+		waiting = newBuildQueueTestContext(t, "/"+t.Name()+"/waiting", func() (*BuildMeta, error) {
 			// parallel resolver callbacks of one build wait for other installs at the same time
 			task := waiting.Context().Value(buildTaskKey{}).(*buildTask)
 			var wg sync.WaitGroup
@@ -562,7 +562,7 @@ func TestBuildQueueParallelRelease(t *testing.T) {
 			wg.Wait()
 			return &BuildMeta{}, nil
 		})
-		running := newBuildQueueTestContext("/"+t.Name()+"/running", func() (*BuildMeta, error) {
+		running := newBuildQueueTestContext(t, "/"+t.Name()+"/running", func() (*BuildMeta, error) {
 			<-finish
 			return &BuildMeta{}, nil
 		})

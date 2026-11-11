@@ -72,6 +72,10 @@ func Start() {
 		logger.Fatalf("failed to initialize storage(%s): %v", config.Storage.Type, err)
 	}
 	logger.Debugf("storage initialized, type: %s, endpoint: %s", config.Storage.Type, config.Storage.Endpoint)
+	metaDB, err := NewBuildMetaDB(path.Join(config.WorkDir, "esm.db"), esmStorage)
+	if err != nil {
+		logger.Fatalf("failed to initialize metadata database: %v", err)
+	}
 
 	negativeCache, err = openNegativeCache(path.Join(config.WorkDir, "negative-cache.db"), logger)
 	if err != nil {
@@ -105,7 +109,7 @@ func Start() {
 	go getNodeRuntimeJS("fs")
 
 	// build the handler chain, the last added handler is called first
-	var handler http.Handler = esmRouter(esmStorage, logger)
+	var handler http.Handler = esmRouter(esmStorage, metaDB, logger)
 	handler = esmLegacyRouter(esmStorage, handler)
 	if config.CustomLandingPage.Origin != "" {
 		handler = customLandingPage(&config.CustomLandingPage, handler)
@@ -172,6 +176,7 @@ func Start() {
 	}
 
 	// release resources
+	metaDB.Close()
 	negativeCache.Close()
 	logger.FlushBuffer()
 	accessLogger.FlushBuffer()

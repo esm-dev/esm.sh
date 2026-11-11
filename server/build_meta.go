@@ -6,12 +6,15 @@ import (
 	"encoding/hex"
 	"errors"
 	"io"
-	"os"
 	"path"
+	"path/filepath"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/esm-dev/esm.sh/internal/storage"
 	lru "github.com/hashicorp/golang-lru/v2"
+	bolt "go.etcd.io/bbolt"
 )
 
 type BuildMeta struct {
@@ -105,88 +108,204 @@ func decodeBuildMeta(data []byte) (*BuildMeta, error) {
 	return meta, nil
 }
 
+var (
+	metaBucket         = []byte("meta")
+	purgedBucket       = []byte("purged")
+	legacyPurgedBucket = []byte("legacy-purged")
+)
+
 type BuildMetaDB struct {
+	db      *bolt.DB
 	cache   *lru.Cache[string, []byte]
 	storage storage.Storage
 	locks   keyedMutex
+	writes  sync.WaitGroup
 }
 
-func NewBuildMetaDB(backStorage storage.Storage) *BuildMetaDB {
-	cache, err := lru.New[string, []byte](lruCacheCapacity)
-	if err != nil {
-		panic(err)
+func NewBuildMetaDB(filename string, backStorage storage.Storage) (*BuildMetaDB, error) {
+	if err := ensureDir(filepath.Dir(filename)); err != nil {
+		return nil, err
 	}
-	return &BuildMetaDB{cache: cache, storage: backStorage}
+	db, err := bolt.Open(filename, 0600, &bolt.Options{Timeout: time.Second})
+	if err != nil {
+		return nil, err
+	}
+	err = db.Update(func(tx *bolt.Tx) error {
+		for _, name := range [][]byte{metaBucket, purgedBucket, legacyPurgedBucket} {
+			if _, err := tx.CreateBucketIfNotExists(name); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		db.Close()
+		return nil, err
+	}
+	cache, _ := lru.New[string, []byte](lruCacheCapacity)
+	return &BuildMetaDB{db: db, cache: cache, storage: backStorage}, nil
 }
 
-// Metadata operations share the package lock; purges take it exclusively.
+func (db *BuildMetaDB) Close() error {
+	db.writes.Wait()
+	return db.db.Close()
+}
+
 func (db *BuildMetaDB) lockPackage(key string, exclusive bool) func() {
 	return db.locks.lock(key, exclusive)
 }
 
-func (db *BuildMetaDB) Get(key string) (value []byte, err error) {
+func (db *BuildMetaDB) Get(key string) ([]byte, error) {
 	storeKey := normalizeMetaStoreKey(key)
-	unlockPackage := db.lockPackage(metaStoreLockKey(storeKey), false)
+	pkgKey := metaStoreLockKey(storeKey)
+	unlockPackage := db.lockPackage(pkgKey, false)
 	defer unlockPackage()
 	unlock := cacheMutex.Lock(storeKey)
 	defer unlock()
-	var cached bool
-	value, cached = db.cache.Get(key)
-	if cached {
-		return
+	value, found := db.cache.Get(key)
+	if !found {
+		err := db.db.View(func(tx *bolt.Tx) error {
+			// [warning] use a cursor, a miss is saved as an empty value and `Get` may return nil for it
+			k, v := tx.Bucket(metaBucket).Cursor().Seek([]byte(storeKey))
+			if found = string(k) == storeKey; found {
+				value = bytes.Clone(v)
+			} else {
+				found = tx.Bucket(purgedBucket).Get([]byte(pkgKey)) != nil
+			}
+			return nil
+		})
+		if err != nil {
+			return nil, err
+		}
+		if !found && db.storage != nil {
+			if value, err = db.importMeta(storeKey); err != nil {
+				return nil, err
+			}
+			// [warning] persist misses too, otherwise every restart repeats the S3 lookup.
+			// write in background, never overwrite a newer value or restore a purged package.
+			db.writes.Go(func() {
+				db.db.Batch(func(tx *bolt.Tx) error {
+					b := tx.Bucket(metaBucket)
+					if k, _ := b.Cursor().Seek([]byte(storeKey)); string(k) == storeKey || tx.Bucket(purgedBucket).Get([]byte(pkgKey)) != nil {
+						return nil
+					}
+					return b.Put([]byte(storeKey), value)
+				})
+			})
+		}
+		db.cache.Add(key, value)
 	}
+	if len(value) == 0 {
+		return nil, storage.ErrNotFound
+	}
+	return value, nil
+}
+
+// importMeta reads the metadata saved in the storage by older versions.
+func (db *BuildMetaDB) importMeta(storeKey string) ([]byte, error) {
 	r, _, err := db.storage.Get(storeKey)
 	legacyKey := "meta/" + path.Base(storeKey)
-	if err == storage.ErrNotFound && storeKey != legacyKey {
+	legacy := err == storage.ErrNotFound && storeKey != legacyKey
+	if legacy {
 		r, _, err = db.storage.Get(legacyKey)
-		if err == nil {
-			// Reuse old metadata until this package has been purged.
-			_, markerErr := db.storage.Stat("meta-purged/" + strings.TrimPrefix(path.Dir(storeKey), "meta/"))
-			if markerErr != storage.ErrNotFound {
-				r.Close()
-				if markerErr != nil {
-					return nil, markerErr
-				}
-				return nil, storage.ErrNotFound
-			}
-		}
+	}
+	if err == storage.ErrNotFound {
+		return nil, nil
 	}
 	if err != nil {
-		return
+		return nil, err
 	}
-	defer r.Close()
-	value, err = io.ReadAll(r)
-	if err == nil {
-		db.cache.Add(key, value)
+	value, err := io.ReadAll(r)
+	r.Close()
+	if err != nil || !legacy {
+		return value, err
 	}
-	return
-}
-
-func (db *BuildMetaDB) Put(key string, value []byte) (err error) {
-	storeKey := normalizeMetaStoreKey(key)
-	unlockPackage := db.lockPackage(metaStoreLockKey(storeKey), false)
-	defer unlockPackage()
-	unlock := cacheMutex.Lock(storeKey)
+	marker := []byte("meta-purged/" + strings.TrimPrefix(path.Dir(storeKey), "meta/"))
+	unlock := cacheMutex.Lock(string(marker))
 	defer unlock()
-	err = db.storage.Put(storeKey, bytes.NewReader(value))
-	if err == nil {
-		db.cache.Add(key, value)
+	var purged []byte
+	err = db.db.View(func(tx *bolt.Tx) error {
+		purged = bytes.Clone(tx.Bucket(legacyPurgedBucket).Get(marker))
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
-	return
-}
-
-func (db *BuildMetaDB) Delete(key string) (err error) {
-	storeKey := normalizeMetaStoreKey(key)
-	unlockPackage := db.lockPackage(metaStoreLockKey(storeKey), false)
-	defer unlockPackage()
-	unlock := cacheMutex.Lock(storeKey)
-	defer unlock()
-	for _, name := range []string{storeKey, "meta/" + path.Base(storeKey)} {
-		if deleteErr := db.storage.Delete(name); deleteErr != nil && deleteErr != storage.ErrNotFound && !errors.Is(deleteErr, os.ErrNotExist) {
-			err = errors.Join(err, deleteErr)
+	if len(purged) == 0 {
+		_, err = db.storage.Stat(string(marker))
+		if err != nil && err != storage.ErrNotFound {
+			return nil, err
+		}
+		purged = []byte{0}
+		if err == nil {
+			purged[0] = 1
+		}
+		err = db.db.Batch(func(tx *bolt.Tx) error {
+			return tx.Bucket(legacyPurgedBucket).Put(marker, purged)
+		})
+		if err != nil {
+			return nil, err
 		}
 	}
-	db.cache.Remove(key)
+	if purged[0] == 1 {
+		return nil, nil
+	}
+	return value, nil
+}
+
+func (db *BuildMetaDB) Put(key string, value []byte) error {
+	return db.put(key, value)
+}
+
+func (db *BuildMetaDB) Delete(key string) error {
+	// [warning] save an empty value as a tombstone, so old storage can not restore deleted metadata
+	return db.put(key, []byte{})
+}
+
+func (db *BuildMetaDB) put(key string, value []byte) error {
+	storeKey := normalizeMetaStoreKey(key)
+	unlockPackage := db.lockPackage(metaStoreLockKey(storeKey), false)
+	defer unlockPackage()
+	unlock := cacheMutex.Lock(storeKey)
+	defer unlock()
+	err := db.db.Batch(func(tx *bolt.Tx) error {
+		return tx.Bucket(metaBucket).Put([]byte(storeKey), value)
+	})
+	if err == nil {
+		db.cache.Add(key, bytes.Clone(value))
+	}
+	return err
+}
+
+// Purge deletes all metadata of the package and blocks importing it from the storage.
+// The caller must hold the exclusive package lock.
+func (db *BuildMetaDB) Purge(pkgId string) (keys []string, err error) {
+	pkgKey := "meta/" + pkgId
+	err = db.db.Update(func(tx *bolt.Tx) error {
+		if err := tx.Bucket(purgedBucket).Put([]byte(pkgKey), []byte{1}); err != nil {
+			return err
+		}
+		b, prefix := tx.Bucket(metaBucket), []byte(pkgKey+"/")
+		c := b.Cursor()
+		for k, _ := c.Seek(prefix); bytes.HasPrefix(k, prefix); k, _ = c.Next() {
+			keys = append(keys, string(k))
+		}
+		// [warning] do not delete while iterating, the cursor may skip keys
+		for _, k := range keys {
+			if err := b.Delete([]byte(k)); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	for _, key := range db.cache.Keys() {
+		if strings.HasPrefix(key, "/"+pkgId+"/") || strings.HasPrefix(key, "/*"+pkgId+"/") {
+			db.cache.Remove(key)
+		}
+	}
 	return
 }
 

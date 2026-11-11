@@ -67,13 +67,12 @@ const (
 	ctTypeScript     = "application/typescript; charset=utf-8"
 )
 
-func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
+func esmRouter(esmStorage storage.Storage, metaDB *BuildMetaDB, logger *log.Logger) http.Handler {
 	var (
 		startTime  = time.Now()
 		globalETag = fmt.Sprintf(`W/"%s"`, VERSION)
 		buildQueue = NewBuildQueue(int(config.BuildConcurrency), time.Duration(config.BuildTimeout)*time.Second)
 		npmrc      = DefaultNpmRC()
-		metaDB     = NewBuildMetaDB(esmStorage)
 	)
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
