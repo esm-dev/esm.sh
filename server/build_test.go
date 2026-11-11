@@ -1625,6 +1625,73 @@ func TestBuildModulePublicExportNames(t *testing.T) {
 	}
 }
 
+func TestBuildModuleWasmFeatureDetect(t *testing.T) {
+	oldConfig := config
+	config = &Config{}
+	t.Cleanup(func() { config = oldConfig })
+	for _, entry := range []string{"esm/index.js", "cjs/index.cjs", "umd/index.js"} {
+		for _, minify := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/minify=%v", entry, minify), func(t *testing.T) {
+				config.Minify = minify
+				wd := t.TempDir()
+				filename := filepath.Join(wd, "node_modules", "wasm-feature-detect", "dist", entry)
+				if err := os.MkdirAll(filepath.Dir(filename), 0755); err != nil {
+					t.Fatal(err)
+				}
+				code := `const sourcePhaseImports = async () => { try { await import.source("data:application/wasm;charset=utf-8;base64,AGFzbQEAAAAACARuYW1lAgEA"); return true; } catch { return false; } };`
+				if strings.HasPrefix(entry, "esm/") {
+					code += `export { sourcePhaseImports };`
+				} else {
+					code += `exports.sourcePhaseImports = sourcePhaseImports;`
+				}
+				if err := os.WriteFile(filename, []byte(code), 0644); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(wd, "node_modules", "wasm-feature-detect", "index.mjs"), []byte(`export { sourcePhaseImports } from "./dist/`+entry+`";`), 0644); err != nil {
+					t.Fatal(err)
+				}
+				fs, err := storage.NewFSStorage(filepath.Join(wd, "storage"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				logger, err := log.New("")
+				if err != nil {
+					t.Fatal(err)
+				}
+				logger.SetOutput(io.Discard)
+				ctx := &BuildContext{
+					wd: wd, target: "es2022", storage: fs, logger: logger, npmrc: &NpmRC{},
+					esmPath: EsmPath{PkgName: "wasm-feature-detect", PkgVersion: "1.10.0"},
+					pkgJson: &npm.PackageJSON{Name: "wasm-feature-detect", Version: "1.10.0", Main: "./index.mjs", Types: "./index.d.ts"},
+				}
+				meta, _, err := ctx.buildModule(false)
+				if err != nil {
+					t.Fatal(err)
+				}
+				f, _, err := fs.Get(ctx.getSavePath())
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer f.Close()
+				output, err := io.ReadAll(f)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if len(meta.Imports) != 0 {
+					t.Fatalf("unexpected eager imports: %v", meta.Imports)
+				}
+				result := esbuild.Transform(string(output), esbuild.TransformOptions{Target: esbuild.ES2022})
+				if len(result.Errors) > 0 {
+					t.Fatalf("output must parse without source phase imports: %v", result.Errors)
+				}
+				if !strings.Contains(string(output), "data:text/javascript,") || !strings.Contains(string(output), "AGFzbQEAAAAACARuYW1lAgEA") {
+					t.Fatalf("missing lazy source phase import probe: %s", output)
+				}
+			})
+		}
+	}
+}
+
 func TestBuildModuleWasm(t *testing.T) {
 	oldConfig := config
 	config = &Config{}

@@ -1136,6 +1136,21 @@ func (ctx *BuildContext) buildModule(analyzeMode bool) (meta *BuildMeta, include
 				},
 			)
 
+			build.OnLoad(
+				esbuild.OnLoadOptions{Filter: `/node_modules/wasm-feature-detect/dist/(esm/index\.js|cjs/index\.cjs|umd/index\.js)$`, Namespace: "file"},
+				func(args esbuild.OnLoadArgs) (esbuild.OnLoadResult, error) {
+					code, err := os.ReadFile(args.Path)
+					if err != nil {
+						return esbuild.OnLoadResult{}, err
+					}
+					// [warning] unsupported source import syntax must reject inside the detector's try/catch.
+					contents := strings.Replace(string(code),
+						`import.source("data:application/wasm;charset=utf-8;base64,AGFzbQEAAAAACARuYW1lAgEA")`,
+						`import("data:text/javascript,await import.source('data:application/wasm;charset=utf-8;base64,AGFzbQEAAAAACARuYW1lAgEA')")`, 1)
+					return esbuild.OnLoadResult{Contents: &contents, ResolveDir: path.Dir(args.Path), Loader: esbuild.LoaderJS}, nil
+				},
+			)
+
 			// npm replacement loader
 			build.OnLoad(
 				esbuild.OnLoadOptions{Filter: ".*", Namespace: "npm-replacement"},
