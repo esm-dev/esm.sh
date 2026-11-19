@@ -382,8 +382,10 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 			switch checkDiskStatus() {
 			case DiskStatusFull:
 				diskStatus = "full"
+				npmStore.cleanup(true)
 			case DiskStatusLow:
 				diskStatus = "low"
+				npmStore.cleanup(true)
 			case DiskStatusError:
 				diskStatus = "error"
 			}

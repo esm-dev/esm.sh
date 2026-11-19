@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"math/rand/v2"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -19,11 +20,12 @@ import (
 var npmStore *npmPackageStore
 
 type npmPackageStore struct {
-	mu      sync.Mutex
-	purgeMu sync.Mutex
-	dir     string
-	logger  *log.Logger
-	items   map[string]*npmPackageUse
+	mu        sync.Mutex
+	purgeMu   sync.Mutex
+	cleanupMu sync.Mutex
+	dir       string
+	logger    *log.Logger
+	items     map[string]*npmPackageUse
 }
 
 type npmPackageUse struct {
@@ -32,6 +34,30 @@ type npmPackageUse struct {
 	expires time.Time
 	timer   *time.Timer
 	purging chan struct{}
+}
+
+func (s *npmPackageStore) cleanup(rotate bool) {
+	if !s.cleanupMu.TryLock() {
+		return
+	}
+	oldDir := filepath.Join(filepath.Dir(s.dir), "_npm")
+	_, err := os.Lstat(oldDir)
+	if os.IsNotExist(err) && rotate {
+		err = os.Rename(s.dir, oldDir)
+	}
+	if err != nil {
+		s.cleanupMu.Unlock()
+		if !os.IsNotExist(err) {
+			s.logger.Errorf("npm cleanup: %v", err)
+		}
+		return
+	}
+	go func() {
+		defer s.cleanupMu.Unlock()
+		if err := exec.Command("rm", "-rf", "--", oldDir).Run(); err != nil {
+			s.logger.Errorf("npm cleanup %s: %v", oldDir, err)
+		}
+	}()
 }
 
 func (s *npmPackageStore) use(key string, ttl time.Duration) func() {

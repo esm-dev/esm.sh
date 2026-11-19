@@ -4,9 +4,11 @@ package server
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"slices"
@@ -75,6 +77,99 @@ func TestCheckDiskStatus(t *testing.T) {
 			t.Fatalf("checked %v, want %v", paths, want)
 		}
 	})
+}
+
+func TestStatusNpmCleanup(t *testing.T) {
+	oldStatfs := diskStatfs
+	t.Cleanup(func() { diskStatfs = oldStatfs })
+	for _, test := range []struct {
+		name     string
+		disk     string
+		bytes    uint64
+		leftover bool
+		rotated  bool
+	}{
+		{"healthy", "ok", 16 * GB, false, false},
+		{"unknown", "error", 0, false, false},
+		{"low", "low", 512 * MB, false, true},
+		{"full", "full", 50 * MB, false, true},
+		{"leftover", "full", 50 * MB, true, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			s := useNpmStore(t)
+			if err := os.Mkdir(s.dir, 0755); err != nil {
+				t.Fatal(err)
+			}
+			oldDir := filepath.Join(config.WorkDir, "_npm")
+			if test.leftover {
+				if err := os.Mkdir(oldDir, 0755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			diskStatfs = func(_ string, stat *syscall.Statfs_t) error {
+				if test.disk == "error" {
+					return syscall.EIO
+				}
+				*stat = syscall.Statfs_t{Bsize: 4096, Bavail: test.bytes / 4096}
+				return nil
+			}
+			res := httptest.NewRecorder()
+			esmRouter(nil, nil).ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/status.json", nil))
+			var status struct{ Disk string }
+			if err := json.Unmarshal(res.Body.Bytes(), &status); err != nil || res.Code != 200 || status.Disk != test.disk {
+				t.Fatalf("status response: %d %s", res.Code, res.Body)
+			}
+			s.cleanupMu.Lock()
+			defer s.cleanupMu.Unlock()
+			if existsDir(s.dir) == test.rotated || existsDir(oldDir) {
+				t.Fatalf("npm exists = %v, _npm exists = %v", existsDir(s.dir), existsDir(oldDir))
+			}
+		})
+	}
+}
+
+func TestNpmCleanupOnStartup(t *testing.T) {
+	s := useNpmStore(t)
+	oldDir := filepath.Join(config.WorkDir, "_npm")
+	for _, dir := range []string{s.dir, filepath.Join(oldDir, "pkg@1.0.0")} {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for range 2 {
+		s.cleanup(false)
+		s.cleanupMu.Lock()
+		s.cleanupMu.Unlock()
+		if !existsDir(s.dir) || existsDir(oldDir) {
+			t.Fatal("startup should remove only _npm")
+		}
+	}
+}
+
+func TestLoaderAfterNpmCleanup(t *testing.T) {
+	s := useNpmStore(t)
+	filename := generatedLoaderPath(DefaultNpmRC(), "test.js")
+	builds := 0
+	compile := func() error {
+		builds++
+		if err := os.MkdirAll(filepath.Dir(filename), 0755); err != nil {
+			return err
+		}
+		return os.WriteFile(filename, nil, 0644)
+	}
+	for _, want := range []int{1, 1, 2} {
+		if want == 2 {
+			s.cleanup(true)
+		}
+		if err := ensureLoader(t.Context(), filename, compile); err != nil || builds != want {
+			t.Fatalf("loader builds = %d, want %d, err = %v", builds, want, err)
+		}
+	}
+	s.cleanupMu.Lock()
+	defer s.cleanupMu.Unlock()
+	if !existsFile(filename) {
+		t.Fatal("cleanup removed the rebuilt loader")
+	}
 }
 
 func TestInstallPackageDiskRecovery(t *testing.T) {
