@@ -834,6 +834,8 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 			mode := ""
 			if query.Has("module") {
 				mode = "module"
+			} else if query.Has("bytes") && strings.HasSuffix(esmPath.SubPath, ".wasm") {
+				mode = "bytes"
 			}
 			if hasTargetSegment && !rawFlag {
 				mode += ":relative:" + target
@@ -939,7 +941,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 		}
 
 		// Fetch GitHub assets directly without installing the repository.
-		if esmPath.GhPrefix && pathKind == RawFile && esmPath.SubPath != "" && !(query.Has("module") && endsWith(esmPath.SubPath, ".css", ".json", ".wasm")) {
+		if esmPath.GhPrefix && pathKind == RawFile && esmPath.SubPath != "" && !(query.Has("module") && endsWith(esmPath.SubPath, ".css", ".json", ".wasm")) && !(query.Has("bytes") && strings.HasSuffix(esmPath.SubPath, ".wasm")) {
 			rawURL := &url.URL{
 				Scheme: "https",
 				Host:   "raw.githubusercontent.com",
@@ -1073,6 +1075,11 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 					return
 				}
 				url := fmt.Sprintf("%s%s/%s@%s/%s", origin, registryPrefix, esmPath.PkgName, esmPath.PkgVersion, file)
+				// The canonical asset is selected; reapplying the override can cause a redirect loop.
+				query.Del("path")
+				if encoded := query.Encode(); encoded != "" {
+					url += "?" + encoded
+				}
 				redirect(w, url, true)
 				return
 			}
@@ -1080,14 +1087,21 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 
 		// try to serve package static files if the version is exact
 		if isExactVersion {
-			// return wasm file as an es6 module when `?module` query is present (requires `top-level-await` support)
-			if pathKind == RawFile && strings.HasSuffix(esmPath.SubPath, ".wasm") && query.Has("module") {
+			// Return a compiled WASM module or bytes as JavaScript (requires top-level await).
+			if pathKind == RawFile && strings.HasSuffix(esmPath.SubPath, ".wasm") && (query.Has("module") || query.Has("bytes")) {
 				wasmUrl := origin + pathname
+				if override := query.Get("path"); override != "" {
+					wasmUrl += "?path=" + url.QueryEscape(override)
+				}
 				buf := bytes.NewBufferString("/* esm.sh - wasm module */\n")
 				buf.WriteString("const data = await fetch(")
 				buf.WriteString(strings.TrimSpace(string(utils.MustEncodeJSON(wasmUrl))))
-				buf.WriteString(").then(r => r.arrayBuffer());\n")
-				buf.WriteString("export default new WebAssembly.Module(data);")
+				buf.WriteString(").then(r => { if (!r.ok) throw new Error('Failed to fetch WASM: ' + r.status); return r.arrayBuffer(); });\n")
+				if query.Has("module") {
+					buf.WriteString("export default new WebAssembly.Module(data);")
+				} else {
+					buf.WriteString("export default new Uint8Array(data);")
+				}
 				header.Set("Content-Type", ctJavaScript)
 				header.Set("Cache-Control", ccImmutable)
 				writeBody(w, buf.Bytes())

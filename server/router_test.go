@@ -784,6 +784,52 @@ func TestRouterPathRegressions(t *testing.T) {
 	setCacheItem("npm:react@18", &npm.PackageJSON{Name: "react", Version: "18.3.1"}, time.Minute)
 	t.Cleanup(func() { deleteCacheItem("npm:react@18") })
 
+	t.Run("asset-override", func(t *testing.T) {
+		const name = "asset-override-test"
+		wasm := []byte{0, 97, 115, 109, 1, 0, 0, 0}
+		for filename, data := range map[string][]byte{"package.json": []byte(`{"name":"` + name + `","version":"1.0.0"}`), "node/foo.wasm": wasm} {
+			filename = filepath.Join(config.WorkDir, "npm", name+"@1.0.0", "node_modules", name, filename)
+			if err := os.MkdirAll(filepath.Dir(filename), 0755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filename, data, 0644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		for _, mode := range []string{"raw", "bytes", "module"} {
+			t.Run(mode, func(t *testing.T) {
+				base := "http://localhost/" + name + "@1.0.0/"
+				target := base + "es2022/missing.wasm?path=missing.wasm&key=a%2Bb"
+				if mode != "raw" {
+					target += "&" + mode
+				}
+				res := httptest.NewRecorder()
+				handler.ServeHTTP(res, httptest.NewRequest("GET", target, nil))
+				location := res.Header().Get("Location")
+				if res.Code != 301 || location == "" {
+					t.Fatalf("expected canonical redirect, got %d: %s", res.Code, res.Body.String())
+				}
+				req := httptest.NewRequest("GET", location, nil)
+				res = httptest.NewRecorder()
+				handler.ServeHTTP(res, req)
+				if res.Code == 301 && res.Header().Get("Location") == location {
+					t.Fatalf("canonical asset redirects to itself: %s", location)
+				}
+				query := req.URL.Query()
+				if res.Code != 200 || req.URL.Path != "/"+name+"@1.0.0/node/foo.wasm" || query.Has("path") || query.Get("key") != "a+b" || mode != "raw" && !query.Has(mode) {
+					t.Fatalf("canonical redirect lost query semantics: %s, HTTP %d", location, res.Code)
+				}
+				if mode == "raw" {
+					if !bytes.Equal(res.Body.Bytes(), wasm) {
+						t.Fatalf("unexpected WASM bytes: %q", res.Body.Bytes())
+					}
+				} else if expected := map[string]string{"bytes": "new Uint8Array(data)", "module": "new WebAssembly.Module(data)"}[mode]; !strings.Contains(res.Body.String(), expected) {
+					t.Fatalf("redirect changed WASM mode: %s", res.Body.String())
+				}
+			})
+		}
+	})
+
 	for _, test := range []struct {
 		path, ua string
 		status   int

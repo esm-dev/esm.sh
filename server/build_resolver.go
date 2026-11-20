@@ -29,6 +29,7 @@ type BuildEntry struct {
 	main   string
 	module bool
 	types  string
+	code   string
 }
 
 func (entry *BuildEntry) isEmpty() bool {
@@ -54,7 +55,7 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 		}
 
 		switch ext := path.Ext(subPath); ext {
-		case ".mts", ".ts", ".tsx", ".cts", ".json", ".jsx", ".svelte", ".vue", ".css":
+		case ".mts", ".ts", ".tsx", ".cts", ".json", ".jsx", ".svelte", ".vue", ".css", ".wasm":
 			if ctx.existsPkgFile(subPath) {
 				switch ext {
 				case ".mts", ".ts", ".tsx", ".cts":
@@ -78,7 +79,7 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 						}
 					}
 					return
-				case ".json", ".jsx", ".svelte", ".vue":
+				case ".json", ".jsx", ".svelte", ".vue", ".wasm":
 					entry.update(subPath, true)
 					return
 				case ".css":
@@ -177,7 +178,7 @@ func (ctx *BuildContext) resolveEntry(esm EsmPath) (entry BuildEntry) {
 							}
 							*/
 							path := strings.ReplaceAll(s, "*", diff)
-							if endsWith(path, ".mjs", ".js", ".cjs") {
+							if endsWith(path, ".mjs", ".js", ".cjs", ".wasm") {
 								if ctx.existsPkgFile(path) {
 									exportEntry.update(path, pkgJson.Type == "module")
 									break
@@ -549,6 +550,8 @@ func (ctx *BuildContext) finalizeBuildEntry(entry *BuildEntry) {
 			} else {
 				entry.main = ""
 			}
+		} else if strings.HasSuffix(entry.main, ".wasm") {
+			entry.module = true
 		} else if !entry.module && endsWith(entry.main, ".js", ".ts") {
 			// check if the cjs entry is an ESM
 			filename := path.Join(ctx.wd, "node_modules", ctx.esmPath.PkgName, entry.main)
@@ -732,7 +735,15 @@ LOOP:
 	return
 }
 
-func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.ResolveKind, withTypeJSON bool, analyzeMode bool) (resolvedPath string, sideEffects esbuild.SideEffects, err error) {
+func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.ResolveKind, withType string, analyzeMode bool) (resolvedPath string, sideEffects esbuild.SideEffects, err error) {
+	withTypeJSON := withType == "json"
+	rawExt, rawQuery := ".json", "module"
+	if withType == "bytes" || withType == "wasm-module" {
+		rawExt = ".wasm"
+		if withType == "bytes" {
+			rawQuery = "bytes"
+		}
+	}
 	if strings.HasPrefix(specifier, "file:") {
 		err = errors.New("file: protocol is not supported: " + specifier)
 		return
@@ -762,6 +773,13 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 				}
 			}
 			if kind == esbuild.ResolveJSRequireCall {
+				if withType == "wasm-module" {
+					if resolvedPathFull == specifier {
+						resolvedPathFull += "?module"
+						resolvedPath += "?module"
+					}
+					specifier += "?module"
+				}
 				ctx.importsLock.Lock()
 				ctx.cjsRequires = append(ctx.cjsRequires, [3]string{specifier, resolvedPathFull, resolvedPath})
 				ctx.importsLock.Unlock()
@@ -846,6 +864,12 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 				sideEffects = esbuild.SideEffectsFalse
 			}
 		}
+		if withType == "bytes" || withType == "wasm-module" {
+			if entry := ctx.resolveEntry(esmPath); strings.HasSuffix(entry.main, ".wasm") {
+				resolvedPath = "/" + esmPath.PackageId() + entry.main[1:] + "?" + rawQuery
+				return
+			}
+		}
 		resolvedPath = ctx.getImportPath(esmPath, ctx.getBuildArgsPrefix(false), ctx.externalAll)
 		return
 	}
@@ -884,17 +908,21 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 					sideEffects = esbuild.SideEffectsFalse
 				}
 			}
-			if withTypeJSON {
+			if withType != "" {
 				resolvedPath = "/" + subModule.String()
-				if !strings.HasSuffix(subPath, ".json") {
+				if !strings.HasSuffix(subPath, rawExt) {
 					entry := ctx.resolveEntry(subModule)
 					if entry.main != "" {
 						resolvedPath = "/" + subModule.PackageId() + entry.main[1:]
 					}
 				}
 				// esbuild removes the `{ type: "json" }` when it's a dynamic import
-				resolvedPath += "?module"
+				resolvedPath += "?" + rawQuery
 			} else {
+				if entry := ctx.resolveEntry(subModule); strings.HasSuffix(entry.main, ".wasm") {
+					// Static and dynamic imports must share the same instance across export aliases.
+					subModule.SubPath = strings.TrimPrefix(entry.main, "./")
+				}
 				resolvedPath = ctx.getImportPath(subModule, ctx.getBuildArgsPrefix(false), ctx.externalAll)
 				if ctx.bundleMode == BundleFalse && strings.HasSuffix(resolvedPath, ".mjs") {
 					resolvedPath = strings.TrimSuffix(resolvedPath, ".mjs") + ".nobundle.mjs"
@@ -982,9 +1010,9 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 		dep.PkgVersion = ctx.esmPath.PkgVersion
 	}
 
-	if withTypeJSON {
+	if withType != "" {
 		resolvedPath = "/" + dep.String()
-		if subPath == "" || !strings.HasSuffix(subPath, ".json") {
+		if subPath == "" || !strings.HasSuffix(subPath, rawExt) {
 			// install the exact version, a range would be kept as the store directory name,
 			// but keep the range in the import url
 			installed := dep
@@ -1011,9 +1039,9 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 				resolvedPath = "/" + dep.PackageId() + entry.main[1:]
 			}
 		}
-		if kind == esbuild.ResolveJSDynamicImport {
+		if !withTypeJSON || kind == esbuild.ResolveJSDynamicImport {
 			// esbuild removes the `{ type: "json" }` when it's a dynamic import
-			resolvedPath += "?module"
+			resolvedPath += "?" + rawQuery
 		}
 		return
 	}
@@ -1044,7 +1072,8 @@ func (ctx *BuildContext) resolveExternalModule(specifier string, kind esbuild.Re
 	} else {
 		exactVersion = npm.IsExactVersion(dep.PkgVersion)
 	}
-	if exactVersion {
+	// A bare .wasm URL serves binary data, so even a floating version needs a build URL here.
+	if exactVersion || strings.HasSuffix(dep.SubPath, ".wasm") {
 		buildArgsPrefix := ""
 		if a := encodeBuildArgs(args, false); a != "" {
 			buildArgsPrefix = "X-" + a + "/"
@@ -1361,6 +1390,20 @@ func (ctx *BuildContext) lexer(entry *BuildEntry) (ret *BuildMeta, cjsExports []
 	}
 
 	if entry.main != "" && entry.module {
+		if strings.HasSuffix(entry.main, ".wasm") {
+			filename := ctx.getPkgFullPath(entry.main)
+			var output *LoaderOutput
+			output, err = transformWasm(ctx.Context(), ctx.npmrc, filename)
+			if err != nil {
+				return
+			}
+			entry.code = output.Code
+			var ast js_ast.AST
+			ast, err = parseJS(filename, []byte(output.Code))
+			_, exportDefault := ast.NamedExports["default"]
+			ret = &BuildMeta{ExportDefault: exportDefault}
+			return
+		}
 		if strings.HasSuffix(entry.main, ".vue") || strings.HasSuffix(entry.main, ".svelte") {
 			ret = &BuildMeta{
 				ExportDefault: true,

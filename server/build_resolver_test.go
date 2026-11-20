@@ -58,7 +58,7 @@ func TestResolveExternalModuleSideEffects(t *testing.T) {
 						SideEffects: *set.NewReadOnly(tt.listed...), SideEffectsFalse: tt.pure,
 					},
 				}
-				resolved, sideEffects, err := ctx.resolveExternalModule(specifier, esbuild.ResolveJSImportStatement, false, false)
+				resolved, sideEffects, err := ctx.resolveExternalModule(specifier, esbuild.ResolveJSImportStatement, "", false)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -103,7 +103,7 @@ func TestResolveExternalModuleScopedFork(t *testing.T) {
 					want += "tsl.mjs"
 				}
 				ctx := &BuildContext{target: "es2022", esmPath: EsmPath{PkgName: pkg.Name, PkgVersion: pkg.Version}, pkgJson: pkg}
-				got, _, err := ctx.resolveExternalModule("three"+subpath, esbuild.ResolveJSImportStatement, false, false)
+				got, _, err := ctx.resolveExternalModule("three"+subpath, esbuild.ResolveJSImportStatement, "", false)
 				if err != nil || got != want {
 					t.Fatalf("resolved = %q, %v; want %q", got, err, want)
 				}
@@ -244,7 +244,7 @@ func TestResolveExternalAllSelfModule(t *testing.T) {
 			if tt.external != "" {
 				ctx.args.External = *set.NewReadOnly(tt.external)
 			}
-			got, _, err := ctx.resolveExternalModule(tt.specifier, esbuild.ResolveJSImportStatement, false, false)
+			got, _, err := ctx.resolveExternalModule(tt.specifier, esbuild.ResolveJSImportStatement, "", false)
 			if err != nil || got != tt.want {
 				t.Fatalf("resolved = %q, %v; want %q", got, err, tt.want)
 			}
@@ -364,7 +364,7 @@ func TestResolveExternalModulePatterns(t *testing.T) {
 				pkgJson: &npm.PackageJSON{Name: "example", Version: "1.0.0", Dependencies: deps},
 				args:    BuildArgs{External: *set.NewReadOnly(tt.external)},
 			}
-			got, _, err := ctx.resolveExternalModule(tt.specifier, esbuild.ResolveJSImportStatement, false, false)
+			got, _, err := ctx.resolveExternalModule(tt.specifier, esbuild.ResolveJSImportStatement, "", false)
 			if err != nil || (got == tt.specifier) != tt.match {
 				t.Fatalf("resolved = %q, %v; want external = %v", got, err, tt.match)
 			}
@@ -573,7 +573,7 @@ func TestResolveExternalModuleUnsupportedDependency(t *testing.T) {
 		esmPath: EsmPath{PkgName: "example", PkgVersion: "1.0.0"},
 		pkgJson: &npm.PackageJSON{Name: "example", Version: "1.0.0", Dependencies: map[string]string{"local": "file:../local"}},
 	}
-	got, _, err := ctx.resolveExternalModule("local", esbuild.ResolveJSImportStatement, false, false)
+	got, _, err := ctx.resolveExternalModule("local", esbuild.ResolveJSImportStatement, "", false)
 	if err != nil || !strings.HasPrefix(got, "/error.js?type=unsupported-file-dependency&name=local&") {
 		t.Fatalf("resolved = %q, %v; want the error module", got, err)
 	}
@@ -645,7 +645,7 @@ func TestResolveJSONModuleInstallsExactVersion(t *testing.T) {
 		esmPath: EsmPath{PkgName: "example", PkgVersion: "1.0.0"},
 		pkgJson: &npm.PackageJSON{Name: "example", Version: "1.0.0", Dependencies: map[string]string{"json-dep": "^1.0.0"}},
 	}
-	got, _, err := ctx.resolveExternalModule("json-dep", esbuild.ResolveJSImportStatement, true, false)
+	got, _, err := ctx.resolveExternalModule("json-dep", esbuild.ResolveJSImportStatement, "json", false)
 	if err != nil || got != "/json-dep@^1.0.0/data.json" {
 		t.Fatalf("resolved = %q, %v", got, err)
 	}
