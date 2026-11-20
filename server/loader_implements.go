@@ -14,29 +14,17 @@ func generatedLoaderPath(npmrc *NpmRC, name string) string {
 	return path.Join(npmrc.StoreDir(), ".loaders", name)
 }
 
-func ensureLoader(ctx context.Context, filename string, compile func() error) error {
-	if existsFile(filename) {
-		return nil
-	}
-	unlock, err := cacheMutex.LockContext(ctx, filename)
-	if err != nil {
-		return err
-	}
-	defer unlock()
-	if existsFile(filename) {
-		return nil
-	}
-	if DEBUG {
-		fmt.Println(term.Dim("Compiling " + path.Base(filename) + "..."))
-	}
-	return compile()
-}
-
 func transformSvelte(ctx context.Context, npmrc *NpmRC, svelteVersion string, filename string, code string) (output *LoaderOutput, err error) {
 	loaderExecPath := generatedLoaderPath(npmrc, "svelte@"+svelteVersion+".js")
 
-	err = ensureLoader(ctx, loaderExecPath, func() error {
-		return compileSvelteLoader(ctx, npmrc, svelteVersion, loaderExecPath)
+	err = doOnce(loaderExecPath, func() (err error) {
+		if !existsFile(loaderExecPath) {
+			if DEBUG {
+				fmt.Println(term.Dim("Compiling svelte loader..."))
+			}
+			err = compileSvelteLoader(ctx, npmrc, svelteVersion, loaderExecPath)
+		}
+		return
 	})
 	if err != nil {
 		err = errors.New("failed to compile svelte loader: " + err.Error())
@@ -87,8 +75,14 @@ func transformVue(ctx context.Context, npmrc *NpmRC, vueVersion string, filename
 	loaderVersion := "1.0.1" // @esm.sh/vue-compiler
 	loaderExecPath := generatedLoaderPath(npmrc, "vue@"+vueVersion+"-"+loaderVersion+".js")
 
-	err = ensureLoader(ctx, loaderExecPath, func() error {
-		return compileVueLoader(ctx, npmrc, vueVersion, loaderVersion, loaderExecPath)
+	err = doOnce(loaderExecPath, func() (err error) {
+		if !existsFile(loaderExecPath) {
+			if DEBUG {
+				fmt.Println(term.Dim("Compiling vue loader..."))
+			}
+			err = compileVueLoader(ctx, npmrc, vueVersion, loaderVersion, loaderExecPath)
+		}
+		return
 	})
 	if err != nil {
 		err = errors.New("failed to compile vue loader: " + err.Error())

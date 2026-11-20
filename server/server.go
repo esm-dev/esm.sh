@@ -61,9 +61,6 @@ func Start() {
 	}
 	logger.SetLevelByName(config.LogLevel)
 
-	npmStore = &npmPackageStore{dir: DefaultNpmRC().StoreDir(), logger: logger}
-	npmStore.cleanup(false)
-
 	accessLogger, err := log.New(fmt.Sprintf("file:%s?buffer=1m&fileDateFormat=20060102", path.Join(config.LogDir, "access.log")))
 	if err != nil {
 		logger.Fatalf("failed to initialize access logger: %v", err)
@@ -86,6 +83,7 @@ func Start() {
 	http.DefaultTransport.(*http.Transport).MaxIdleConnsPerHost = 64
 
 	startTime := time.Now()
+	npmStore = &npmPackageStore{dir: DefaultNpmRC().StoreDir(), logger: logger}
 	go func() {
 		// remove the dirs left behind by installs and purges interrupted by a crash or restart
 		// [warning] in the background, globbing a big npm store delays the start, so keep the installs started since
@@ -100,6 +98,12 @@ func Start() {
 		}
 		if err := npmStore.restore(); err != nil {
 			logger.Errorf("npm TTL restore: %v", err)
+		}
+		// free the disk before installs hit ENOSPC, the idle purge keeps the packages held by running builds
+		for range time.Tick(time.Minute) {
+			if status, _, _ := diskStatus(npmStore.dir); status == DiskStatusLow || status == DiskStatusFull {
+				npmStore.purgeIdle()
+			}
 		}
 	}()
 
