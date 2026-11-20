@@ -99,6 +99,12 @@ func Start() {
 		if err := npmStore.restore(); err != nil {
 			logger.Errorf("npm TTL restore: %v", err)
 		}
+		// free the disk before installs hit ENOSPC, the idle purge keeps the packages held by running builds
+		for range time.Tick(time.Minute) {
+			if status, _, _ := diskStatus(npmStore.dir); status == DiskStatusLow || status == DiskStatusFull {
+				npmStore.purgeIdle()
+			}
+		}
 	}()
 
 	// load node runtime in background
