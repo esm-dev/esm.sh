@@ -1689,6 +1689,35 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 			}
 			if err != nil {
 				msg := err.Error()
+				if msg == "could not resolve build entry" && pathKind == EsmBuild && isExactVersion && strings.HasSuffix(pathname, ".mjs") && esmPath.SubPath != "" && query.Get("path") == "" {
+					defer useNpmPackage(r.Context(), esmPath.PackageId())()
+					pkgJson, err := npmrc.installPackageContext(r.Context(), esmPath.Package())
+					if err != nil {
+						writePackageError(w, err)
+						return
+					}
+					b := &BuildContext{
+						wd:          path.Join(npmrc.StoreDir(), esmPath.PackageId()),
+						pkgJson:     pkgJson,
+						esmPath:     esmPath,
+						args:        buildArgs,
+						bundleMode:  bundleMode,
+						externalAll: externalAll,
+						target:      target,
+						dev:         dev,
+					}
+					b.esmPath.SubPath = ""
+					entry := b.resolveEntry(b.esmPath)
+					if dir := path.Dir(entry.main); entry.main != "" && dir != "." {
+						file := path.Join(dir, esmPath.SubPath+".mjs")
+						if b.existsPkgFile(file) {
+							b.esmPath.SubPath = strings.TrimPrefix(stripEntryModuleExt(file), "./")
+							location := &url.URL{Path: b.Path(), RawQuery: r.URL.RawQuery}
+							redirect(w, origin+location.String(), true)
+							return
+						}
+					}
+				}
 				if msg == "could not resolve build entry" || strings.HasSuffix(msg, " not found") || strings.Contains(msg, "is not exported from package") || strings.Contains(msg, "no such file or directory") {
 					header.Set("Cache-Control", ccTenMinutes)
 					writeStatus(w, 404, msg)

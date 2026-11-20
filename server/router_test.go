@@ -122,6 +122,76 @@ func TestRouterModuleResponses(t *testing.T) {
 	logger.SetOutput(io.Discard)
 	handler := esmRouter(fs, logger)
 
+	t.Run("relative module worker", func(t *testing.T) {
+		useNegativeCache(t)
+		const pkg = "@scope/relative-worker-test"
+		dir := filepath.Join(config.WorkDir, "npm", pkg+"@1.0.0", "node_modules", pkg)
+		for name, content := range map[string]string{
+			"package.json":           `{"name":"` + pkg + `","version":"1.0.0","type":"module","types":"./index.d.ts","exports":{".":{"custom":"./custom/index.mjs","default":"./dist/index.mjs"},"./public-worker":"./public/worker.mjs"}}`,
+			"index.d.ts":             `export declare const worker: URL;`,
+			"dist/index.mjs":         `export const worker = new URL("./worker.mjs", import.meta.url);`,
+			"dist/worker.mjs":        `import { message } from "./shared.mjs"; postMessage(message);`,
+			"dist/shared.mjs":        `export const message = "worker ready";`,
+			"dist/public-worker.mjs": `postMessage("wrong worker");`,
+			"public/worker.mjs":      `postMessage("public worker");`,
+			"custom/index.mjs":       `export const worker = new URL("./worker.mjs", import.meta.url);`,
+			"custom/worker.mjs":      `postMessage("custom worker");`,
+			"other/unrelated.mjs":    `postMessage("unrelated worker");`,
+		} {
+			filename := filepath.Join(dir, name)
+			if err := os.MkdirAll(filepath.Dir(filename), 0755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filename, []byte(content), 0644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		http.DefaultTransport = ghTestTransport(func(r *http.Request) (*http.Response, error) {
+			t.Errorf("unexpected request: %s", r.URL)
+			return &http.Response{StatusCode: 500, Body: http.NoBody}, nil
+		})
+		defer deleteCacheItemsWithPrefix("npm:" + pkg + "@")
+		args := "X-" + encodeBuildArgs(BuildArgs{Conditions: []string{"custom"}}, false) + "/"
+		for _, test := range []struct {
+			path, location, content string
+			status                  int
+		}{
+			{"es2022/relative-worker-test.mjs", "", "worker.mjs", 200},
+			{"es2022/worker.mjs?v=1.0.0", "es2022/dist/worker.mjs?v=1.0.0", "worker ready", 301},
+			{"es2022/worker.mjs?v=1.0.0", "es2022/dist/worker.mjs?v=1.0.0", "worker ready", 301},
+			{"es2022/public-worker.mjs", "", "public worker", 200},
+			{"es2022/dist/worker.mjs", "", "worker ready", 200},
+			{args + "es2020/worker.development.nobundle.mjs?v=1.0.0", args + "es2020/custom/worker.development.nobundle.mjs?v=1.0.0", "custom worker", 301},
+			{"es2022/missing.mjs", "", "could not resolve build entry", 404},
+			{"es2022/unrelated.mjs", "", "could not resolve build entry", 404},
+			{"es2022/worker.mjs?path=worker", "", "could not resolve build entry", 404},
+			{"worker.mjs", "", "could not resolve build entry", 404},
+		} {
+			base := "http://localhost/" + pkg + "@1.0.0/"
+			defer cacheLRU.Remove("/" + pkg + "@1.0.0/" + strings.Split(test.path, "?")[0])
+			defer cacheLRU.Remove("/" + pkg + "@1.0.0/" + strings.Split(test.location, "?")[0])
+			res := httptest.NewRecorder()
+			handler.ServeHTTP(res, httptest.NewRequest("GET", base+test.path, nil))
+			if res.Code != test.status {
+				t.Errorf("%s: HTTP %d: %s", test.path, res.Code, res.Body.String())
+				continue
+			}
+			if test.location != "" {
+				if location := res.Header().Get("Location"); location != base+test.location {
+					t.Fatalf("%s: redirect = %s, want %s", test.path, location, base+test.location)
+				}
+				res = httptest.NewRecorder()
+				handler.ServeHTTP(res, httptest.NewRequest("GET", base+test.location, nil))
+				if res.Code != 200 {
+					t.Fatalf("%s: HTTP %d: %s", test.location, res.Code, res.Body.String())
+				}
+			}
+			if !strings.Contains(res.Body.String(), test.content) {
+				t.Errorf("%s: missing %q in %s", test.path, test.content, res.Body.String())
+			}
+		}
+	})
+
 	t.Run("css module installation", func(t *testing.T) {
 		var archive bytes.Buffer
 		gz := gzip.NewWriter(&archive)
