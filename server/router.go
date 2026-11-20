@@ -780,7 +780,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 
 		// use `?path=$PATH` query to override the pathname
 		if v := query.Get("path"); v != "" {
-			esmPath.SubPath = stripEntryModuleExt(utils.NormalizePathname(v)[1:])
+			esmPath.SubPath = utils.NormalizePathname(v)[1:]
 		}
 
 		// check the path kind
@@ -1623,7 +1623,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 
 		dev := query.Has("dev")
 		// force react/jsx-dev-runtime and react-refresh into `dev` mode
-		if !dev && (((esmPath.PkgName == "react" || esmPath.PkgName == "vue") && esmPath.SubPath == "jsx-dev-runtime") || esmPath.PkgName == "react-refresh") {
+		if !dev && (((esmPath.PkgName == "react" || esmPath.PkgName == "vue") && stripEntryModuleExt(esmPath.SubPath) == "jsx-dev-runtime") || esmPath.PkgName == "react-refresh") {
 			dev = true
 		}
 
@@ -1640,7 +1640,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 				esmPath.SubPath = before
 				dev = true
 			}
-			if before, ok := strings.CutSuffix(esmPath.SubPath, ".js"); ok && endsWith(before, ".bundle", ".nobundle", ".development") {
+			if before, ok := strings.CutSuffix(esmPath.SubPath, ".js"); ok && hasBuildFlagSuffix(before) {
 				esmPath.SubPath = before
 			}
 			basename := strings.TrimSuffix(path.Base(esmPath.PkgName), ".js")
